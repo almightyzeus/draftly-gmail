@@ -4,9 +4,9 @@ import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
-import { env } from './config/env';
-import { logger } from './utils/logger';
-import authRoutes from './routes/authRoutes';
+import { env } from './config/env.js';
+import { logger } from './utils/logger.js';
+import authRoutes from './routes/authRoutes.js';
 
 export const app: Express = express();
 
