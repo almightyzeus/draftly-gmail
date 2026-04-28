@@ -1,9 +1,9 @@
 import { Request, Response } from 'express';
 import jwt from 'jsonwebtoken';
-import { User } from '../models';
-import { env } from '../config/env';
-import { logger } from '../utils/logger';
-import { AuthRequest } from '../middleware/auth';
+import { User } from '../models/User.js';
+import { env } from '../config/env.js';
+import { logger } from '../utils/logger.js';
+import { AuthRequest } from '../middleware/auth.js';
 
 interface RegisterRequest extends Request {
   body: {
