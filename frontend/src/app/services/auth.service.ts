@@ -1,0 +1,121 @@
+import { Injectable } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { Observable, BehaviorSubject, tap } from 'rxjs';
+
+export interface User {
+  id: string;
+  email: string;
+  name: string;
+}
+
+export interface AuthResponse {
+  message: string;
+  user: User;
+  accessToken: string;
+  refreshToken: string;
+}
+
+@Injectable({
+  providedIn: 'root',
+})
+export class AuthService {
+  private apiUrl = 'http://localhost:3000/api/auth';
+  private currentUserSubject = new BehaviorSubject<User | null>(null);
+  public currentUser$ = this.currentUserSubject.asObservable();
+
+  private accessTokenSubject = new BehaviorSubject<string | null>(null);
+  public accessToken$ = this.accessTokenSubject.asObservable();
+
+  constructor(private http: HttpClient) {
+    this.loadTokenFromStorage();
+  }
+
+  /**
+   * Load token from localStorage and validate
+   */
+  private loadTokenFromStorage(): void {
+    const token = localStorage.getItem('accessToken');
+    if (token) {
+      this.accessTokenSubject.next(token);
+      // Optionally fetch user info to validate token
+      this.getMe().subscribe(
+        (response) => this.currentUserSubject.next(response.user),
+        () => {
+          // Token invalid, clear it
+          this.logout();
+        }
+      );
+    }
+  }
+
+  /**
+   * Register a new user
+   */
+  register(name: string, email: string, password: string): Observable<AuthResponse> {
+    return this.http.post<AuthResponse>(`${this.apiUrl}/register`, {
+      name,
+      email,
+      password,
+    }).pipe(
+      tap((response) => {
+        this.storeTokens(response.accessToken, response.refreshToken);
+        this.currentUserSubject.next(response.user);
+      })
+    );
+  }
+
+  /**
+   * Login user
+   */
+  login(email: string, password: string): Observable<AuthResponse> {
+    return this.http.post<AuthResponse>(`${this.apiUrl}/login`, {
+      email,
+      password,
+    }).pipe(
+      tap((response) => {
+        this.storeTokens(response.accessToken, response.refreshToken);
+        this.currentUserSubject.next(response.user);
+      })
+    );
+  }
+
+  /**
+   * Get current user info
+   */
+  getMe(): Observable<{ user: User }> {
+    return this.http.get<{ user: User }>(`${this.apiUrl}/me`);
+  }
+
+  /**
+   * Logout user
+   */
+  logout(): void {
+    localStorage.removeItem('accessToken');
+    localStorage.removeItem('refreshToken');
+    this.accessTokenSubject.next(null);
+    this.currentUserSubject.next(null);
+  }
+
+  /**
+   * Check if user is authenticated
+   */
+  isAuthenticated(): boolean {
+    return !!localStorage.getItem('accessToken');
+  }
+
+  /**
+   * Get current access token
+   */
+  getAccessToken(): string | null {
+    return localStorage.getItem('accessToken');
+  }
+
+  /**
+   * Store tokens in localStorage
+   */
+  private storeTokens(accessToken: string, refreshToken: string): void {
+    localStorage.setItem('accessToken', accessToken);
+    localStorage.setItem('refreshToken', refreshToken);
+    this.accessTokenSubject.next(accessToken);
+  }
+}

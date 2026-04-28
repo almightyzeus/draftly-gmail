@@ -1,0 +1,51 @@
+<div class="dashboard">
+  <!-- Header -->
+  <mat-toolbar color="primary">
+    <span class="spacer"></span>
+    <span *ngIf="currentUser" class="user-info">{{ currentUser.name }}</span>
+    <button mat-icon-button [matMenuTriggerFor]="menu">
+      <mat-icon>account_circle</mat-icon>
+    </button>
+    <mat-menu #menu="matMenu">
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Logout</span>
+      </button>
+    </mat-menu>
+  </mat-toolbar>
+
+  <!-- Main Content -->
+  <div class="container">
+    <mat-card>
+      <mat-card-header>
+        <mat-card-title>Welcome to Draftly</mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <p>
+          <strong>Gmail AI Reply Agent</strong> - Automate your email drafting with
+          AI-powered suggestions.
+        </p>
+
+        <h3>Coming Soon</h3>
+        <ul>
+          <li>Connect your Gmail account via OAuth2</li>
+          <li>View and manage email drafts</li>
+          <li>Generate AI-powered replies</li>
+          <li>Review, edit, and send responses</li>
+          <li>Track your email activity</li>
+        </ul>
+
+        <div class="button-group">
+          <button mat-raised-button color="primary">
+            <mat-icon>mail</mat-icon>
+            Connect Gmail
+          </button>
+          <button mat-raised-button color="accent">
+            <mat-icon>draft</mat-icon>
+            View Drafts
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  </div>
+</div>
