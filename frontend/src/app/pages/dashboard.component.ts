@@ -38,4 +38,8 @@ export class DashboardComponent implements OnInit {
     this.authService.logout();
     this.router.navigate(['/login']);
   }
+
+  connectGmail(): void {
+    this.authService.connectGmail();
+  }
 }

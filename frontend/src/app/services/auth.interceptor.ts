@@ -29,6 +29,11 @@ export class AuthInterceptor implements HttpInterceptor {
       });
     }
 
+    // Enable credentials for all requests to allow cookies
+    req = req.clone({
+      withCredentials: true,
+    });
+
     return next.handle(req).pipe(
       catchError((error: HttpErrorResponse) => {
         // If 401, token is invalid/expired

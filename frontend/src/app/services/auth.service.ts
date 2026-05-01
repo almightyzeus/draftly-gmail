@@ -20,6 +20,7 @@ export interface AuthResponse {
 })
 export class AuthService {
   private apiUrl = 'api/auth';
+  private gmailApiUrl = 'http://localhost:3000/api/gmail';
   private currentUserSubject = new BehaviorSubject<User | null>(null);
   public currentUser$ = this.currentUserSubject.asObservable();
 
@@ -111,11 +112,44 @@ export class AuthService {
   }
 
   /**
-   * Store tokens in localStorage
+   * Store tokens in localStorage AND cookies
    */
   private storeTokens(accessToken: string, refreshToken: string): void {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
+    // Also store in cookies for redirect requests
+    try {
+      this.setCookie('accessToken', accessToken, 15); // 15 minutes
+      this.setCookie('refreshToken', refreshToken, 7 * 24 * 60); // 7 days
+    } catch (error) {
+      console.error('Failed to set cookies:', error);
+      // Continue even if cookies fail - localStorage is sufficient for API calls
+    }
     this.accessTokenSubject.next(accessToken);
+  }
+
+  /**
+   * Set a cookie with expiration time (in minutes)
+   */
+  private setCookie(name: string, value: string, minutesExpiry: number): void {
+    const date = new Date();
+    date.setTime(date.getTime() + minutesExpiry * 60 * 1000);
+    const expires = date.toUTCString();
+    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+  }
+
+  /**
+   * Initiate Gmail OAuth connection
+   * Redirects to backend OAuth endpoint - do NOT use HttpClient
+   */
+  connectGmail(): void {
+    window.location.href = `${this.gmailApiUrl}/oauth/connect`;
+  }
+
+  /**
+   * Revoke Gmail account access
+   */
+  revokeGmail(): Observable<{ message: string }> {
+    return this.http.post<{ message: string }>(`${this.gmailApiUrl}/oauth/revoke`, {});
   }
 }

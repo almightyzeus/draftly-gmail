@@ -11,8 +11,17 @@ export interface AuthRequest extends Request {
 
 export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
+    // Check Authorization header first
+    let token = null;
     const authHeader = req.headers.authorization;
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    if (authHeader?.startsWith('Bearer ')) {
+      token = authHeader.slice(7);
+    }
+
+    // Fallback to cookie if no header
+    if (!token && req.cookies?.accessToken) {
+      token = req.cookies.accessToken;
+    }
 
     if (!token) {
       logger.warn({ path: req.path }, 'No token provided');
