@@ -1,36 +1,36 @@
 import crypto from 'crypto';
-import { env } from '../config/env';
-import { logger } from './logger';
+import { env } from '../config/env.js';
+import { logger } from './logger.js';
 
 /**
- * Crypto Service - Handles AES-256-GCM encryption/decryption
+ * Crypto utilities - Handles AES-256-GCM encryption/decryption
  * Used for encrypting sensitive data like OAuth tokens at rest
  */
 
 export interface EncryptedData {
-  ciphertext: string; // base64-encoded ciphertext
+  ciphertext: string; // hex-encoded ciphertext
   iv: string; // base64-encoded initialization vector
-  authTag: string; // base64-encoded authentication tag
+  tag: string; // base64-encoded authentication tag
 }
 
 /**
  * Encrypt a string using AES-256-GCM
- * Returns an object with ciphertext, IV, and auth tag (all base64-encoded)
+ * Returns an object with ciphertext, IV, and auth tag
  */
 export function encrypt(plaintext: string): EncryptedData {
   try {
-    const iv = crypto.randomBytes(16); // 128-bit IV
+    const iv = crypto.randomBytes(12); // 96-bit IV (standard for GCM)
     const cipher = crypto.createCipheriv('aes-256-gcm', env.encryptionKey, iv);
 
-    let ciphertext = cipher.update(plaintext, 'utf8', 'binary');
-    ciphertext += cipher.final('binary');
+    let ciphertext = cipher.update(plaintext, 'utf-8', 'hex');
+    ciphertext += cipher.final('hex');
 
     const authTag = cipher.getAuthTag();
 
     return {
-      ciphertext: Buffer.from(ciphertext, 'binary').toString('base64'),
       iv: iv.toString('base64'),
-      authTag: authTag.toString('base64'),
+      ciphertext,
+      tag: authTag.toString('base64'),
     };
   } catch (error) {
     logger.error({ error }, 'Encryption failed');
@@ -40,19 +40,17 @@ export function encrypt(plaintext: string): EncryptedData {
 
 /**
  * Decrypt data encrypted with the encrypt function
- * Expects an object with base64-encoded ciphertext, IV, and auth tag
  */
 export function decrypt(encryptedData: EncryptedData): string {
   try {
-    const ciphertext = Buffer.from(encryptedData.ciphertext, 'base64');
     const iv = Buffer.from(encryptedData.iv, 'base64');
-    const authTag = Buffer.from(encryptedData.authTag, 'base64');
+    const authTag = Buffer.from(encryptedData.tag, 'base64');
 
     const decipher = crypto.createDecipheriv('aes-256-gcm', env.encryptionKey, iv);
     decipher.setAuthTag(authTag);
 
-    let plaintext = decipher.update(ciphertext, 'binary', 'utf8');
-    plaintext += decipher.final('utf8');
+    let plaintext = decipher.update(encryptedData.ciphertext, 'hex', 'utf-8');
+    plaintext += decipher.final('utf-8');
 
     return plaintext;
   } catch (error) {
@@ -62,18 +60,16 @@ export function decrypt(encryptedData: EncryptedData): string {
 }
 
 /**
- * Encrypt an object (converts to JSON first)
+ * Encrypt a string and return as JSON string
  */
-export function encryptObject<T extends Record<string, any>>(obj: T): EncryptedData {
-  return encrypt(JSON.stringify(obj));
+export function encryptToJson(plaintext: string): string {
+  return JSON.stringify(encrypt(plaintext));
 }
 
 /**
- * Decrypt and parse an object
+ * Decrypt from JSON string
  */
-export function decryptObject<T extends Record<string, any>>(
-  encryptedData: EncryptedData
-): T {
-  const plaintext = decrypt(encryptedData);
-  return JSON.parse(plaintext) as T;
+export function decryptFromJson(encryptedJson: string): string {
+  const data: EncryptedData = JSON.parse(encryptedJson);
+  return decrypt(data);
 }

@@ -1,5 +1,5 @@
 import { Schema, model, Document, Types } from 'mongoose';
-import { ToneType } from './UserPreference';
+import { ToneType } from './UserPreference.js';
 
 export type DraftStatus = 'PENDING' | 'APPROVED' | 'REJECTED' | 'SENT';
 

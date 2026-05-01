@@ -6,6 +6,7 @@ import rateLimit from 'express-rate-limit';
 import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
+import { AppError } from './utils/errors.js';
 import authRoutes from './routes/authRoutes.js';
 
 export const app: Express = express();
@@ -59,17 +60,26 @@ app.use((req: Request, res: Response) => {
   });
 });
 
-// Error handler middleware
+// Global error handler middleware
 app.use((err: any, req: Request, res: Response, next: NextFunction) => {
-  logger.error({ err }, 'Unhandled error');
+  if (err instanceof AppError) {
+    logger.warn(
+      { error: err.message, statusCode: err.statusCode, path: req.path },
+      'Application error'
+    );
+    return res.status(err.statusCode).json({ error: err.message });
+  }
 
-  const status = err.status || err.statusCode || 500;
-  const message = err.message || 'Internal Server Error';
+  logger.error({ error: err, path: req.path }, 'Unhandled error');
+
+  const status = 500;
+  const message = 'Internal Server Error';
 
   res.status(status).json({
     error: message,
-    ...(env.nodeEnv === 'development' && { stack: err.stack }),
+    ...(env.nodeEnv === 'development' && { stack: err?.stack }),
   });
 });
 
 export default app;
+
