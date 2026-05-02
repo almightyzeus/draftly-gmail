@@ -1,5 +1,6 @@
 import { Router, Request, Response, NextFunction } from 'express';
 import { GmailOAuthService } from '../services/gmailOAuthService.js';
+import { GmailService } from '../services/gmailService.js';
 import { authenticateJWT } from '../middleware/auth.js';
 import { logger } from '../utils/logger.js';
 
@@ -61,6 +62,47 @@ router.post('/oauth/revoke', authenticateJWT, async (req: Request, res: Response
   } catch (error) {
     logger.error(error instanceof Error ? error : new Error(String(error)), 'Revoke error');
     res.status(500).json({ error: 'Failed to revoke account' });
+  }
+});
+
+/**
+ * GET /api/gmail/emails
+ * Fetch emails from Gmail
+ * Query params: label, unread, limit
+ */
+router.get('/emails', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).userId;
+    const { label = 'INBOX', unread, limit = 20 } = req.query;
+
+    const options = {
+      label: label as string,
+      unread: unread === 'true',
+      limit: parseInt(limit as string) || 20,
+    };
+
+    const emails = await GmailService.fetchEmails(userId, options);
+    res.json(emails);
+  } catch (error) {
+    logger.error(error instanceof Error ? error : new Error(String(error)), 'Failed to fetch emails');
+    res.status(500).json({ error: 'Failed to fetch emails' });
+  }
+});
+
+/**
+ * GET /api/gmail/emails/:gmailMessageId
+ * Get a single email
+ */
+router.get('/emails/:gmailMessageId', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
+  try {
+    const userId = (req as any).userId;
+    const gmailMessageId = req.params.gmailMessageId as string;
+
+    const email = await GmailService.getEmail(userId, gmailMessageId);
+    res.json(email);
+  } catch (error) {
+    logger.error(error instanceof Error ? error : new Error(String(error)), 'Failed to get email');
+    res.status(500).json({ error: 'Failed to get email' });
   }
 });
 

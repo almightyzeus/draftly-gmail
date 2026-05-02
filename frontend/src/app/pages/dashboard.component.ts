@@ -6,7 +6,23 @@ import { MatCardModule } from '@angular/material/card';
 import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatMenuModule } from '@angular/material/menu';
+import { MatTableModule } from '@angular/material/table';
+import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatDividerModule } from '@angular/material/divider';
 import { AuthService, User } from '../services/auth.service';
+
+interface Email {
+  id: string;
+  gmailMessageId: string;
+  threadId: string;
+  from: string;
+  to: string;
+  subject: string;
+  snippet: string;
+  direction: string;
+  internalDate: Date;
+  labels?: string[];
+}
 
 @Component({
   selector: 'app-dashboard',
@@ -19,19 +35,53 @@ import { AuthService, User } from '../services/auth.service';
     MatToolbarModule,
     MatIconModule,
     MatMenuModule,
+    MatTableModule,
+    MatProgressSpinnerModule,
+    MatDividerModule,
   ],
   templateUrl: './dashboard.component.html',
   styleUrls: ['./dashboard.component.css'],
 })
 export class DashboardComponent implements OnInit {
   currentUser: User | null = null;
+  emails: Email[] = [];
+  isLoadingEmails = false;
+  emailsError: string | null = null;
+  displayedColumns: string[] = ['from', 'subject', 'snippet', 'internalDate'];
 
   constructor(private authService: AuthService, private router: Router) {}
 
   ngOnInit(): void {
     this.authService.currentUser$.subscribe((user) => {
       this.currentUser = user;
+      // Fetch emails when Gmail is connected
+      if (user?.googleConnected) {
+        // Only fetch if we don't already have emails or if it's a reconnect
+        if (this.emails.length === 0 || !this.isLoadingEmails) {
+          this.fetchEmails();
+        }
+      } else {
+        // Clear emails if Gmail is not connected
+        this.emails = [];
+        this.isLoadingEmails = false;
+      }
     });
+
+    // On component load, ensure we have the latest user data
+    if (this.authService.isAuthenticated()) {
+      this.authService.getMe().subscribe(
+        (response) => {
+          this.currentUser = response.user;
+          if (response.user?.googleConnected) {
+            this.fetchEmails();
+          }
+        },
+        (error) => {
+          // If getMe fails, it's likely a token issue - let the interceptor handle it
+          console.error('Failed to fetch user data:', error);
+        }
+      );
+    }
   }
 
   logout(): void {
@@ -49,6 +99,7 @@ export class DashboardComponent implements OnInit {
         () => {
           if (this.currentUser) {
             this.currentUser.googleConnected = false;
+            this.emails = [];
           }
         },
         (error) => {
@@ -56,5 +107,44 @@ export class DashboardComponent implements OnInit {
         }
       );
     }
+  }
+
+  fetchEmails(): void {
+    if (!this.currentUser?.googleConnected) {
+      this.emailsError = 'Gmail account not connected. Please connect Gmail first.';
+      return;
+    }
+
+    this.isLoadingEmails = true;
+    this.emailsError = null;
+
+    this.authService.fetchEmails({ label: 'INBOX', limit: 20 }).subscribe(
+      (emails) => {
+        this.emails = emails;
+        this.isLoadingEmails = false;
+      },
+      (error) => {
+        console.error('Failed to fetch emails:', error);
+        if (error.status === 401) {
+          this.emailsError = 'Authentication failed. Please log in again.';
+        } else if (error.error?.error === 'Gmail account not connected') {
+          this.emailsError = 'Gmail account not properly connected. Try disconnecting and reconnecting.';
+        } else {
+          this.emailsError = error.error?.error || 'Failed to fetch emails. Please try again.';
+        }
+        this.isLoadingEmails = false;
+      }
+    );
+  }
+
+  formatDate(date: any): string {
+    if (!date) return '';
+    const dateObj = new Date(date);
+    return dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
+  }
+
+  truncateSnippet(snippet: string, length: number = 60): string {
+    if (!snippet) return '';
+    return snippet.length > length ? snippet.substring(0, length) + '...' : snippet;
   }
 }

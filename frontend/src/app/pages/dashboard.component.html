@@ -16,54 +16,112 @@
 
   <!-- Main Content -->
   <div class="container">
-    <mat-card>
+    <!-- Gmail Connection Status Card -->
+    <mat-card class="status-card">
       <mat-card-header>
-        <mat-card-title>Welcome to Draftly</mat-card-title>
+        <mat-card-title>Gmail Connection Status</mat-card-title>
       </mat-card-header>
       <mat-card-content>
-        <p>
-          <strong>Gmail AI Reply Agent</strong> - Automate your email drafting with
-          AI-powered suggestions.
-        </p>
+        <ng-container *ngIf="currentUser?.googleConnected">
+          <div class="connected-status">
+            <mat-icon class="status-icon success">check_circle</mat-icon>
+            <div class="status-text">
+              <p class="status-label">Gmail Connected</p>
+              <p class="text-muted">Email: {{ currentUser?.email || 'N/A' }}</p>
+            </div>
+          </div>
+          <button mat-raised-button color="accent" (click)="disconnectGmail()" class="margin-top">
+            <mat-icon>mail</mat-icon>
+            Disconnect Gmail
+          </button>
+        </ng-container>
+        <ng-container *ngIf="!currentUser?.googleConnected">
+          <div class="disconnected-status">
+            <mat-icon class="status-icon warning">info</mat-icon>
+            <div class="status-text">
+              <p class="status-label">Gmail Not Connected</p>
+              <p class="text-muted">Connect your Gmail account to get started</p>
+            </div>
+          </div>
+          <button mat-raised-button color="primary" (click)="connectGmail()" class="margin-top">
+            <mat-icon>mail</mat-icon>
+            Connect Gmail
+          </button>
+        </ng-container>
+      </mat-card-content>
+    </mat-card>
 
-        <h3>Coming Soon</h3>
-        <ul>
-          <li>Connect your Gmail account via OAuth2</li>
-          <li>View and manage email drafts</li>
-          <li>Generate AI-powered replies</li>
-          <li>Review, edit, and send responses</li>
-          <li>Track your email activity</li>
-        </ul>
-
-        <!-- Gmail Connection Status -->
-        <div class="status-section">
-          <h3>Gmail Connection Status</h3>
-          <ng-container *ngIf="currentUser?.googleConnected">
-            <p><mat-icon class="status-icon success">check_circle</mat-icon> Gmail Connected</p>
-            <p class="text-muted">Email: {{ currentUser?.email || 'N/A' }}</p>
-          </ng-container>
-          <ng-container *ngIf="!currentUser?.googleConnected">
-            <p><mat-icon class="status-icon warning">info</mat-icon> Gmail Not Connected</p>
-          </ng-container>
+    <!-- Emails Section -->
+    <mat-card class="emails-card" *ngIf="currentUser?.googleConnected">
+      <mat-card-header>
+        <mat-card-title>
+          <div class="emails-header">
+            <span>Inbox</span>
+            <button mat-icon-button (click)="fetchEmails()" [disabled]="isLoadingEmails" title="Refresh emails">
+              <mat-icon>refresh</mat-icon>
+            </button>
+          </div>
+        </mat-card-title>
+      </mat-card-header>
+      <mat-card-content>
+        <!-- Error Message -->
+        <div *ngIf="emailsError" class="error-message">
+          <mat-icon>error</mat-icon>
+          <span>{{ emailsError }}</span>
         </div>
 
-        <div class="button-group">
-          <ng-container *ngIf="!currentUser?.googleConnected">
-            <button mat-raised-button color="primary" (click)="connectGmail()">
-              <mat-icon>mail</mat-icon>
-              Connect Gmail
-            </button>
-          </ng-container>
-          <ng-container *ngIf="currentUser?.googleConnected">
-            <button mat-raised-button color="accent" (click)="disconnectGmail()">
-              <mat-icon>mail</mat-icon>
-              Disconnect Gmail
-            </button>
-          </ng-container>
-          <button mat-raised-button color="accent">
-            <mat-icon>draft</mat-icon>
-            View Drafts
-          </button>
+        <!-- Loading Spinner -->
+        <div *ngIf="isLoadingEmails" class="loading-spinner">
+          <mat-spinner diameter="50"></mat-spinner>
+          <p>Loading emails...</p>
+        </div>
+
+        <!-- Emails Table -->
+        <div *ngIf="!isLoadingEmails && emails.length > 0" class="emails-table-container">
+          <table mat-table [dataSource]="emails" class="emails-table">
+            <!-- From Column -->
+            <ng-container matColumnDef="from">
+              <th mat-header-cell *matHeaderCellDef>From</th>
+              <td mat-cell *matCellDef="let email">
+                <div class="email-from" title="{{ email.from }}">{{ email.from }}</div>
+              </td>
+            </ng-container>
+
+            <!-- Subject Column -->
+            <ng-container matColumnDef="subject">
+              <th mat-header-cell *matHeaderCellDef>Subject</th>
+              <td mat-cell *matCellDef="let email">
+                <div class="email-subject" title="{{ email.subject }}">{{ email.subject }}</div>
+              </td>
+            </ng-container>
+
+            <!-- Snippet Column -->
+            <ng-container matColumnDef="snippet">
+              <th mat-header-cell *matHeaderCellDef>Preview</th>
+              <td mat-cell *matCellDef="let email">
+                <div class="email-snippet" title="{{ email.snippet }}">
+                  {{ truncateSnippet(email.snippet, 80) }}
+                </div>
+              </td>
+            </ng-container>
+
+            <!-- Date Column -->
+            <ng-container matColumnDef="internalDate">
+              <th mat-header-cell *matHeaderCellDef>Date</th>
+              <td mat-cell *matCellDef="let email">
+                <div class="email-date">{{ formatDate(email.internalDate) }}</div>
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+            <tr mat-row *matRowDef="let email; columns: displayedColumns;" class="email-row"></tr>
+          </table>
+        </div>
+
+        <!-- No Emails Message -->
+        <div *ngIf="!isLoadingEmails && emails.length === 0" class="no-emails">
+          <mat-icon>mail_outline</mat-icon>
+          <p>No emails found</p>
         </div>
       </mat-card-content>
     </mat-card>

@@ -1,4 +1,5 @@
 import { google } from 'googleapis';
+import { Types } from 'mongoose';
 import { oauth2Client } from './googleClient.js';
 import {GmailAccount} from '../models/GmailAccount.js';
 import { User } from '../models/User.js';
@@ -45,10 +46,13 @@ export class GmailOAuthService {
       const refreshTokenEnc = CryptoService.encryptToken(tokens.refresh_token);
 
       // Save or update in DB
+      const userObjectId = new Types.ObjectId(userId);
       await GmailAccount.findOneAndUpdate(
-        { userId, gmailEmail },
+        { userId: userObjectId, gmailEmail },
         {
+          userId: userObjectId,
           accessTokenEnc,
+          revokedAt: null, // Clear revokedAt if reconnecting
           refreshTokenEnc,
           tokenExpiry: new Date(tokens.expiry_date || Date.now() + 3600000),
           scopes: tokens.scope?.split(' ') || [],
@@ -58,7 +62,7 @@ export class GmailOAuthService {
 
       // Update User model - set googleConnected flag and gmailEmail
       await User.findByIdAndUpdate(
-        userId,
+        userObjectId,
         {
           googleConnected: true,
           gmailEmail: gmailEmail,
@@ -77,7 +81,8 @@ export class GmailOAuthService {
    * Get and refresh tokens for user
    */
   static async getValidTokens(userId: string): Promise<{ access_token: string; refresh_token: string }> {
-    const account = await GmailAccount.findOne({ userId, revokedAt: null });
+    const userObjectId = new Types.ObjectId(userId);
+    const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
 
     if (!account) {
       throw new Error('Gmail account not connected');
@@ -101,7 +106,8 @@ export class GmailOAuthService {
    * Revoke Gmail account access
    */
   static async revoke(userId: string): Promise<void> {
-    const account = await GmailAccount.findOne({ userId, revokedAt: null });
+    const userObjectId = new Types.ObjectId(userId);
+    const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
 
     if (account) {
       account.revokedAt = new Date();
@@ -109,7 +115,7 @@ export class GmailOAuthService {
 
       // Update User model - set googleConnected to false
       await User.findByIdAndUpdate(
-        userId,
+        userObjectId,
         {
           googleConnected: false,
           gmailEmail: null,
