@@ -85,3 +85,41 @@ button {
   height: 44px;
   font-size: 16px;
 }
+
+.status-section {
+  background: #f9f9f9;
+  border-left: 4px solid #2196f3;
+  padding: 16px;
+  margin: 24px 0;
+  border-radius: 4px;
+}
+
+.status-section h3 {
+  margin-top: 0;
+}
+
+.status-section p {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 8px 0;
+}
+
+.status-icon {
+  font-size: 20px;
+  width: 20px;
+  height: 20px;
+}
+
+.status-icon.success {
+  color: #4caf50;
+}
+
+.status-icon.warning {
+  color: #ff9800;
+}
+
+.text-muted {
+  color: #999 !important;
+  font-size: 14px !important;
+}

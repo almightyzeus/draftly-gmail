@@ -21,6 +21,7 @@ export interface AuthResponse {
     id: string;
     email: string;
     name: string;
+    googleConnected: boolean;
   };
   tokens: TokenPair;
 }
@@ -93,6 +94,7 @@ export class AuthService {
           id: user._id.toString(),
           email: user.email,
           name: user.name,
+          googleConnected: user.googleConnected || false,
         },
         tokens,
       };
@@ -137,6 +139,7 @@ export class AuthService {
           id: user._id.toString(),
           email: user.email,
           name: user.name,
+          googleConnected: user.googleConnected || false,
         },
         tokens,
       };

@@ -5,6 +5,8 @@ export interface IUser extends Document {
   email: string;
   name: string;
   passwordHash: string;
+  googleConnected: boolean;
+  gmailEmail?: string;
   createdAt: Date;
   updatedAt: Date;
   comparePassword(password: string): Promise<boolean>;
@@ -27,6 +29,17 @@ const userSchema = new Schema<IUser>(
     passwordHash: {
       type: String,
       required: true,
+    },
+    googleConnected: {
+      type: Boolean,
+      default: false,
+      index: true,
+    },
+    gmailEmail: {
+      type: String,
+      lowercase: true,
+      trim: true,
+      default: null,
     },
   },
   { timestamps: true }

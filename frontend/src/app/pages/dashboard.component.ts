@@ -42,4 +42,19 @@ export class DashboardComponent implements OnInit {
   connectGmail(): void {
     this.authService.connectGmail();
   }
+
+  disconnectGmail(): void {
+    if (confirm('Are you sure you want to disconnect your Gmail account?')) {
+      this.authService.revokeGmail().subscribe(
+        () => {
+          if (this.currentUser) {
+            this.currentUser.googleConnected = false;
+          }
+        },
+        (error) => {
+          console.error('Failed to disconnect Gmail:', error);
+        }
+      );
+    }
+  }
 }

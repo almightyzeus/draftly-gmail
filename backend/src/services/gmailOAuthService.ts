@@ -1,6 +1,7 @@
 import { google } from 'googleapis';
 import { oauth2Client } from './googleClient.js';
 import {GmailAccount} from '../models/GmailAccount.js';
+import { User } from '../models/User.js';
 import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
 
@@ -55,7 +56,17 @@ export class GmailOAuthService {
         { upsert: true, new: true }
       );
 
-      logger.info(`Gmail account connected for user ${userId}`);
+      // Update User model - set googleConnected flag and gmailEmail
+      await User.findByIdAndUpdate(
+        userId,
+        {
+          googleConnected: true,
+          gmailEmail: gmailEmail,
+        },
+        { new: true }
+      );
+
+      logger.info(`Gmail account connected for user ${userId} with email ${gmailEmail}`);
     } catch (error) {
       logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth callback error');
       throw error;
@@ -95,6 +106,17 @@ export class GmailOAuthService {
     if (account) {
       account.revokedAt = new Date();
       await account.save();
+
+      // Update User model - set googleConnected to false
+      await User.findByIdAndUpdate(
+        userId,
+        {
+          googleConnected: false,
+          gmailEmail: null,
+        },
+        { new: true }
+      );
+
       logger.info(`Gmail account revoked for user ${userId}`);
     }
   }

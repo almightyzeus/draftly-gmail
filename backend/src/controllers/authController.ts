@@ -59,6 +59,7 @@ export const me = async (req: AuthRequest, res: Response) => {
         id: user._id.toString(),
         email: user.email,
         name: user.name,
+        googleConnected: user.googleConnected || false,
       },
     });
   } catch (error) {

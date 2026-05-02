@@ -35,11 +35,31 @@
           <li>Track your email activity</li>
         </ul>
 
+        <!-- Gmail Connection Status -->
+        <div class="status-section">
+          <h3>Gmail Connection Status</h3>
+          <ng-container *ngIf="currentUser?.googleConnected">
+            <p><mat-icon class="status-icon success">check_circle</mat-icon> Gmail Connected</p>
+            <p class="text-muted">Email: {{ currentUser?.email || 'N/A' }}</p>
+          </ng-container>
+          <ng-container *ngIf="!currentUser?.googleConnected">
+            <p><mat-icon class="status-icon warning">info</mat-icon> Gmail Not Connected</p>
+          </ng-container>
+        </div>
+
         <div class="button-group">
-          <button mat-raised-button color="primary" (click)="connectGmail()">
-            <mat-icon>mail</mat-icon>
-            Connect Gmail
-          </button>
+          <ng-container *ngIf="!currentUser?.googleConnected">
+            <button mat-raised-button color="primary" (click)="connectGmail()">
+              <mat-icon>mail</mat-icon>
+              Connect Gmail
+            </button>
+          </ng-container>
+          <ng-container *ngIf="currentUser?.googleConnected">
+            <button mat-raised-button color="accent" (click)="disconnectGmail()">
+              <mat-icon>mail</mat-icon>
+              Disconnect Gmail
+            </button>
+          </ng-container>
           <button mat-raised-button color="accent">
             <mat-icon>draft</mat-icon>
             View Drafts
