@@ -1,0 +1,130 @@
+<div class="draft-detail-container">
+  <!-- Toolbar with back button -->
+  <mat-toolbar color="primary" class="toolbar">
+    <button mat-icon-button (click)="goBack()" class="back-btn">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <span>Draft Reply</span>
+    <span class="status-badge" [ngClass]="draft?.status?.toLowerCase()">
+      {{ draft?.status }}
+    </span>
+  </mat-toolbar>
+
+  <div class="content">
+    <!-- Loading state -->
+    <div *ngIf="isLoading" class="loading-state">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading draft...</p>
+    </div>
+
+    <!-- Error state -->
+    <div *ngIf="error && !isLoading" class="error-state">
+      <mat-card class="error-card">
+        <mat-card-content>
+          <mat-icon class="error-icon">error_outline</mat-icon>
+          <p>{{ error }}</p>
+          <button mat-raised-button color="primary" (click)="goBack()">
+            Go Back
+          </button>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Draft content -->
+    <div *ngIf="draft && !isLoading && !error" class="draft-content">
+      <mat-card class="draft-card">
+        <mat-card-header>
+          <div class="header-info">
+            <div>
+              <strong>Tone:</strong> {{ draft.tone | titlecase }}
+            </div>
+            <div>
+              <strong>Created:</strong> {{ draft.createdAt | date : 'short' }}
+            </div>
+          </div>
+        </mat-card-header>
+
+        <mat-card-content>
+          <div class="editor-section">
+            <label for="draft-editor" class="editor-label">
+              <strong>Edit Your Draft</strong>
+            </label>
+            <textarea
+              id="draft-editor"
+              class="draft-editor"
+              [(ngModel)]="editedContent"
+              (ngModelChange)="onContentChange()"
+              [disabled]="
+                isSaving ||
+                isApproving ||
+                isRejecting ||
+                draft.status !== 'PENDING'
+              "
+              placeholder="Edit your draft reply here..."
+            ></textarea>
+            <div class="char-count">
+              {{ editedContent.length }} characters
+            </div>
+          </div>
+
+          <mat-divider class="divider"></mat-divider>
+
+          <!-- Actions -->
+          <div class="actions">
+            <div class="save-section" *ngIf="hasChanges">
+              <button
+                mat-raised-button
+                color="accent"
+                (click)="saveDraft()"
+                [disabled]="isSaving || isApproving || isRejecting"
+                class="save-btn"
+              >
+                <mat-icon *ngIf="!isSaving">save</mat-icon>
+                <mat-spinner
+                  *ngIf="isSaving"
+                  diameter="20"
+                  class="inline-spinner"
+                ></mat-spinner>
+                {{ isSaving ? 'Saving...' : 'Save Changes' }}
+              </button>
+            </div>
+
+            <div class="approval-actions">
+              <button
+                mat-raised-button
+                color="primary"
+                (click)="approveDraft()"
+                [disabled]="isSaving || isApproving || isRejecting"
+                class="approve-btn"
+              >
+                <mat-icon *ngIf="!isApproving">check_circle</mat-icon>
+                <mat-spinner
+                  *ngIf="isApproving"
+                  diameter="20"
+                  class="inline-spinner"
+                ></mat-spinner>
+                {{ isApproving ? 'Approving...' : 'Approve & Send' }}
+              </button>
+
+              <button
+                mat-stroked-button
+                color="warn"
+                (click)="rejectDraft()"
+                [disabled]="isSaving || isApproving || isRejecting"
+                class="reject-btn"
+              >
+                <mat-icon *ngIf="!isRejecting">cancel</mat-icon>
+                <mat-spinner
+                  *ngIf="isRejecting"
+                  diameter="20"
+                  class="inline-spinner"
+                ></mat-spinner>
+                {{ isRejecting ? 'Rejecting...' : 'Reject' }}
+              </button>
+            </div>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </div>
+</div>

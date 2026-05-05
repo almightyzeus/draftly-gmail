@@ -212,6 +212,7 @@ button {
 
 .email-row {
   transition: background-color 0.2s;
+  cursor: pointer;
 }
 
 .email-row:hover {

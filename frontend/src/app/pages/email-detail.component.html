@@ -1,0 +1,115 @@
+<div class="email-detail-container">
+  <!-- Toolbar with back button -->
+  <mat-toolbar color="primary" class="toolbar">
+    <button mat-icon-button (click)="goBack()" class="back-btn">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+    <span>Email Detail</span>
+  </mat-toolbar>
+
+  <div class="content">
+    <!-- Loading state -->
+    <div *ngIf="isLoading" class="loading-state">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading email...</p>
+    </div>
+
+    <!-- Error state -->
+    <div *ngIf="error && !isLoading" class="error-state">
+      <mat-card class="error-card">
+        <mat-card-content>
+          <mat-icon class="error-icon">error_outline</mat-icon>
+          <p>{{ error }}</p>
+          <button mat-raised-button color="primary" (click)="goBack()">
+            Go Back
+          </button>
+        </mat-card-content>
+      </mat-card>
+    </div>
+
+    <!-- Email content -->
+    <div *ngIf="email && !isLoading && !error" class="email-content">
+      <mat-card class="email-card">
+        <mat-card-header>
+          <div class="header-row">
+            <div class="sender-info">
+              <strong>From:</strong> {{ email.from }}
+            </div>
+            <div class="date-info">
+              {{ email.internalDate | date : 'short' }}
+            </div>
+          </div>
+          <div class="to-info">
+            <strong>To:</strong> {{ email.to }}
+          </div>
+        </mat-card-header>
+
+        <mat-card-content>
+          <div class="subject">
+            <h2>{{ email.subject }}</h2>
+          </div>
+
+          <mat-divider class="divider"></mat-divider>
+
+          <div class="body">
+            <p [innerHTML]="email.bodyPlain"></p>
+          </div>
+        </mat-card-content>
+      </mat-card>
+
+      <!-- Draft generation section -->
+      <mat-card class="draft-generation-card">
+        <mat-card-header>
+          <mat-card-title>Generate Draft Reply</mat-card-title>
+        </mat-card-header>
+
+        <mat-card-content>
+          <div class="tone-selector">
+            <mat-form-field appearance="fill">
+              <mat-label>Select Tone</mat-label>
+              <mat-select
+                [(ngModel)]="selectedTone"
+                [disabled]="isGenerating"
+              >
+                <mat-option
+                  *ngFor="let tone of toneOptions"
+                  [value]="tone"
+                >
+                  {{ tone | titlecase }}
+                </mat-option>
+              </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div class="button-group">
+            <button
+              mat-raised-button
+              color="primary"
+              (click)="generateDraft()"
+              [disabled]="isGenerating"
+              class="generate-btn"
+            >
+              <mat-icon *ngIf="!isGenerating">auto_awesome</mat-icon>
+              <mat-spinner
+                *ngIf="isGenerating"
+                diameter="20"
+                class="inline-spinner"
+              ></mat-spinner>
+              {{
+                isGenerating ? 'Generating Draft...' : 'Generate Draft with AI'
+              }}
+            </button>
+
+            <button
+              mat-stroked-button
+              (click)="goBack()"
+              [disabled]="isGenerating"
+            >
+              Cancel
+            </button>
+          </div>
+        </mat-card-content>
+      </mat-card>
+    </div>
+  </div>
+</div>

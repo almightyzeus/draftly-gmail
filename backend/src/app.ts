@@ -9,6 +9,7 @@ import { logger } from './utils/logger.js';
 import { AppError } from './utils/errors.js';
 import authRoutes from './routes/authRoutes.js';
 import gmailRoutes from './routes/gmailRoutes.js';
+import draftRoutes from './routes/draftRoutes.js';
 
 export const app: Express = express();
 
@@ -47,6 +48,7 @@ const authLimiter = rateLimit({
 // Routes
 app.use('/api/auth', authLimiter, authRoutes);
 app.use('/api/gmail', gmailRoutes);
+app.use('/api/drafts', draftRoutes);
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {

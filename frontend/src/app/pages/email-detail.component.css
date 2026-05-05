@@ -1,0 +1,154 @@
+.email-detail-container {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+  background-color: #f5f5f5;
+}
+
+.toolbar {
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+}
+
+.back-btn {
+  margin-right: 16px;
+}
+
+.content {
+  flex: 1;
+  padding: 24px;
+  overflow-y: auto;
+}
+
+.loading-state,
+.error-state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100%;
+  gap: 16px;
+}
+
+.error-card {
+  text-align: center;
+  padding: 32px;
+}
+
+.error-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  color: #d32f2f;
+  margin-bottom: 16px;
+}
+
+.email-content {
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+  max-width: 800px;
+  margin: 0 auto;
+}
+
+.email-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+mat-card-header {
+  margin-bottom: 16px;
+  padding-bottom: 16px;
+  border-bottom: 1px solid #eee;
+}
+
+.header-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 12px;
+}
+
+.sender-info {
+  flex: 1;
+}
+
+.date-info {
+  color: #999;
+  font-size: 12px;
+}
+
+.to-info {
+  font-size: 14px;
+  color: #666;
+}
+
+.subject {
+  margin: 20px 0;
+}
+
+.subject h2 {
+  margin: 0;
+  font-size: 20px;
+  font-weight: 600;
+}
+
+.body {
+  line-height: 1.6;
+  color: #333;
+  white-space: pre-wrap;
+  word-wrap: break-word;
+}
+
+.divider {
+  margin: 16px 0;
+}
+
+.draft-generation-card {
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.tone-selector {
+  margin-bottom: 24px;
+  min-width: 250px;
+}
+
+.button-group {
+  display: flex;
+  gap: 12px;
+  align-items: center;
+}
+
+.generate-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.inline-spinner {
+  margin-right: 8px;
+}
+
+@media (max-width: 600px) {
+  .content {
+    padding: 16px;
+  }
+
+  .header-row {
+    flex-direction: column;
+    align-items: flex-start;
+    gap: 8px;
+  }
+
+  .date-info {
+    margin-top: 8px;
+  }
+
+  .button-group {
+    flex-wrap: wrap;
+  }
+
+  .tone-selector {
+    width: 100%;
+  }
+}

@@ -10,6 +10,7 @@ import { MatTableModule } from '@angular/material/table';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { AuthService, User } from '../services/auth.service';
+import { GmailService } from '../services/gmail.service';
 
 interface Email {
   id: string;
@@ -49,7 +50,11 @@ export class DashboardComponent implements OnInit {
   emailsError: string | null = null;
   displayedColumns: string[] = ['from', 'subject', 'snippet', 'internalDate'];
 
-  constructor(private authService: AuthService, private router: Router) {}
+  constructor(
+    private authService: AuthService,
+    private gmailService: GmailService,
+    private router: Router
+  ) {}
 
   ngOnInit(): void {
     this.authService.currentUser$.subscribe((user) => {
@@ -95,7 +100,7 @@ export class DashboardComponent implements OnInit {
 
   disconnectGmail(): void {
     if (confirm('Are you sure you want to disconnect your Gmail account?')) {
-      this.authService.revokeGmail().subscribe(
+      this.gmailService.revokeGmail().subscribe(
         () => {
           if (this.currentUser) {
             this.currentUser.googleConnected = false;
@@ -118,7 +123,7 @@ export class DashboardComponent implements OnInit {
     this.isLoadingEmails = true;
     this.emailsError = null;
 
-    this.authService.fetchEmails({ label: 'INBOX', limit: 20 }).subscribe(
+    this.gmailService.fetchEmails({ label: 'INBOX', limit: 20 }).subscribe(
       (emails) => {
         this.emails = emails;
         this.isLoadingEmails = false;
@@ -146,5 +151,9 @@ export class DashboardComponent implements OnInit {
   truncateSnippet(snippet: string, length: number = 60): string {
     if (!snippet) return '';
     return snippet.length > length ? snippet.substring(0, length) + '...' : snippet;
+  }
+
+  openEmailDetail(email: Email): void {
+    this.router.navigate(['/email', email.gmailMessageId]);
   }
 }
