@@ -92,20 +92,30 @@ export class GmailService {
 
       const gmailEmail = account.gmailEmail;
 
-      // Build Gmail API query
-      let query = '';
+            // Build Gmail API query
+      const queryParts = [
+        '-category:promotions',
+        '-category:social',
+        '-category:purchases',
+        '-from:(noreply OR "no-reply" OR "do-not-reply" OR donotreply OR "no_reply" OR "no.reply" OR "no response" OR "do not reply")',
+        '-subject:("do not reply" OR "no reply" OR "no-response")',
+      ];
+
       if (options?.label) {
-        query += `label:${options.label}`;
+        queryParts.push(`label:${options.label}`);
       }
       if (options?.unread) {
-        query += (query ? ' ' : '') + 'is:unread';
+        queryParts.push('is:unread');
       }
+
+      const query = queryParts.join(' ').trim();
 
       const listResponse = await gmail.users.messages.list({
         userId: 'me',
         q: query,
         maxResults: options?.limit || 20,
       });
+
 
       const messageIds = listResponse.data.messages || [];
 
