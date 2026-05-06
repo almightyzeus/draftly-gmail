@@ -30,3 +30,7 @@ Thumbs.db
 
 # macOS metadata files
 ._*
+
+# Continue.dev
+.continue/
+.continue.dev/
