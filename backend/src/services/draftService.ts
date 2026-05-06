@@ -3,6 +3,8 @@ import { logger } from '../utils/logger.js';
 import { Draft } from '../models/Draft.js';
 import { EmailMessage } from '../models/EmailMessage.js';
 import { OpenAIService } from './openaiService.js';
+import { GmailService } from './gmailService.js';
+import { GmailAccount } from '../models/GmailAccount.js';
 
 /**
  * DraftService - Handles draft generation, approval, rejection, and sending
@@ -12,58 +14,107 @@ export class DraftService {
 
   /**
    * Generate a draft reply using OpenAI
+   * If threadId is provided, fetch all unread emails in the thread and consolidate
    */
   static async generateDraft(
     userId: string,
-    gmailMessageId: string,
-    tone: string = 'formal'
+    gmailMessageId?: string,
+    tone: string = 'formal',
+    threadId?: string
   ): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
 
-      // Check if draft already exists for this email (idempotency)
+      let targetThreadId = threadId;
+      let gmailMessageIds: string[] = [];
+      let isConsolidated = false;
+
+      // If threadId provided, fetch all emails in thread for consolidation
+      if (threadId) {
+        const threadEmails = await GmailService.fetchThreadEmails(userId, threadId);
+        
+        if (threadEmails.length === 0) {
+          throw new Error('No emails found in thread');
+        }
+
+        // Get all unread inbound emails in thread
+        const unreadEmails = threadEmails.filter(
+          (e) => e.direction === 'INBOUND' && e.labels?.includes('UNREAD')
+        );
+
+        if (unreadEmails.length > 1) {
+          // Multiple emails: consolidate
+          gmailMessageIds = unreadEmails.map((e) => e.gmailMessageId);
+          isConsolidated = true;
+          targetThreadId = threadId;
+          logger.info(
+            { userId, threadId, emailCount: gmailMessageIds.length },
+            'Consolidating multiple emails for single draft'
+          );
+        } else if (unreadEmails.length === 1) {
+          // Single unread email
+          gmailMessageIds = [unreadEmails[0].gmailMessageId];
+          targetThreadId = threadId;
+        } else if (threadEmails.length > 0) {
+          // No unread, use latest email
+          gmailMessageIds = [threadEmails[0].gmailMessageId];
+          targetThreadId = threadId;
+        }
+      } else if (gmailMessageId) {
+        // Single email specified
+        const email = await EmailMessage.findOne({
+          userId: userObjectId,
+          gmailMessageId,
+        });
+
+        if (!email) {
+          throw new Error('Email not found');
+        }
+
+        gmailMessageIds = [gmailMessageId];
+        targetThreadId = email.threadId;
+      } else {
+        throw new Error('Either gmailMessageId or threadId must be provided');
+      }
+
+      // Check if draft already exists for this thread/message (idempotency)
       const existingDraft = await Draft.findOne({
         userId: userObjectId,
-        gmailMessageId,
+        threadId: targetThreadId,
         status: 'PENDING',
       });
 
       if (existingDraft) {
         logger.warn(
-          { userId, gmailMessageId },
-          'Draft already exists for this email'
+          { userId, threadId: targetThreadId },
+          'Draft already exists for this thread'
         );
         return existingDraft;
       }
 
-      // Get original email to extract thread info
-      const originalEmail = await EmailMessage.findOne({
-        userId: userObjectId,
-        gmailMessageId,
-      });
-
-      if (!originalEmail) {
-        throw new Error('Email not found');
-      }
-
       // Generate draft using OpenAI
-      const draftBody = await OpenAIService.generateDraft(userId, gmailMessageId, tone);
+      const draftBody = await OpenAIService.generateDraft(
+        userId,
+        gmailMessageIds[0],
+        tone
+      );
 
       // Create draft record
       const draft = new Draft({
         userId: userObjectId,
-        gmailMessageId,
-        threadId: originalEmail.threadId,
+        gmailMessageId: isConsolidated ? gmailMessageIds : gmailMessageIds[0],
+        threadId: targetThreadId,
         tone,
         promptVersion: this.PROMPT_VERSION,
         draftBody,
         status: 'PENDING',
+        isConsolidated,
         auditTrail: [
           {
             at: new Date(),
             action: 'GENERATED',
             by: 'system',
-            meta: { tone },
+            meta: { tone, isConsolidated, emailCount: gmailMessageIds.length },
           },
         ],
       });
@@ -71,7 +122,14 @@ export class DraftService {
       await draft.save();
 
       logger.info(
-        { userId, gmailMessageId, draftId: draft._id, tone },
+        {
+          userId,
+          threadId: targetThreadId,
+          draftId: draft._id,
+          tone,
+          isConsolidated,
+          emailCount: gmailMessageIds.length,
+        },
         'Draft generated and saved'
       );
 
@@ -144,7 +202,7 @@ export class DraftService {
   }
 
   /**
-   * Update draft content
+   * Update draft content (both MongoDB + Gmail if approved)
    */
   static async updateDraft(userId: string, draftId: string, draftBody: string): Promise<any> {
     try {
@@ -154,11 +212,15 @@ export class DraftService {
       const draft = await Draft.findOne({
         _id: draftObjectId,
         userId: userObjectId,
-        status: 'PENDING',
       });
 
       if (!draft) {
-        throw new Error('Draft not found or not in PENDING status');
+        throw new Error('Draft not found');
+      }
+
+      // Only allow editing PENDING or APPROVED drafts
+      if (!['PENDING', 'APPROVED'].includes(draft.status)) {
+        throw new Error(`Cannot edit draft with status: ${draft.status}`);
       }
 
       draft.draftBody = draftBody;
@@ -168,6 +230,36 @@ export class DraftService {
         by: 'user',
         meta: { bodyLength: draftBody.length },
       });
+
+      // If draft is already approved and has gmailDraftId, update in Gmail
+      if (draft.status === 'APPROVED' && draft.gmailDraftId) {
+        try {
+          const originalEmail = await EmailMessage.findOne({
+            userId: userObjectId,
+            gmailMessageId: Array.isArray(draft.gmailMessageId)
+              ? draft.gmailMessageId[0]
+              : draft.gmailMessageId,
+          });
+
+          if (originalEmail) {
+            await GmailService.updateDraft(
+              userId,
+              draft.gmailDraftId,
+              draftBody,
+              originalEmail.from,
+              `Re: ${originalEmail.subject}`,
+              draft.threadId,
+              originalEmail.gmailMessageId,
+              originalEmail.gmailMessageId
+            );
+          }
+        } catch (gmailError) {
+          logger.warn(
+            gmailError instanceof Error ? gmailError : new Error(String(gmailError)),
+            'Failed to update Gmail draft during edit, continuing with MongoDB update'
+          );
+        }
+      }
 
       await draft.save();
 
@@ -184,7 +276,7 @@ export class DraftService {
   }
 
   /**
-   * Approve a draft (mark as ready to send)
+   * Approve a draft (mark as ready to send + save to Gmail)
    */
   static async approveDraft(userId: string, draftId: string): Promise<any> {
     try {
@@ -201,17 +293,55 @@ export class DraftService {
         throw new Error('Draft not found or not in PENDING status');
       }
 
+      // Get original email to extract info for Gmail draft
+      const originalEmail = await EmailMessage.findOne({
+        userId: userObjectId,
+        gmailMessageId: Array.isArray(draft.gmailMessageId)
+          ? draft.gmailMessageId[0]
+          : draft.gmailMessageId,
+      });
+
+      if (!originalEmail) {
+        throw new Error('Original email not found');
+      }
+
+      // Create draft in Gmail
+      let gmailDraftId: string | null = null;
+      try {
+        gmailDraftId = await GmailService.createDraft(
+          userId,
+          originalEmail.from,
+          `Re: ${originalEmail.subject}`,
+          draft.draftBody,
+          draft.threadId,
+          originalEmail.gmailMessageId,
+          originalEmail.gmailMessageId
+        );
+      } catch (gmailError) {
+        logger.warn(
+          gmailError instanceof Error ? gmailError : new Error(String(gmailError)),
+          'Failed to create Gmail draft, but proceeding with MongoDB approval'
+        );
+      }
+
       draft.status = 'APPROVED';
       draft.approvedAt = new Date();
+      if (gmailDraftId) {
+        draft.gmailDraftId = gmailDraftId;
+      }
       draft.auditTrail.push({
         at: new Date(),
         action: 'APPROVED',
         by: 'user',
+        meta: { gmailDraftId: gmailDraftId || null },
       });
 
       await draft.save();
 
-      logger.info({ userId, draftId }, 'Draft approved');
+      logger.info(
+        { userId, draftId, gmailDraftId },
+        'Draft approved and saved to Gmail'
+      );
 
       return draft;
     } catch (error) {
@@ -265,8 +395,105 @@ export class DraftService {
 
   /**
    * Send an approved draft
+   * Requires idempotency key to prevent double-sends
    */
   static async sendDraft(userId: string, draftId: string, idempotencyKey: string): Promise<any> {
-    throw new Error('Not implemented yet (Day 4)');
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      const draftObjectId = new Types.ObjectId(draftId);
+
+      const draft = await Draft.findOne({
+        _id: draftObjectId,
+        userId: userObjectId,
+      });
+
+      if (!draft) {
+        throw new Error('Draft not found');
+      }
+
+      if (draft.status !== 'APPROVED') {
+        throw new Error(`Cannot send draft with status: ${draft.status}. Must be APPROVED.`);
+      }
+
+      // Idempotency: if already sent with same key, return existing result
+      if (draft.sentAt && draft.sentGmailMessageId) {
+        logger.warn(
+          { userId, draftId, idempotencyKey },
+          'Draft already sent, returning existing result'
+        );
+        return draft;
+      }
+
+      if (!draft.gmailDraftId) {
+        throw new Error('Gmail draft ID not found. Please approve the draft first.');
+      }
+
+      // Send the draft via Gmail
+      const sentMessageId = await GmailService.sendDraft(
+        userId,
+        draft.gmailDraftId,
+        draft.threadId
+      );
+
+      // Get original email for creating outbound EmailMessage record
+      const originalEmail = await EmailMessage.findOne({
+        userId: userObjectId,
+        gmailMessageId: Array.isArray(draft.gmailMessageId)
+          ? draft.gmailMessageId[0]
+          : draft.gmailMessageId,
+      });
+
+      // Update draft status
+      draft.status = 'SENT';
+      draft.sentAt = new Date();
+      draft.sentGmailMessageId = sentMessageId;
+      draft.auditTrail.push({
+        at: new Date(),
+        action: 'SENT',
+        by: 'user',
+        meta: {
+          sentGmailMessageId: sentMessageId,
+          idempotencyKey,
+        },
+      });
+
+      await draft.save();
+
+      // Create outbound EmailMessage record if original email exists
+      if (originalEmail) {
+        await EmailMessage.create({
+          userId: userObjectId,
+          gmailMessageId: sentMessageId,
+          threadId: draft.threadId,
+          from: originalEmail.to, // We sent to the original sender
+          to: originalEmail.from,
+          subject: `Re: ${originalEmail.subject}`,
+          snippet: draft.draftBody.substring(0, 255),
+          bodyPlain: draft.draftBody,
+          bodyHtml: draft.draftBody,
+          internalDate: new Date(),
+          direction: 'OUTBOUND',
+          labels: ['SENT'],
+        });
+
+        logger.info(
+          { userId, sentMessageId, threadId: draft.threadId },
+          'Outbound EmailMessage created'
+        );
+      }
+
+      logger.info(
+        { userId, draftId, sentMessageId, idempotencyKey },
+        'Draft sent successfully'
+      );
+
+      return draft;
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Failed to send draft'
+      );
+      throw error;
+    }
   }
 }

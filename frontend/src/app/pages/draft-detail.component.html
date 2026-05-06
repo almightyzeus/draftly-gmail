@@ -30,6 +30,15 @@
       </mat-card>
     </div>
 
+    <!-- Success message -->
+    <div *ngIf="successMessage && !isLoading" class="success-message">
+      <mat-card class="success-card">
+        <mat-card-content>
+          {{ successMessage }}
+        </mat-card-content>
+      </mat-card>
+    </div>
+
     <!-- Draft content -->
     <div *ngIf="draft && !isLoading && !error" class="draft-content">
       <mat-card class="draft-card">
@@ -58,7 +67,8 @@
                 isSaving ||
                 isApproving ||
                 isRejecting ||
-                draft.status !== 'PENDING'
+                isSending ||
+                (draft.status !== 'PENDING' && draft.status !== 'APPROVED')
               "
               placeholder="Edit your draft reply here..."
             ></textarea>
@@ -71,12 +81,13 @@
 
           <!-- Actions -->
           <div class="actions">
-            <div class="save-section" *ngIf="hasChanges">
+            <!-- Save section -->
+            <div class="save-section" *ngIf="hasChanges && (draft.status === 'PENDING' || draft.status === 'APPROVED')">
               <button
                 mat-raised-button
                 color="accent"
                 (click)="saveDraft()"
-                [disabled]="isSaving || isApproving || isRejecting"
+                [disabled]="isSaving || isApproving || isRejecting || isSending"
                 class="save-btn"
               >
                 <mat-icon *ngIf="!isSaving">save</mat-icon>
@@ -89,12 +100,13 @@
               </button>
             </div>
 
-            <div class="approval-actions">
+            <!-- PENDING state actions: Approve, Reject -->
+            <div class="approval-actions" *ngIf="draft.status === 'PENDING'">
               <button
                 mat-raised-button
                 color="primary"
                 (click)="approveDraft()"
-                [disabled]="isSaving || isApproving || isRejecting"
+                [disabled]="isSaving || isApproving || isRejecting || isSending"
                 class="approve-btn"
               >
                 <mat-icon *ngIf="!isApproving">check_circle</mat-icon>
@@ -103,14 +115,14 @@
                   diameter="20"
                   class="inline-spinner"
                 ></mat-spinner>
-                {{ isApproving ? 'Approving...' : 'Approve & Send' }}
+                {{ isApproving ? 'Approving...' : 'Approve' }}
               </button>
 
               <button
                 mat-stroked-button
                 color="warn"
                 (click)="rejectDraft()"
-                [disabled]="isSaving || isApproving || isRejecting"
+                [disabled]="isSaving || isApproving || isRejecting || isSending"
                 class="reject-btn"
               >
                 <mat-icon *ngIf="!isRejecting">cancel</mat-icon>
@@ -120,6 +132,58 @@
                   class="inline-spinner"
                 ></mat-spinner>
                 {{ isRejecting ? 'Rejecting...' : 'Reject' }}
+              </button>
+            </div>
+
+            <!-- APPROVED state actions: Send, Reject -->
+            <div class="send-actions" *ngIf="draft.status === 'APPROVED'">
+              <button
+                mat-raised-button
+                color="primary"
+                (click)="sendDraft()"
+                [disabled]="isSaving || isApproving || isRejecting || isSending"
+                class="send-btn"
+              >
+                <mat-icon *ngIf="!isSending">send</mat-icon>
+                <mat-spinner
+                  *ngIf="isSending"
+                  diameter="20"
+                  class="inline-spinner"
+                ></mat-spinner>
+                {{ isSending ? 'Sending...' : 'Send' }}
+              </button>
+
+              <button
+                mat-stroked-button
+                color="warn"
+                (click)="rejectDraft()"
+                [disabled]="isSaving || isApproving || isRejecting || isSending"
+                class="reject-btn"
+              >
+                <mat-icon *ngIf="!isRejecting">cancel</mat-icon>
+                <mat-spinner
+                  *ngIf="isRejecting"
+                  diameter="20"
+                  class="inline-spinner"
+                ></mat-spinner>
+                {{ isRejecting ? 'Rejecting...' : 'Reject' }}
+              </button>
+            </div>
+
+            <!-- READ-ONLY state for SENT or REJECTED -->
+            <div class="read-only-actions" *ngIf="draft.status === 'SENT' || draft.status === 'REJECTED'">
+              <p class="status-info">
+                <strong *ngIf="draft.status === 'SENT'">✓ This draft has been sent.</strong>
+                <strong *ngIf="draft.status === 'REJECTED'">✗ This draft was rejected.</strong>
+              </p>
+              <button
+                mat-stroked-button
+                color="primary"
+                (click)="goBack()"
+                class="back-to-list-btn"
+              >
+                <mat-icon>arrow_back</mat-icon>
+                Back to Drafts
               </button>
             </div>
           </div>

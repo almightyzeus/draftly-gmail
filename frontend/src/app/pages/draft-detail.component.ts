@@ -51,8 +51,10 @@ export class DraftDetailComponent implements OnInit {
   isSaving = false;
   isApproving = false;
   isRejecting = false;
+  isSending = false;
   error: string | null = null;
   hasChanges = false;
+  successMessage: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -99,12 +101,15 @@ export class DraftDetailComponent implements OnInit {
 
     this.isSaving = true;
     this.error = null;
+    this.successMessage = null;
 
     this.draftService.updateDraft(this.draft._id, this.editedContent).subscribe(
       (updated) => {
         this.draft = updated;
         this.hasChanges = false;
         this.isSaving = false;
+        this.successMessage = 'Draft saved successfully!';
+        setTimeout(() => (this.successMessage = null), 3000);
       },
       (error) => {
         console.error('Failed to save draft:', error);
@@ -126,13 +131,14 @@ export class DraftDetailComponent implements OnInit {
 
     this.isApproving = true;
     this.error = null;
+    this.successMessage = null;
 
     this.draftService.approveDraft(this.draft._id).subscribe(
       (updated) => {
         this.draft = updated;
         this.isApproving = false;
-        alert('Draft approved!');
-        this.router.navigate(['/dashboard']);
+        this.successMessage = '✓ Draft approved! Saved to Gmail drafts. You can now send or edit further.';
+        this.hasChanges = false;
       },
       (error) => {
         console.error('Failed to approve draft:', error);
@@ -150,18 +156,48 @@ export class DraftDetailComponent implements OnInit {
     if (confirm('Are you sure you want to reject this draft?')) {
       this.isRejecting = true;
       this.error = null;
+      this.successMessage = null;
 
       this.draftService.rejectDraft(this.draft._id).subscribe(
         (updated) => {
           this.draft = updated;
           this.isRejecting = false;
-          alert('Draft rejected');
-          this.router.navigate(['/dashboard']);
+          this.successMessage = 'Draft rejected.';
+          setTimeout(() => this.router.navigate(['/dashboard']), 2000);
         },
         (error) => {
           console.error('Failed to reject draft:', error);
           this.error = 'Failed to reject draft';
           this.isRejecting = false;
+        }
+      );
+    }
+  }
+
+  sendDraft(): void {
+    if (!this.draft) {
+      return;
+    }
+
+    if (confirm('Are you sure you want to send this draft?')) {
+      this.isSending = true;
+      this.error = null;
+      this.successMessage = null;
+
+      // Generate idempotency key
+      const idempotencyKey = `${this.draft._id}-${Date.now()}`;
+
+      this.draftService.sendDraft(this.draft._id, idempotencyKey).subscribe(
+        (updated) => {
+          this.draft = updated;
+          this.isSending = false;
+          this.successMessage = '✓ Draft sent successfully! Message ID: ' + updated.sentGmailMessageId;
+          setTimeout(() => this.router.navigate(['/dashboard']), 2000);
+        },
+        (error) => {
+          console.error('Failed to send draft:', error);
+          this.error = 'Failed to send draft: ' + (error?.error?.error || error.message);
+          this.isSending = false;
         }
       );
     }

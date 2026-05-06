@@ -70,4 +70,13 @@ export class DraftService {
   rejectDraft(draftId: string): Observable<any> {
     return this.http.post<any>(`${this.draftsApiUrl}/${draftId}/reject`, {});
   }
+
+  /**
+   * Send an approved draft
+   */
+  sendDraft(draftId: string, idempotencyKey: string): Observable<any> {
+    return this.http.post<any>(`${this.draftsApiUrl}/${draftId}/send`, {
+      idempotencyKey,
+    });
+  }
 }

@@ -7,15 +7,17 @@ const router = Router();
 
 /**
  * POST /api/drafts/generate
- * Generate a draft reply for a given email
+ * Generate a draft reply for a given email or thread
+ * Either gmailMessageId or threadId can be provided
+ * If threadId is provided, will consolidate multiple unread emails
  */
 router.post('/generate', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
-    const { gmailMessageId, tone } = req.body;
+    const { gmailMessageId, threadId, tone } = req.body;
 
-    if (!gmailMessageId) {
-      return res.status(400).json({ error: 'gmailMessageId is required' });
+    if (!gmailMessageId && !threadId) {
+      return res.status(400).json({ error: 'Either gmailMessageId or threadId is required' });
     }
 
     const validTones = ['formal', 'concise', 'friendly'];
@@ -25,7 +27,12 @@ router.post('/generate', authenticateJWT, async (req: Request, res: Response) =>
       });
     }
 
-    const draft = await DraftService.generateDraft(userId, gmailMessageId, tone || 'formal');
+    const draft = await DraftService.generateDraft(
+      userId,
+      gmailMessageId,
+      tone || 'formal',
+      threadId
+    );
 
     res.status(201).json(draft);
   } catch (error) {
@@ -133,6 +140,29 @@ router.post('/:id/reject', authenticateJWT, async (req: Request, res: Response) 
   } catch (error) {
     logger.error(error instanceof Error ? error : new Error(String(error)), 'Reject draft error');
     res.status(500).json({ error: 'Failed to reject draft' });
+  }
+});
+
+/**
+ * POST /api/drafts/:id/send
+ * Send an approved draft
+ */
+router.post('/:id/send', authenticateJWT, async (req: Request, res: Response) => {
+  try {
+    const userId = (req as any).userId;
+    const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
+    const { idempotencyKey } = req.body;
+
+    if (!idempotencyKey) {
+      return res.status(400).json({ error: 'idempotencyKey is required' });
+    }
+
+    const draft = await DraftService.sendDraft(userId, id, idempotencyKey);
+
+    res.json(draft);
+  } catch (error) {
+    logger.error(error instanceof Error ? error : new Error(String(error)), 'Send draft error');
+    res.status(500).json({ error: 'Failed to send draft' });
   }
 });
 

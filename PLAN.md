@@ -76,7 +76,7 @@ Implement these collections with Mongoose:
 
 5. `Draft`
    - userId
-   - gmailMessageId (original)
+   - gmailMessageId (original, or array if consolidated from multiple)
    - threadId
    - tone
    - promptVersion
@@ -84,8 +84,10 @@ Implement these collections with Mongoose:
    - status: `PENDING | APPROVED | REJECTED | SENT`
    - approvedAt?, rejectedAt?, sentAt?
    - sentGmailMessageId?
+   - gmailDraftId? (stores Gmail draft ID when saved to Gmail)
    - idempotencyKey (for send)
    - auditTrail: [{ at, action, by, meta }]
+   - isConsolidated? (true if generated from multiple emails in thread)
 
 6. `ActivityLog`
    - userId
@@ -116,13 +118,13 @@ Implement these collections with Mongoose:
 
 ### Drafts
 
-- `POST /api/drafts/generate` { gmailMessageId, tone? }
+- `POST /api/drafts/generate` { gmailMessageId (or threadId for consolidation), tone? }
 - `GET /api/drafts?status=PENDING`
 - `GET /api/drafts/:id`
-- `PUT /api/drafts/:id` { draftBody }
-- `POST /api/drafts/:id/approve`
-- `POST /api/drafts/:id/reject`
-- `POST /api/drafts/:id/send` { idempotencyKey }
+- `PUT /api/drafts/:id` { draftBody } (updates both MongoDB + Gmail draft)
+- `POST /api/drafts/:id/approve` (saves to MongoDB + saves as Gmail draft, status → APPROVED)
+- `POST /api/drafts/:id/reject` (status → REJECTED)
+- `POST /api/drafts/:id/send` { idempotencyKey } (sends via Gmail API, status → SENT, stores sentGmailMessageId)
 
 ### Preferences
 
@@ -149,15 +151,43 @@ For “learning user style”, do **simple retrieval**:
 1. Pull last `N` outbound emails (`EmailMessage` direction OUTBOUND)
 2. Put them in the prompt as examples (“Here are examples of my writing style”)
 
-## Threading rules for Gmail replies
+## Draft Workflow (NEW — Missing Feature + D5)
 
-When sending reply:
+### Approval Flow
+When user clicks **Approve**:
+1. Save draft to MongoDB with status = APPROVED
+2. Create/update draft in Gmail using `users.drafts.create()` or `users.drafts.update()`
+3. Store returned `gmailDraftId` in Draft model
+4. User can now see it in Gmail's drafts folder
 
-- Use `threadId`
-- Add headers:
-  - `In-Reply-To: <messageId>`
-  - `References: <messageId>`
-- Use `users.messages.send` with raw RFC822 message
+### Edit Flow
+When user clicks **Edit** (after approve):
+1. Update `draftBody` in MongoDB
+2. Update the Gmail draft via `users.drafts.update(gmailDraftId)` with new body
+3. Keep both in sync
+
+### Send Flow
+When user clicks **Send** (after approve):
+1. Fetch Draft from MongoDB
+2. Fetch the latest Gmail draft (or compose fresh if needed)
+3. Send via `users.messages.send()` with:
+   - Proper threading headers (In-Reply-To, References)
+   - threadId for Gmail API
+   - idempotencyKey for deduplication
+4. Mark Draft status = SENT
+5. Store sentGmailMessageId
+6. Create EmailMessage record (direction: OUTBOUND) with the sent message
+7. Optionally delete the draft from Gmail (or leave it)
+
+### Multi-Email Consolidation (D5 Enhancement)
+When generating drafts:
+1. If `threadId` provided, fetch ALL unread/recent emails in that thread
+2. If multiple emails:
+   - Mark Draft as `isConsolidated: true`
+   - Store array of `gmailMessageId`s
+   - In prompt: "You have received multiple emails. Here's the full context: [email1] [email2]..."
+3. If single email: generate draft normally
+4. Result: ONE draft that addresses all emails in thread
 
 ## Idempotency + retries (send)
 
@@ -202,11 +232,24 @@ Frontend:
 - Approve/reject endpoints
 - Activity log for each state change
 
-### Day 5 — Send flow
+### Day 5 — Send flow + Gmail draft saving (PRIORITY)
 
+**Gmail Draft Saving (Missing Feature)**:
+- Implement `users.drafts.create()` when user clicks Approve
+- Store `gmailDraftId` in Draft model
+- Implement `users.drafts.update()` for edit endpoint
+- Implement `users.drafts.send()` or `users.messages.send()` for send
+
+**D5 — Enhanced Send Flow**:
 - Implement Gmail reply sending (threading)
 - Idempotency + retries
-- Mark draft SENT + store sent message id
+- Mark draft SENT + store sent message ID
+- Create outbound EmailMessage record for sent message
+
+**D5 — Multi-Email Consolidation**:
+- Fetch all unread/recent emails in thread (not just latest)
+- If multiple: generate ONE draft addressing all
+- Mark as `isConsolidated: true` with array of message IDs
 
 ### Day 6 — Angular UI for workflows
 
@@ -241,3 +284,78 @@ Frontend:
 - Don’t overbuild role-based access
 - Skip full test suite; add a couple smoke tests only
 - Prefer “works end-to-end” over perfect abstraction
+## CURRENT SPRINT: Gmail Draft Saving + D5 Send Flow
+
+### Implementation Breakdown
+
+#### Backend Tasks
+
+**1. Update Draft Model**
+- [ ] Add `gmailDraftId?: string` field
+- [ ] Add `isConsolidated?: boolean` field
+- [ ] Update `gmailMessageId` to support `string | string[]`
+
+**2. GmailService enhancements**
+- [ ] `createDraft(userId, to, subject, bodyHtml, threadId)` → returns gmailDraftId
+- [ ] `updateDraft(userId, gmailDraftId, bodyHtml)` → updates Gmail draft
+- [ ] `sendDraftFromGmail(userId, gmailDraftId, threadId, inReplyTo, references)` → sends + returns sentMessageId
+- [ ] `deleteDraft(userId, gmailDraftId)` → optional cleanup
+- [ ] `fetchThreadEmails(userId, threadId)` → returns all emails in thread (for consolidation)
+
+**3. DraftService enhancements**
+- [ ] `approveDraft(draftId)` → save to MongoDB + call `GmailService.createDraft()` to save in Gmail
+- [ ] `editDraft(draftId, newBody)` → update MongoDB + call `GmailService.updateDraft()` to sync Gmail
+- [ ] `sendDraft(draftId, idempotencyKey)` → check idempotency → send via Gmail → mark SENT → store sentGmailMessageId
+- [ ] Update `generateDraft()` logic:
+  - Accept `threadId` (instead of just gmailMessageId)
+  - Fetch all unread emails in thread
+  - If multiple: consolidate into one prompt + mark `isConsolidated: true`
+  - If one: normal flow
+
+**4. New endpoint: POST /api/drafts/:id/approve**
+- Save to MongoDB (status = APPROVED)
+- Call GmailService.createDraft()
+- Return updated draft with gmailDraftId
+
+**5. Update endpoint: PUT /api/drafts/:id**
+- Update draftBody in MongoDB
+- If gmailDraftId exists, call GmailService.updateDraft()
+- Maintain sync between MongoDB and Gmail
+
+**6. New endpoint: POST /api/drafts/:id/send**
+- Verify draft status = APPROVED
+- Check idempotency key (avoid double-send)
+- Call GmailService.sendDraftFromGmail() or compose message with threading headers
+- Mark status = SENT, store sentGmailMessageId
+- Create EmailMessage record (direction: OUTBOUND)
+- Log activity
+
+#### Frontend Tasks
+
+**1. Update Draft Detail UI**
+- Show 3 buttons: **Approve**, **Reject**, **Send** (instead of approve + send combined)
+- **Approve**: Changes status to APPROVED + shows Gmail draft saved message
+- **Reject**: Changes status to REJECTED
+- **Send**: Only enabled if status = APPROVED, sends email
+
+**2. Draft Status Indicator**
+- PENDING → edit allowed, no send
+- APPROVED → edit + send allowed, Gmail draft exists
+- REJECTED → no actions
+- SENT → read-only, show sent timestamp + message ID
+
+**3. Edit Form**
+- Allow editing only in PENDING or APPROVED states
+- Show "Syncing to Gmail..." during edit if gmailDraftId exists
+
+#### Testing Checklist
+
+- [ ] Approve draft → verify saved in MongoDB with status APPROVED
+- [ ] Verify gmailDraftId returned and stored
+- [ ] Check Gmail: draft appears in Drafts folder
+- [ ] Edit draft → verify changes sync to Gmail
+- [ ] Reject draft → status changes, no Gmail draft created
+- [ ] Send approved draft → email sent, status = SENT, sentGmailMessageId stored
+- [ ] Send with idempotency key → retry returns same result
+- [ ] Multi-email thread consolidation → single draft generated for all emails
+- [ ] Check outbound EmailMessage created after send

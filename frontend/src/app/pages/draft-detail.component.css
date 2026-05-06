@@ -71,6 +71,26 @@
   margin-bottom: 16px;
 }
 
+.success-message {
+  display: flex;
+  justify-content: center;
+  margin-bottom: 16px;
+}
+
+.success-card {
+  background-color: #e8f5e9;
+  border-left: 4px solid #4caf50;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  max-width: 900px;
+  width: 100%;
+}
+
+.success-card mat-card-content {
+  color: #2e7d32;
+  font-weight: 500;
+  padding: 16px;
+}
+
 .draft-content {
   display: flex;
   flex-direction: column;
@@ -153,7 +173,9 @@
   gap: 8px;
 }
 
-.approval-actions {
+.approval-actions,
+.send-actions,
+.read-only-actions {
   display: flex;
   gap: 12px;
   justify-content: flex-end;
@@ -161,12 +183,35 @@
 }
 
 .approve-btn,
-.reject-btn {
+.send-btn,
+.reject-btn,
+.back-to-list-btn {
   display: flex;
   align-items: center;
   gap: 8px;
   min-width: 150px;
   justify-content: center;
+}
+
+.send-btn {
+  min-width: 140px;
+}
+
+.read-only-actions {
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.status-info {
+  color: #1976d2;
+  font-weight: 500;
+}
+
+.status-info strong {
+  display: flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .inline-spinner {
@@ -187,11 +232,13 @@
     min-height: 250px;
   }
 
-  .approval-actions {
+  .approval-actions,
+  .send-actions {
     flex-direction: column;
   }
 
   .approve-btn,
+  .send-btn,
   .reject-btn {
     width: 100%;
   }

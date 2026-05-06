@@ -12,7 +12,7 @@ export interface IAuditTrailEntry {
 
 export interface IDraft extends Document {
   userId: Types.ObjectId;
-  gmailMessageId: string;
+  gmailMessageId: string | string[];
   threadId: string;
   tone: ToneType;
   promptVersion: string;
@@ -22,6 +22,8 @@ export interface IDraft extends Document {
   rejectedAt?: Date;
   sentAt?: Date;
   sentGmailMessageId?: string;
+  gmailDraftId?: string;
+  isConsolidated?: boolean;
   auditTrail: IAuditTrailEntry[];
   createdAt: Date;
   updatedAt: Date;
@@ -56,7 +58,7 @@ const draftSchema = new Schema<IDraft>(
       index: true,
     },
     gmailMessageId: {
-      type: String,
+      type: Schema.Types.Mixed,
       required: true,
     },
     threadId: {
@@ -98,6 +100,14 @@ const draftSchema = new Schema<IDraft>(
     sentGmailMessageId: {
       type: String,
       default: null,
+    },
+    gmailDraftId: {
+      type: String,
+      default: null,
+    },
+    isConsolidated: {
+      type: Boolean,
+      default: false,
     },
     auditTrail: {
       type: [auditTrailSchema],

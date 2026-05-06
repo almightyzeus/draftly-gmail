@@ -1,5 +1,6 @@
 import { google } from 'googleapis';
 import { Types } from 'mongoose';
+import * as nodemailer from 'nodemailer';
 import { oauth2Client } from './googleClient.js';
 import { GmailAccount } from '../models/GmailAccount.js';
 import { EmailMessage } from '../models/EmailMessage.js';
@@ -247,5 +248,218 @@ export class GmailService {
     message: string
   ): Promise<string> {
     throw new Error('Not implemented yet');
+  }
+
+  /**
+   * Fetch all emails in a thread
+   */
+  static async fetchThreadEmails(userId: string, threadId: string): Promise<any[]> {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      const emails = await EmailMessage.find({
+        userId: userObjectId,
+        threadId,
+      })
+        .sort({ internalDate: -1 })
+        .lean();
+
+      return emails.map((email) => ({
+        id: email._id,
+        gmailMessageId: email.gmailMessageId,
+        threadId: email.threadId,
+        from: email.from,
+        to: email.to,
+        subject: email.subject,
+        snippet: email.snippet,
+        bodyPlain: email.bodyPlain,
+        bodyHtml: email.bodyHtml,
+        direction: email.direction,
+        internalDate: email.internalDate,
+        labels: email.labels,
+      }));
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Failed to fetch thread emails'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Create a draft in Gmail
+   * Returns the gmailDraftId
+   */
+  static async createDraft(
+    userId: string,
+    to: string,
+    subject: string,
+    bodyHtml: string,
+    threadId: string,
+    inReplyTo?: string,
+    references?: string
+  ): Promise<string> {
+    try {
+      const gmail = await this.getGmailClient(userId);
+
+      // Build RFC822 message
+      const boundary = '===============' + Date.now() + '===============';
+      const headers = [
+        `From: ${(await GmailAccount.findOne({ userId: new Types.ObjectId(userId) }))?.gmailEmail}`,
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      ];
+
+      if (inReplyTo) {
+        headers.push(`In-Reply-To: ${inReplyTo}`);
+      }
+      if (references) {
+        headers.push(`References: ${references}`);
+      }
+
+      const bodyPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n--${boundary}--`;
+      const rawMessage = headers.join('\r\n') + '\r\n\r\n' + bodyPart;
+      const encodedMessage = Buffer.from(rawMessage).toString('base64');
+
+      // Create draft in Gmail
+      const response = await gmail.users.drafts.create({
+        userId: 'me',
+        requestBody: {
+          message: {
+            raw: encodedMessage,
+            threadId: threadId,
+          },
+        },
+      });
+
+      const gmailDraftId = response.data.id;
+      logger.info({ userId, gmailDraftId, threadId }, 'Draft created in Gmail');
+
+      return gmailDraftId || '';
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Failed to create Gmail draft'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Update an existing draft in Gmail
+   */
+  static async updateDraft(
+    userId: string,
+    gmailDraftId: string,
+    bodyHtml: string,
+    to: string,
+    subject: string,
+    threadId: string,
+    inReplyTo?: string,
+    references?: string
+  ): Promise<void> {
+    try {
+      const gmail = await this.getGmailClient(userId);
+
+      // Build RFC822 message
+      const boundary = '===============' + Date.now() + '===============';
+      const headers = [
+        `From: ${(await GmailAccount.findOne({ userId: new Types.ObjectId(userId) }))?.gmailEmail}`,
+        `To: ${to}`,
+        `Subject: ${subject}`,
+        'MIME-Version: 1.0',
+        `Content-Type: multipart/alternative; boundary="${boundary}"`,
+      ];
+
+      if (inReplyTo) {
+        headers.push(`In-Reply-To: ${inReplyTo}`);
+      }
+      if (references) {
+        headers.push(`References: ${references}`);
+      }
+
+      const bodyPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n--${boundary}--`;
+      const rawMessage = headers.join('\r\n') + '\r\n\r\n' + bodyPart;
+      const encodedMessage = Buffer.from(rawMessage).toString('base64');
+
+      // Update draft
+      await gmail.users.drafts.update({
+        userId: 'me',
+        id: gmailDraftId,
+        requestBody: {
+          message: {
+            raw: encodedMessage,
+            threadId: threadId,
+          },
+        },
+      });
+
+      logger.info({ userId, gmailDraftId }, 'Draft updated in Gmail');
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Failed to update Gmail draft'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Send a draft in Gmail
+   * Returns the sentGmailMessageId
+   */
+  static async sendDraft(
+    userId: string,
+    gmailDraftId: string,
+    threadId: string,
+    inReplyTo?: string,
+    references?: string
+  ): Promise<string> {
+    try {
+      const gmail = await this.getGmailClient(userId);
+
+      // Send the draft
+      const response = await gmail.users.drafts.send({
+        userId: 'me',
+        requestBody: {
+          id: gmailDraftId,
+        },
+      });
+
+      const sentMessageId = response.data.id;
+      logger.info({ userId, gmailDraftId, sentMessageId }, 'Draft sent via Gmail');
+
+      return sentMessageId || '';
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Failed to send Gmail draft'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Delete a draft in Gmail (optional cleanup)
+   */
+  static async deleteDraft(userId: string, gmailDraftId: string): Promise<void> {
+    try {
+      const gmail = await this.getGmailClient(userId);
+
+      await gmail.users.drafts.delete({
+        userId: 'me',
+        id: gmailDraftId,
+      });
+
+      logger.info({ userId, gmailDraftId }, 'Draft deleted from Gmail');
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Failed to delete Gmail draft'
+      );
+      throw error;
+    }
   }
 }
