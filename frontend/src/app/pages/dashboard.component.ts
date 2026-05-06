@@ -49,6 +49,7 @@ export class DashboardComponent implements OnInit {
   isLoadingEmails = false;
   emailsError: string | null = null;
   displayedColumns: string[] = ['from', 'subject', 'snippet', 'internalDate'];
+  private isInitialLoad = true;
 
   constructor(
     private authService: AuthService,
@@ -59,13 +60,10 @@ export class DashboardComponent implements OnInit {
   ngOnInit(): void {
     this.authService.currentUser$.subscribe((user) => {
       this.currentUser = user;
-      // Fetch emails when Gmail is connected
-      if (user?.googleConnected) {
-        // Only fetch if we don't already have emails or if it's a reconnect
-        if (this.emails.length === 0 || !this.isLoadingEmails) {
-          this.fetchEmails();
-        }
-      } else {
+      // Only fetch emails on initial load, not on every user$ update
+      if (this.isInitialLoad && user?.googleConnected && this.emails.length === 0) {
+        this.fetchEmails();
+      } else if (!user?.googleConnected) {
         // Clear emails if Gmail is not connected
         this.emails = [];
         this.isLoadingEmails = false;
@@ -77,13 +75,15 @@ export class DashboardComponent implements OnInit {
       this.authService.getMe().subscribe(
         (response) => {
           this.currentUser = response.user;
-          if (response.user?.googleConnected) {
+          if (response.user?.googleConnected && this.isInitialLoad && this.emails.length === 0) {
             this.fetchEmails();
+            this.isInitialLoad = false;
           }
         },
         (error) => {
           // If getMe fails, it's likely a token issue - let the interceptor handle it
           console.error('Failed to fetch user data:', error);
+          this.isInitialLoad = false;
         }
       );
     }

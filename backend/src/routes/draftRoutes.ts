@@ -14,7 +14,7 @@ const router = Router();
 router.post('/generate', authenticateJWT, async (req: Request, res: Response) => {
   try {
     const userId = (req as any).userId;
-    const { gmailMessageId, threadId, tone } = req.body;
+    const { gmailMessageId, threadId, tone, customContext } = req.body;
 
     if (!gmailMessageId && !threadId) {
       return res.status(400).json({ error: 'Either gmailMessageId or threadId is required' });
@@ -31,7 +31,8 @@ router.post('/generate', authenticateJWT, async (req: Request, res: Response) =>
       userId,
       gmailMessageId,
       tone || 'formal',
-      threadId
+      threadId,
+      customContext
     );
 
     res.status(201).json(draft);

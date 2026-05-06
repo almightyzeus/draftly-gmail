@@ -4,7 +4,6 @@ import { Draft } from '../models/Draft.js';
 import { EmailMessage } from '../models/EmailMessage.js';
 import { OpenAIService } from './openaiService.js';
 import { GmailService } from './gmailService.js';
-import { GmailAccount } from '../models/GmailAccount.js';
 
 /**
  * DraftService - Handles draft generation, approval, rejection, and sending
@@ -20,7 +19,8 @@ export class DraftService {
     userId: string,
     gmailMessageId?: string,
     tone: string = 'formal',
-    threadId?: string
+    threadId?: string,
+    customContext?: string
   ): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
@@ -32,7 +32,6 @@ export class DraftService {
       // If threadId provided, fetch all emails in thread for consolidation
       if (threadId) {
         const threadEmails = await GmailService.fetchThreadEmails(userId, threadId);
-        
         if (threadEmails.length === 0) {
           throw new Error('No emails found in thread');
         }
@@ -96,7 +95,8 @@ export class DraftService {
       const draftBody = await OpenAIService.generateDraft(
         userId,
         gmailMessageIds[0],
-        tone
+        tone,
+        customContext
       );
 
       // Create draft record
@@ -114,7 +114,7 @@ export class DraftService {
             at: new Date(),
             action: 'GENERATED',
             by: 'system',
-            meta: { tone, isConsolidated, emailCount: gmailMessageIds.length },
+            meta: { tone, isConsolidated, emailCount: gmailMessageIds.length, hasCustomContext: !!customContext },
           },
         ],
       });

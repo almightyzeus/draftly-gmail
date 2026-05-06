@@ -113,6 +113,14 @@ mat-card-header {
   min-width: 250px;
 }
 
+.custom-context {
+  margin-bottom: 24px;
+}
+
+.full-width {
+  width: 100%;
+}
+
 .button-group {
   display: flex;
   gap: 12px;
@@ -127,6 +135,11 @@ mat-card-header {
 
 .inline-spinner {
   margin-right: 8px;
+}
+
+.no-body {
+  color: #999;
+  font-style: italic;
 }
 
 @media (max-width: 600px) {

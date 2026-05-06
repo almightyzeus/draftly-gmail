@@ -8,8 +8,10 @@ import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
 import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
+import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
+import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
 import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
 
@@ -22,6 +24,7 @@ interface Email {
   subject: string;
   snippet: string;
   bodyPlain?: string;
+  bodyHtml?: string;
   direction: string;
   internalDate: Date;
 }
@@ -39,6 +42,7 @@ interface Email {
     MatIconModule,
     MatSelectModule,
     MatFormFieldModule,
+    MatInputModule,
     MatProgressSpinnerModule,
     MatDividerModule,
   ],
@@ -50,6 +54,7 @@ export class EmailDetailComponent implements OnInit {
   isLoading = true;
   isGenerating = false;
   selectedTone = 'formal';
+  customContext = '';
   toneOptions = ['formal', 'concise', 'friendly'];
   error: string | null = null;
 
@@ -57,7 +62,8 @@ export class EmailDetailComponent implements OnInit {
     private route: ActivatedRoute,
     private router: Router,
     private gmailService: GmailService,
-    private draftService: DraftService
+    private draftService: DraftService,
+    private sanitizer: DomSanitizer
   ) {}
 
   ngOnInit(): void {
@@ -95,7 +101,7 @@ export class EmailDetailComponent implements OnInit {
     this.error = null;
 
     this.draftService
-      .generateDraft(this.email.gmailMessageId, this.selectedTone)
+      .generateDraft(this.email.gmailMessageId, this.selectedTone, this.customContext || undefined)
       .subscribe(
         (draft: any) => {
           this.isGenerating = false;
@@ -108,6 +114,25 @@ export class EmailDetailComponent implements OnInit {
           this.isGenerating = false;
         }
       );
+  }
+
+  /**
+   * Sanitize HTML to prevent XSS attacks
+   */
+  sanitizeHtml(html: string): SafeHtml {
+    return this.sanitizer.sanitize(1, html) || ''; // 1 = SecurityContext.HTML
+  }
+
+  /**
+   * Format plain text by converting newlines to <br> tags
+   */
+  formatPlainText(text: string): SafeHtml {
+    const formatted = text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+    return this.sanitizer.bypassSecurityTrustHtml(formatted);
   }
 
   goBack(): void {

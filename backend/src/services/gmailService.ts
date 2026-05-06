@@ -1,6 +1,5 @@
 import { google } from 'googleapis';
 import { Types } from 'mongoose';
-import * as nodemailer from 'nodemailer';
 import { oauth2Client } from './googleClient.js';
 import { GmailAccount } from '../models/GmailAccount.js';
 import { EmailMessage } from '../models/EmailMessage.js';
@@ -11,6 +10,19 @@ import { logger } from '../utils/logger.js';
  * GmailService - Handles Gmail email fetching and sending
  */
 export class GmailService {
+  /**
+   * Convert plain text to HTML by escaping special chars and converting newlines to <br>
+   */
+  private static plainTextToHtml(plainText: string): string {
+    return plainText
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+      .replace(/'/g, '&#39;')
+      .replace(/\n/g, '<br>\r\n');
+  }
+
   /**
    * Get Gmail client with user's credentials
    */
@@ -34,7 +46,7 @@ export class GmailService {
   }
 
   /**
-   * Parse email body from Gmail message
+   * Parse email body from Gmail message (recursively handles nested parts)
    */
   private static parseEmailBody(
     message: any
@@ -42,16 +54,33 @@ export class GmailService {
     let bodyPlain = '';
     let bodyHtml = '';
 
-    if (message.parts) {
-      for (const part of message.parts) {
-        if (part.mimeType === 'text/plain' && part.data) {
-          bodyPlain = Buffer.from(part.data, 'base64').toString('utf-8');
-        } else if (part.mimeType === 'text/html' && part.data) {
-          bodyHtml = Buffer.from(part.data, 'base64').toString('utf-8');
+    // Helper function to recursively search through message parts
+    const searchParts = (parts: any[]): void => {
+      if (!parts) return;
+
+      for (const part of parts) {
+        // Check if this part has the body content we're looking for
+        if (part.mimeType === 'text/plain' && part.body?.data) {
+          bodyPlain = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        } else if (part.mimeType === 'text/html' && part.body?.data) {
+          bodyHtml = Buffer.from(part.body.data, 'base64').toString('utf-8');
+        }
+
+        // Recursively search nested parts (for multipart/alternative, multipart/mixed, etc.)
+        if (part.parts && part.parts.length > 0) {
+          searchParts(part.parts);
         }
       }
-    } else if (message.data) {
-      bodyPlain = Buffer.from(message.data, 'base64').toString('utf-8');
+    };
+
+    // Check if message has a simple data payload
+    if (message.body?.data) {
+      bodyPlain = Buffer.from(message.body.data, 'base64').toString('utf-8');
+    }
+
+    // Search through all parts (handles multipart messages)
+    if (message.parts && message.parts.length > 0) {
+      searchParts(message.parts);
     }
 
     return { bodyPlain, bodyHtml };
@@ -302,8 +331,10 @@ export class GmailService {
     try {
       const gmail = await this.getGmailClient(userId);
 
-      // Build RFC822 message
+      // Build RFC822 message with multipart/alternative (plain text + HTML)
       const boundary = '===============' + Date.now() + '===============';
+      const htmlBody = this.plainTextToHtml(bodyHtml);
+
       const headers = [
         `From: ${(await GmailAccount.findOne({ userId: new Types.ObjectId(userId) }))?.gmailEmail}`,
         `To: ${to}`,
@@ -319,7 +350,11 @@ export class GmailService {
         headers.push(`References: ${references}`);
       }
 
-      const bodyPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n--${boundary}--`;
+      // Create both plain text and HTML parts
+      const plainTextPart = `--${boundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n`;
+      const htmlPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${htmlBody}\r\n--${boundary}--`;
+      const bodyPart = plainTextPart + htmlPart;
+
       const rawMessage = headers.join('\r\n') + '\r\n\r\n' + bodyPart;
       const encodedMessage = Buffer.from(rawMessage).toString('base64');
 
@@ -363,8 +398,10 @@ export class GmailService {
     try {
       const gmail = await this.getGmailClient(userId);
 
-      // Build RFC822 message
+      // Build RFC822 message with multipart/alternative (plain text + HTML)
       const boundary = '===============' + Date.now() + '===============';
+      const htmlBody = this.plainTextToHtml(bodyHtml);
+
       const headers = [
         `From: ${(await GmailAccount.findOne({ userId: new Types.ObjectId(userId) }))?.gmailEmail}`,
         `To: ${to}`,
@@ -380,7 +417,11 @@ export class GmailService {
         headers.push(`References: ${references}`);
       }
 
-      const bodyPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n--${boundary}--`;
+      // Create both plain text and HTML parts
+      const plainTextPart = `--${boundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n`;
+      const htmlPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${htmlBody}\r\n--${boundary}--`;
+      const bodyPart = plainTextPart + htmlPart;
+
       const rawMessage = headers.join('\r\n') + '\r\n\r\n' + bodyPart;
       const encodedMessage = Buffer.from(rawMessage).toString('base64');
 

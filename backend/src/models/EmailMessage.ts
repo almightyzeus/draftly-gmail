@@ -58,7 +58,6 @@ const emailMessageSchema = new Schema<IEmailMessage>(
     },
     bodyHtml: {
       type: String,
-      default: null,
     },
     internalDate: {
       type: Date,

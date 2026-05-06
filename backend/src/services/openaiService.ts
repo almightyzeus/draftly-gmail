@@ -73,7 +73,8 @@ export class OpenAIService {
   static async generateDraft(
     userId: string,
     gmailMessageId: string,
-    tone: string = 'formal'
+    tone: string = 'formal',
+    customContext?: string
   ): Promise<string> {
     try {
       const userObjectId = new Types.ObjectId(userId);
@@ -108,8 +109,8 @@ export class OpenAIService {
         .map((email: any) => `${email.from}: ${email.bodyPlain}`)
         .join('\n\n---\n\n');
 
-      // Build user prompt
-      const userPrompt = `
+      // Build user prompt with optional custom context
+      let userPrompt = `
 Please draft a reply to this email thread:
 
 ${threadContext}
@@ -119,8 +120,11 @@ Subject: ${originalEmail.subject}
 Body: ${originalEmail.bodyPlain}
 ${learningEmailsContext}
 
-Generate a thoughtful, appropriate reply to the most recent email.
-`;
+Generate a thoughtful, appropriate reply to the most recent email.`;
+
+      if (customContext) {
+        userPrompt += `\n\nAdditional context from the user:\n${customContext}`;
+      }
 
       const systemPrompt = this.buildSystemPrompt(tone, signature);
 

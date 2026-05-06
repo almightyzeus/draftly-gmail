@@ -52,7 +52,10 @@
           <mat-divider class="divider"></mat-divider>
 
           <div class="body">
-            <p [innerHTML]="email.bodyPlain"></p>
+            <!-- Display HTML version if available, otherwise plain text -->
+            <div *ngIf="email.bodyHtml" [innerHTML]="sanitizeHtml(email.bodyHtml)"></div>
+            <p *ngIf="!email.bodyHtml && email.bodyPlain" [innerHTML]="formatPlainText(email.bodyPlain)"></p>
+            <p *ngIf="!email.bodyHtml && !email.bodyPlain" class="no-body">No email body available</p>
           </div>
         </mat-card-content>
       </mat-card>
@@ -78,6 +81,19 @@
                   {{ tone | titlecase }}
                 </mat-option>
               </mat-select>
+            </mat-form-field>
+          </div>
+
+          <div class="custom-context">
+            <mat-form-field appearance="fill" class="full-width">
+              <mat-label>Additional Context (Optional)</mat-label>
+              <textarea
+                matInput
+                [(ngModel)]="customContext"
+                [disabled]="isGenerating"
+                rows="4"
+                placeholder="Add any additional context or instructions for the draft generation. Example: 'I will not be free on Saturday' or 'Please mention my availability'"
+              ></textarea>
             </mat-form-field>
           </div>
 

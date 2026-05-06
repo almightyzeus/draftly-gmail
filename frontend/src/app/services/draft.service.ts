@@ -13,10 +13,11 @@ export class DraftService {
   /**
    * Generate a draft for an email
    */
-  generateDraft(gmailMessageId: string, tone: string = 'formal'): Observable<any> {
+  generateDraft(gmailMessageId: string, tone: string = 'formal', customContext?: string): Observable<any> {
     return this.http.post<any>(`${this.draftsApiUrl}/generate`, {
       gmailMessageId,
       tone,
+      ...(customContext && { customContext }),
     });
   }
 
