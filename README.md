@@ -2,7 +2,7 @@
 
 Draftly is a local MVP for the Airtribe Backend Engineering Launchpad capstone. It connects to Gmail, fetches inbox emails, generates AI reply drafts, lets the user review/edit/approve/reject drafts, and sends approved replies through Gmail.
 
-The project is intentionally scoped as an MVP. The core workflow is implemented and demoable locally; Docker deployment and frontend test stabilization are listed as known limitations.
+The project is intentionally scoped as an MVP. The core workflow is implemented and demoable locally; Docker deployment is listed as a known limitation.
 
 ## Capstone Objective
 
@@ -46,7 +46,7 @@ Implemented:
 Known limitations:
 
 - Docker and deployment are not included in the MVP submission.
-- Backend tests are passing with coverage. Frontend automated tests are deferred for the MVP.
+- Backend and frontend tests are passing with coverage above the MVP target.
 - Send retry/backoff is not fully implemented.
 - Send idempotency requires a key and prevents obvious duplicate status transitions, but it is not a complete production-grade idempotency store.
 - Gmail threading is implemented with Gmail thread IDs and reply headers, but should be hardened further for production.
@@ -311,6 +311,8 @@ Frontend:
 cd frontend
 npm start
 npm run build
+npm test
+npm run test:coverage
 ```
 
 ## Testing Status
@@ -322,7 +324,12 @@ Backend tests cover services, models, middleware, controllers, and critical API 
 - Functions: 91%+
 - Branches: 61%+
 
-Frontend automated tests are intentionally deferred for this MVP. The frontend is validated through a successful Angular production build and the local demo flow.
+Frontend tests use Vitest and cover service APIs plus page/component class behavior. Frontend coverage is also above the MVP target:
+
+- Statements: 89%+
+- Lines: 89%+
+- Functions: 93%+
+- Branches: 82%+
 
 For submission, the recommended validation is:
 
@@ -330,7 +337,9 @@ For submission, the recommended validation is:
 2. `cd backend && npm test`
 3. `cd backend && npm run test:coverage`
 4. `cd frontend && npm run build`
-5. Run the local demo flow from registration through sending an approved Gmail draft.
+5. `cd frontend && npm test`
+6. `cd frontend && npm run test:coverage`
+7. Run the local demo flow from registration through sending an approved Gmail draft.
 
 ## Design Notes
 
@@ -349,5 +358,5 @@ For submission, the recommended validation is:
 - More complete idempotency table for send requests
 - Full preferences and activity log UI
 - More robust Gmail RFC Message-ID handling
-- Frontend test suite setup and CI
+- CI pipeline for build/test/coverage
 - Better token refresh persistence
