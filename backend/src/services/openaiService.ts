@@ -162,4 +162,155 @@ Generate a thoughtful, appropriate reply to the most recent email.`;
       throw error;
     }
   }
+
+  /**
+   * Generate a reply to a single email
+   */
+  static async generateReply(
+    emailBody: string,
+    tone: string = 'formal',
+    signature: string = ''
+  ): Promise<string> {
+    try {
+      const systemPrompt = this.buildSystemPrompt(tone, signature);
+
+      const userPrompt = `
+Please draft a reply to this email:
+
+${emailBody}
+
+Generate a thoughtful, appropriate reply.`;
+
+      const response = await openai.chat.completions.create({
+        model: this.GPT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 500,
+      });
+
+      const reply = response.choices[0]?.message?.content || 'Failed to generate reply';
+
+      logger.info('Reply generated successfully');
+      return reply;
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Reply generation failed'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Generate a consolidated reply addressing multiple emails
+   */
+  static async generateConsolidatedReply(
+    emails: Array<{ from: string; subject: string; body: string }>,
+    tone: string = 'formal',
+    signature: string = ''
+  ): Promise<string> {
+    try {
+      const systemPrompt = this.buildSystemPrompt(tone, signature);
+
+      const emailsContext = emails
+        .map((email) => `From: ${email.from}\nSubject: ${email.subject}\n\n${email.body}`)
+        .join('\n\n---\n\n');
+
+      const userPrompt = `
+Please draft a consolidated reply addressing all of these emails:
+
+${emailsContext}
+
+Generate a single reply that thoughtfully addresses all the questions and points raised across all emails.`;
+
+      const response = await openai.chat.completions.create({
+        model: this.GPT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+        temperature: 0.7,
+        max_tokens: 1000,
+      });
+
+      const reply = response.choices[0]?.message?.content || 'Failed to generate consolidated reply';
+
+      logger.info({ emailCount: emails.length }, 'Consolidated reply generated successfully');
+      return reply;
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Consolidated reply generation failed'
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Extract key points from an email body
+   */
+  static async extractKeyPoints(emailBody: string): Promise<string[]> {
+    try {
+      const systemPrompt = `You are an email analysis assistant. Extract the key points, questions, and action items from emails. Return ONLY a JSON array of strings with the key points. Example: ["Point 1", "Point 2"]`;
+
+      const userPrompt = `
+Extract all key points, questions, and action items from this email:
+
+${emailBody}
+
+Return only a valid JSON array of strings.`;
+
+      const response = await openai.chat.completions.create({
+        model: this.GPT_MODEL,
+        messages: [
+          {
+            role: 'system',
+            content: systemPrompt,
+          },
+          {
+            role: 'user',
+            content: userPrompt,
+          },
+        ],
+        temperature: 0.5,
+        max_tokens: 500,
+      });
+
+      const content = response.choices[0]?.message?.content || '[]';
+
+      // Parse the JSON response
+      try {
+        const keyPoints = JSON.parse(content);
+        if (!Array.isArray(keyPoints)) {
+          return [];
+        }
+        return keyPoints;
+      } catch {
+        // If JSON parsing fails, return empty array
+        logger.warn('Failed to parse key points response as JSON');
+        return [];
+      }
+    } catch (error) {
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        'Key points extraction failed'
+      );
+      throw error;
+    }
+  }
 }
