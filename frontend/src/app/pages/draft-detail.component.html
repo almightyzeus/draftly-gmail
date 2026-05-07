@@ -173,8 +173,8 @@
             <!-- READ-ONLY state for SENT or REJECTED -->
             <div class="read-only-actions" *ngIf="draft.status === 'SENT' || draft.status === 'REJECTED'">
               <p class="status-info">
-                <strong *ngIf="draft.status === 'SENT'">✓ This draft has been sent.</strong>
-                <strong *ngIf="draft.status === 'REJECTED'">✗ This draft was rejected.</strong>
+                <strong *ngIf="draft.status === 'SENT'">This draft has been sent.</strong>
+                <strong *ngIf="draft.status === 'REJECTED'">This draft was rejected.</strong>
               </p>
               <button
                 mat-stroked-button

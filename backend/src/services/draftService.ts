@@ -4,12 +4,29 @@ import { Draft } from '../models/Draft.js';
 import { EmailMessage } from '../models/EmailMessage.js';
 import { OpenAIService } from './openaiService.js';
 import { GmailService } from './gmailService.js';
+import { ActivityLogService } from './activityLogService.js';
 
 /**
  * DraftService - Handles draft generation, approval, rejection, and sending
  */
 export class DraftService {
   private static readonly PROMPT_VERSION = '1.0';
+
+  private static async logActivity(
+    userId: string,
+    action: string,
+    entityId: string,
+    meta?: Record<string, any>
+  ): Promise<void> {
+    try {
+      await ActivityLogService.logActivity(userId, action, 'Draft', 'info', entityId, meta);
+    } catch (error) {
+      logger.warn(
+        error instanceof Error ? error : new Error(String(error)),
+        'Activity logging failed'
+      );
+    }
+  }
 
   /**
    * Generate a draft reply using OpenAI
@@ -120,6 +137,11 @@ export class DraftService {
       });
 
       await draft.save();
+      await this.logActivity(userId, 'DRAFT_GENERATED', draft._id.toString(), {
+        tone,
+        isConsolidated,
+        emailCount: gmailMessageIds.length,
+      });
 
       logger.info(
         {
@@ -262,6 +284,10 @@ export class DraftService {
       }
 
       await draft.save();
+      await this.logActivity(userId, 'DRAFT_EDITED', draft._id.toString(), {
+        status: draft.status,
+        bodyLength: draftBody.length,
+      });
 
       logger.info({ userId, draftId }, 'Draft updated');
 
@@ -305,30 +331,19 @@ export class DraftService {
         throw new Error('Original email not found');
       }
 
-      // Create draft in Gmail
-      let gmailDraftId: string | null = null;
-      try {
-        gmailDraftId = await GmailService.createDraft(
-          userId,
-          originalEmail.from,
-          `Re: ${originalEmail.subject}`,
-          draft.draftBody,
-          draft.threadId,
-          originalEmail.gmailMessageId,
-          originalEmail.gmailMessageId
-        );
-      } catch (gmailError) {
-        logger.warn(
-          gmailError instanceof Error ? gmailError : new Error(String(gmailError)),
-          'Failed to create Gmail draft, but proceeding with MongoDB approval'
-        );
-      }
+      const gmailDraftId = await GmailService.createDraft(
+        userId,
+        originalEmail.from,
+        `Re: ${originalEmail.subject}`,
+        draft.draftBody,
+        draft.threadId,
+        originalEmail.gmailMessageId,
+        originalEmail.gmailMessageId
+      );
 
       draft.status = 'APPROVED';
       draft.approvedAt = new Date();
-      if (gmailDraftId) {
-        draft.gmailDraftId = gmailDraftId;
-      }
+      draft.gmailDraftId = gmailDraftId;
       draft.auditTrail.push({
         at: new Date(),
         action: 'APPROVED',
@@ -337,6 +352,9 @@ export class DraftService {
       });
 
       await draft.save();
+      await this.logActivity(userId, 'DRAFT_APPROVED', draft._id.toString(), {
+        gmailDraftId,
+      });
 
       logger.info(
         { userId, draftId, gmailDraftId },
@@ -380,6 +398,7 @@ export class DraftService {
       });
 
       await draft.save();
+      await this.logActivity(userId, 'DRAFT_REJECTED', draft._id.toString());
 
       logger.info({ userId, draftId }, 'Draft rejected');
 
@@ -458,6 +477,10 @@ export class DraftService {
       });
 
       await draft.save();
+      await this.logActivity(userId, 'DRAFT_SENT', draft._id.toString(), {
+        sentGmailMessageId: sentMessageId,
+        idempotencyKey,
+      });
 
       // Create outbound EmailMessage record if original email exists
       if (originalEmail) {

@@ -5,261 +5,142 @@ import { GmailAccount } from '../src/models/GmailAccount.js';
 import { EmailMessage } from '../src/models/EmailMessage.js';
 import { CryptoService } from '../src/services/cryptoService.js';
 
-vi.mock('../src/models/GmailAccount');
-vi.mock('../src/models/EmailMessage');
-vi.mock('../src/services/googleClient');
-vi.mock('../src/services/cryptoService');
-vi.mock('../src/utils/logger');
+const mocks = vi.hoisted(() => ({
+  gmail: vi.fn(),
+  setCredentials: vi.fn(),
+}));
 
-// Mock google module
 vi.mock('googleapis', () => ({
   google: {
-    gmail: vi.fn(),
+    gmail: mocks.gmail,
+    auth: {
+      OAuth2: vi.fn(() => ({ setCredentials: mocks.setCredentials })),
+    },
   },
 }));
+
+vi.mock('../src/models/GmailAccount.js', () => ({
+  GmailAccount: { findOne: vi.fn() },
+}));
+
+vi.mock('../src/models/EmailMessage.js', () => ({
+  EmailMessage: {
+    find: vi.fn(),
+    findOne: vi.fn(),
+    findOneAndUpdate: vi.fn(),
+  },
+}));
+
+vi.mock('../src/utils/logger.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+const userId = new Types.ObjectId().toString();
+const account = {
+  userId: new Types.ObjectId(userId),
+  gmailEmail: 'user@gmail.com',
+  accessTokenEnc: 'access',
+  refreshTokenEnc: 'refresh',
+  tokenExpiry: new Date(Date.now() + 3600000),
+};
 
 describe('GmailService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (CryptoService.decryptToken as unknown as Mock).mockReturnValue('valid_access_token');
+    vi.spyOn(CryptoService, 'decryptToken').mockReturnValue('token');
+    (GmailAccount.findOne as unknown as Mock).mockResolvedValue(account);
   });
 
-  describe('fetchEmails', () => {
-    it('should fetch emails from Gmail', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        gmailEmail: 'user@gmail.com',
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-      };
-
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-
-      // This would call the actual Gmail API in production
-      // For now, testing the service setup
-      const result = await GmailService.fetchEmails(userId, { unread: true, limit: 20 });
-
-      expect(Array.isArray(result) || result === undefined).toBe(true);
-    });
-
-    it('should throw error if Gmail not connected', async () => {
-      const userId = new Types.ObjectId().toString();
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        GmailService.fetchEmails(userId, { unread: true })
-      ).rejects.toThrow();
-    });
+  it('throws when Gmail is not connected', async () => {
+    (GmailAccount.findOne as unknown as Mock).mockResolvedValue(null);
+    await expect(GmailService.fetchEmails(userId, { unread: true })).rejects.toThrow('Gmail account not connected');
   });
 
-  describe('createDraft', () => {
-    it('should create draft in Gmail', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        gmailEmail: 'user@gmail.com',
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-      };
-
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-
-      const { google } = await import('googleapis');
-      (google.gmail as unknown as Mock).mockReturnValue({
-        users: {
-          drafts: {
-            create: vi.fn().mockResolvedValue({ data: { id: 'draft_123' } }),
-          },
+  it('fetches and stores Gmail messages', async () => {
+    mocks.gmail.mockReturnValue({
+      users: {
+        messages: {
+          list: vi.fn().mockResolvedValue({ data: { messages: [{ id: 'msg-1' }] } }),
+          get: vi.fn().mockResolvedValue({
+            data: {
+              id: 'msg-1',
+              threadId: 'thread-1',
+              snippet: 'hello',
+              labelIds: ['INBOX', 'UNREAD'],
+              payload: {
+                headers: [
+                  { name: 'Subject', value: 'Question' },
+                  { name: 'From', value: 'sender@example.com' },
+                  { name: 'To', value: 'user@gmail.com' },
+                  { name: 'Date', value: new Date().toUTCString() },
+                ],
+                body: { data: Buffer.from('Hello').toString('base64') },
+              },
+            },
+          }),
         },
-      });
-
-      const result = await GmailService.createDraft(userId, {
-        to: 'recipient@example.com',
-        subject: 'Test',
-        bodyHtml: '<p>Test reply</p>',
-        threadId: 'thread123',
-        inReplyTo: 'msg_123',
-        references: 'msg_123',
-      });
-
-      expect(typeof result === 'string' || result === undefined).toBe(true);
+      },
     });
+    (EmailMessage.findOneAndUpdate as unknown as Mock).mockResolvedValue({
+      _id: new Types.ObjectId(),
+      gmailMessageId: 'msg-1',
+      threadId: 'thread-1',
+      from: 'sender@example.com',
+      to: 'user@gmail.com',
+      subject: 'Question',
+      snippet: 'hello',
+      direction: 'INBOUND',
+      internalDate: new Date(),
+      labels: ['INBOX'],
+    });
+
+    const emails = await GmailService.fetchEmails(userId, { unread: true, limit: 1 });
+    expect(emails).toHaveLength(1);
+    expect(EmailMessage.findOneAndUpdate).toHaveBeenCalled();
   });
 
-  describe('updateDraft', () => {
-    it('should update existing Gmail draft', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-      };
-
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-
-      const { google } = await import('googleapis');
-      (google.gmail as unknown as Mock).mockReturnValue({
-        users: {
-          drafts: {
-            update: vi.fn().mockResolvedValue({ data: {} }),
-          },
-        },
-      });
-
-      const result = await GmailService.updateDraft(userId, 'draft_id_123', '<p>Updated reply</p>');
-
-      expect(result === undefined || typeof result === 'string').toBe(true);
+  it('gets stored email and thread emails', async () => {
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue({
+      _id: 'email-id',
+      gmailMessageId: 'msg-1',
+      threadId: 'thread-1',
+      from: 'sender@example.com',
+      to: 'user@gmail.com',
+      subject: 'Subject',
+      snippet: 'Snippet',
+      bodyPlain: 'Body',
+      bodyHtml: '<p>Body</p>',
+      direction: 'INBOUND',
+      internalDate: new Date(),
+      labels: ['INBOX'],
     });
 
-    it('should throw error if Gmail not connected', async () => {
-      const userId = new Types.ObjectId().toString();
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(null);
+    const email = await GmailService.getEmail(userId, 'msg-1');
+    expect(email.gmailMessageId).toBe('msg-1');
 
-      await expect(
-        GmailService.updateDraft(userId, 'draft_id_123', '<p>Updated</p>')
-      ).rejects.toThrow();
+    (EmailMessage.find as unknown as Mock).mockReturnValue({
+      sort: vi.fn().mockReturnThis(),
+      lean: vi.fn().mockResolvedValue([email]),
     });
+    await expect(GmailService.fetchThreadEmails(userId, 'thread-1')).resolves.toHaveLength(1);
   });
 
-  describe('sendDraft', () => {
-    it('should send email via Gmail API', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-      };
+  it('creates, updates, sends, and deletes Gmail drafts', async () => {
+    const draftApi = {
+      create: vi.fn().mockResolvedValue({ data: { id: 'draft-1' } }),
+      update: vi.fn().mockResolvedValue({ data: {} }),
+      send: vi.fn().mockResolvedValue({ data: { id: 'sent-1' } }),
+      delete: vi.fn().mockResolvedValue({}),
+    };
+    mocks.gmail.mockReturnValue({ users: { drafts: draftApi } });
 
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-
-      const { google } = await import('googleapis');
-      (google.gmail as unknown as Mock).mockReturnValue({
-        users: {
-          drafts: {
-            send: vi.fn().mockResolvedValue({ data: { id: 'msg_123' } }),
-          },
-        },
-      });
-
-      const result = await GmailService.sendDraft(userId, 'draft_id_123', 'thread_123');
-
-      expect(typeof result === 'string' || result === undefined).toBe(true);
-    });
+    await expect(GmailService.createDraft(userId, 'to@example.com', 'Subject', 'Body', 'thread-1')).resolves.toBe('draft-1');
+    await expect(GmailService.updateDraft(userId, 'draft-1', 'Body 2', 'to@example.com', 'Subject', 'thread-1')).resolves.toBeUndefined();
+    await expect(GmailService.sendDraft(userId, 'draft-1', 'thread-1')).resolves.toBe('sent-1');
+    await expect(GmailService.deleteDraft(userId, 'draft-1')).resolves.toBeUndefined();
   });
 
-  describe('getEmail', () => {
-    it('should fetch full email details including body', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-      };
-      const mockEmail = {
-        gmailMessageId: 'msg_id_123',
-        bodyHtml: '<p>Email body</p>',
-      };
-
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(mockEmail);
-
-      const result = await GmailService.getEmail(userId, 'msg_id_123');
-
-      expect(result === undefined || typeof result === 'object').toBe(true);
-    });
-  });
-
-  describe('fetchThreadEmails', () => {
-    it('should fetch all emails in a thread', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-      };
-      const mockEmails = [
-        { gmailMessageId: 'msg_1', bodyHtml: '<p>Email 1</p>' },
-        { gmailMessageId: 'msg_2', bodyHtml: '<p>Email 2</p>' },
-      ];
-
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-      (EmailMessage.find as unknown as Mock).mockReturnValue({
-        sort: vi.fn().mockReturnValue({
-          lean: vi.fn().mockResolvedValue(mockEmails),
-        }),
-      });
-
-      const result = await GmailService.fetchThreadEmails(userId, 'thread_123');
-
-      expect(Array.isArray(result) || result === undefined).toBe(true);
-    });
-  });
-
-  describe('sendReply', () => {
-    it('should send a reply to an email', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-        gmailEmail: 'user@gmail.com',
-      };
-
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-
-      const { google } = await import('googleapis');
-      (google.gmail as unknown as Mock).mockReturnValue({
-        users: {
-          messages: {
-            send: vi.fn().mockResolvedValue({ data: { id: 'msg_456' } }),
-          },
-        },
-      });
-
-      const result = await GmailService.sendReply(userId, {
-        to: 'recipient@example.com',
-        subject: 'Re: Test',
-        bodyHtml: '<p>Reply text</p>',
-        threadId: 'thread_123',
-        inReplyTo: 'msg_123',
-        references: 'msg_123',
-      });
-
-      expect(typeof result === 'string' || result === undefined).toBe(true);
-    });
-  });
-
-  describe('deleteDraft', () => {
-    it('should delete a draft from Gmail', async () => {
-      const userId = new Types.ObjectId().toString();
-      const accountId = new Types.ObjectId().toString();
-      const mockAccount = {
-        _id: new Types.ObjectId(accountId),
-        userId: new Types.ObjectId(userId),
-        accessTokenEnc: 'encrypted_token',
-        tokenExpiry: new Date(),
-      };
-
-      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(mockAccount);
-
-      const result = await GmailService.deleteDraft(userId, 'draft_id_123');
-
-      expect(result === undefined).toBe(true);
-    });
+  it('documents that direct sendReply is not implemented in the MVP', async () => {
+    await expect(GmailService.sendReply(userId, 'thread-1', 'Body')).rejects.toThrow('Not implemented yet');
   });
 });

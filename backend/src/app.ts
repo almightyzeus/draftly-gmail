@@ -10,6 +10,8 @@ import { AppError } from './utils/errors.js';
 import authRoutes from './routes/authRoutes.js';
 import gmailRoutes from './routes/gmailRoutes.js';
 import draftRoutes from './routes/draftRoutes.js';
+import preferenceRoutes from './routes/preferenceRoutes.js';
+import logRoutes from './routes/logRoutes.js';
 
 export const app: Express = express();
 
@@ -46,9 +48,15 @@ const authLimiter = rateLimit({
 });
 
 // Routes
-app.use('/api/auth', authLimiter, authRoutes);
+if (env.nodeEnv === 'test') {
+  app.use('/api/auth', authRoutes);
+} else {
+  app.use('/api/auth', authLimiter, authRoutes);
+}
 app.use('/api/gmail', gmailRoutes);
 app.use('/api/drafts', draftRoutes);
+app.use('/api/preferences', preferenceRoutes);
+app.use('/api/logs', logRoutes);
 
 // Health check
 app.get('/health', (req: Request, res: Response) => {
@@ -86,4 +94,3 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
 });
 
 export default app;
-

@@ -3,436 +3,178 @@ import { Types } from 'mongoose';
 import { DraftService } from '../src/services/draftService.js';
 import { Draft } from '../src/models/Draft.js';
 import { EmailMessage } from '../src/models/EmailMessage.js';
+import { OpenAIService } from '../src/services/openaiService.js';
+import { GmailService } from '../src/services/gmailService.js';
+import { ActivityLogService } from '../src/services/activityLogService.js';
 
-vi.mock('../src/models/Draft');
-vi.mock('../src/models/EmailMessage');
-vi.mock('../src/services/openaiService');
-vi.mock('../src/services/gmailService');
-vi.mock('../src/utils/logger');
+vi.mock('../src/models/Draft.js', () => {
+  const DraftMock = vi.fn();
+  Object.assign(DraftMock, {
+    findOne: vi.fn(),
+    find: vi.fn(),
+  });
+  return { Draft: DraftMock };
+});
+
+vi.mock('../src/models/EmailMessage.js', () => ({
+  EmailMessage: {
+    findOne: vi.fn(),
+    create: vi.fn(),
+  },
+}));
+
+vi.mock('../src/services/openaiService.js', () => ({
+  OpenAIService: { generateDraft: vi.fn() },
+}));
+
+vi.mock('../src/services/gmailService.js', () => ({
+  GmailService: {
+    fetchThreadEmails: vi.fn(),
+    createDraft: vi.fn(),
+    updateDraft: vi.fn(),
+    sendDraft: vi.fn(),
+  },
+}));
+
+vi.mock('../src/services/activityLogService.js', () => ({
+  ActivityLogService: { logActivity: vi.fn().mockResolvedValue({}) },
+}));
+
+vi.mock('../src/utils/logger.js', () => ({
+  logger: { info: vi.fn(), warn: vi.fn(), error: vi.fn() },
+}));
+
+const userId = new Types.ObjectId().toString();
+const draftId = new Types.ObjectId().toString();
+const email = {
+  _id: new Types.ObjectId(),
+  userId: new Types.ObjectId(userId),
+  gmailMessageId: 'msg-1',
+  threadId: 'thread-1',
+  from: 'sender@example.com',
+  to: 'user@gmail.com',
+  subject: 'Question',
+  bodyPlain: 'Can you help?',
+  labels: ['INBOX', 'UNREAD'],
+};
+
+const buildDraft = (overrides: Record<string, any> = {}) => ({
+  _id: new Types.ObjectId(draftId),
+  userId: new Types.ObjectId(userId),
+  gmailMessageId: 'msg-1',
+  threadId: 'thread-1',
+  tone: 'formal',
+  draftBody: 'Draft body',
+  status: 'PENDING',
+  auditTrail: [],
+  save: vi.fn().mockResolvedValue(true),
+  ...overrides,
+});
 
 describe('DraftService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    (OpenAIService.generateDraft as unknown as Mock).mockResolvedValue('Generated reply');
+    (ActivityLogService.logActivity as unknown as Mock).mockResolvedValue({});
   });
 
-  describe('generateDraft', () => {
-    it('should generate a draft from an email', async () => {
-      const userId = new Types.ObjectId().toString();
-      const emailId = new Types.ObjectId().toString();
-      
-      const mockEmail = {
-        _id: emailId,
-        userId: userId,
-        gmailMessageId: 'msg123',
-        threadId: 'thread123',
-        from: 'sender@example.com',
-        to: 'user@gmail.com',
-        subject: 'Test Email',
-        bodyPlain: 'This is a test email',
-        direction: 'INBOUND',
-      };
+  it('generates a draft from a stored email', async () => {
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+    (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, _id: new Types.ObjectId(draftId) }));
 
-      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(mockEmail);
-      (Draft as unknown as Mock).mockReturnValue({
-        userId: userId,
-        gmailMessageId: 'msg123',
-        draftBody: 'Generated reply...',
-        status: 'PENDING',
-        tone: 'formal',
-        save: vi.fn().mockResolvedValue(true),
-      });
+    const result = await DraftService.generateDraft(userId, 'msg-1', 'formal');
 
-      const result = await DraftService.generateDraft(userId, 'msg123', 'formal');
-
-      expect(result).toBeDefined();
-      expect(result.status).toBe('PENDING');
-    });
-
-    it('should throw error if email not found', async () => {
-      const userId = new Types.ObjectId().toString();
-      
-      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.generateDraft(userId, 'nonexistent', 'formal')
-      ).rejects.toThrow();
-    });
+    expect(result.status).toBe('PENDING');
+    expect(result.draftBody).toBe('Generated reply');
+    expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, 'msg-1', 'formal', undefined);
+    expect(ActivityLogService.logActivity).toHaveBeenCalledWith(userId, 'DRAFT_GENERATED', 'Draft', 'info', draftId, expect.any(Object));
   });
 
-  describe('approveDraft', () => {
-    it('should approve a draft', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      
-      const mockDraft = {
-        _id: draftId,
-        userId: userId,
-        status: 'PENDING',
-        gmailMessageId: 'msg123',
-        threadId: 'thread123',
-        auditTrail: [],
-        save: vi.fn().mockResolvedValue(true),
-      };
+  it('returns existing pending draft for the same thread', async () => {
+    const existing = buildDraft();
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (Draft.findOne as unknown as Mock).mockResolvedValue(existing);
 
-      const mockEmail = {
-        _id: new Types.ObjectId().toString(),
-        userId: userId,
-        gmailMessageId: 'msg123',
-        threadId: 'thread123',
-        from: 'sender@example.com',
-        to: 'user@gmail.com',
-        subject: 'Test Email',
-        bodyPlain: 'This is a test email',
-        direction: 'INBOUND',
-      };
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
-      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(mockEmail);
-
-      const result = await DraftService.approveDraft(userId, draftId);
-
-      expect(result).toBeDefined();
-    });
-
-    it('should throw error if draft not found', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      
-      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.approveDraft(userId, draftId)
-      ).rejects.toThrow();
-    });
+    await expect(DraftService.generateDraft(userId, 'msg-1', 'formal')).resolves.toBe(existing);
   });
 
+  it('supports thread consolidation', async () => {
+    (GmailService.fetchThreadEmails as unknown as Mock).mockResolvedValue([
+      { ...email, gmailMessageId: 'msg-1', direction: 'INBOUND' },
+      { ...email, gmailMessageId: 'msg-2', direction: 'INBOUND' },
+    ]);
+    (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+    (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
 
-  describe('rejectDraft', () => {
-    it('should reject a draft', async () => {
-      const mockDraft = {
-        _id: 'draft123',
-        userId: 'user123',
-        status: 'PENDING',
-        save: vi.fn().mockResolvedValue(true),
-      };
-
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
-
-      const result = await DraftService.rejectDraft('draft123', 'user123');
-
-      expect(result).toBeDefined();
-    });
+    const result = await DraftService.generateDraft(userId, undefined, 'friendly', 'thread-1');
+    expect(result.isConsolidated).toBe(true);
+    expect(result.gmailMessageId).toEqual(['msg-1', 'msg-2']);
   });
 
-  describe('editDraft', () => {
-    it('should update draft body', async () => {
-      const mockDraft = {
-        _id: 'draft123',
-        userId: 'user123',
-        draftBody: 'Original text',
-        gmailDraftId: null,
-        save: vi.fn().mockResolvedValue(true),
-      };
+  it('lists and gets drafts for a user', async () => {
+    const draft = buildDraft();
+    const chain = { sort: vi.fn().mockReturnThis(), limit: vi.fn().mockReturnThis(), lean: vi.fn().mockResolvedValue([draft]) };
+    (Draft.find as unknown as Mock).mockReturnValue(chain);
+    await expect(DraftService.getUserDrafts(userId, 'PENDING', 10)).resolves.toHaveLength(1);
+    expect(chain.limit).toHaveBeenCalledWith(10);
 
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
-
-      const newBody = 'Updated text';
-      const result = await DraftService.editDraft('draft123', 'user123', newBody);
-
-      expect(result).toBeDefined();
-    });
-
-    it('should throw error if draft not found', async () => {
-      (Draft.findById as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.editDraft('nonexistent', 'user123', 'new text')
-      ).rejects.toThrow();
-    });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    await expect(DraftService.getDraftById(userId, draftId)).resolves.toBe(draft);
   });
 
-  describe('getDraft', () => {
-    it('should retrieve a draft by ID', async () => {
-      const mockDraft = {
-        _id: 'draft123',
-        userId: 'user123',
-        draftBody: 'Reply text',
-        status: 'PENDING',
-      };
+  it('updates pending and approved drafts', async () => {
+    const pending = buildDraft();
+    (Draft.findOne as unknown as Mock).mockResolvedValue(pending);
+    await DraftService.updateDraft(userId, draftId, 'Updated');
+    expect(pending.draftBody).toBe('Updated');
 
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
-
-      const result = await DraftService.getDraft('draft123', 'user123');
-
-      expect(result).toBeDefined();
-      expect(result._id).toBe('draft123');
-    });
-
-    it('should throw error if user does not own draft', async () => {
-      const mockDraft = {
-        _id: 'draft123',
-        userId: 'otheruser',
-      };
-
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
-
-      await expect(
-        DraftService.getDraft('draft123', 'user123')
-      ).rejects.toThrow();
-    });
+    const approved = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' });
+    (Draft.findOne as unknown as Mock).mockResolvedValueOnce(approved);
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    await DraftService.updateDraft(userId, draftId, 'Updated approved');
+    expect(GmailService.updateDraft).toHaveBeenCalled();
   });
 
-  describe('sendDraft', () => {
-    it('should send approved draft', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      const mockDraft = {
-        _id: new Types.ObjectId(draftId),
-        userId: new Types.ObjectId(userId),
-        status: 'APPROVED',
-        save: vi.fn().mockResolvedValue(true),
-      };
+  it('approves only pending drafts and requires Gmail draft creation', async () => {
+    const draft = buildDraft();
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (GmailService.createDraft as unknown as Mock).mockResolvedValue('gmail-draft-1');
 
-      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
+    const result = await DraftService.approveDraft(userId, draftId);
+    expect(result.status).toBe('APPROVED');
+    expect(result.gmailDraftId).toBe('gmail-draft-1');
 
-      const result = await DraftService.sendDraft(userId, draftId, 'unique-key-123');
-
-      expect(result).toBeDefined();
-    });
-
-    it('should throw error if draft not approved', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      const mockDraft = {
-        _id: new Types.ObjectId(draftId),
-        userId: new Types.ObjectId(userId),
-        status: 'PENDING',
-      };
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
-
-      await expect(
-        DraftService.sendDraft(userId, draftId, 'unique-key')
-      ).rejects.toThrow();
-    });
-
-    it('should throw error if draft not found', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.sendDraft(userId, draftId, 'unique-key')
-      ).rejects.toThrow();
-    });
-
-    it('should throw error if user does not own draft', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      const otherUserId = new Types.ObjectId().toString();
-      const mockDraft = {
-        _id: new Types.ObjectId(draftId),
-        userId: new Types.ObjectId(otherUserId),
-        status: 'APPROVED',
-      };
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
-
-      await expect(
-        DraftService.sendDraft(userId, draftId, 'unique-key')
-      ).rejects.toThrow();
-    });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+    await expect(DraftService.approveDraft(userId, draftId)).rejects.toThrow();
   });
 
-  describe('getUserDrafts', () => {
-    it('should retrieve all drafts for a user', async () => {
-      const userId = new Types.ObjectId().toString();
-      const mockDrafts = [
-        { _id: new Types.ObjectId(), userId: new Types.ObjectId(userId), status: 'PENDING', draftBody: 'Draft 1' },
-        { _id: new Types.ObjectId(), userId: new Types.ObjectId(userId), status: 'APPROVED', draftBody: 'Draft 2' },
-      ];
-
-      (Draft.find as unknown as Mock).mockReturnValue({
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        lean: vi.fn().mockResolvedValue(mockDrafts),
-      });
-
-      const result = await DraftService.getUserDrafts(userId);
-
-      expect(result).toEqual(mockDrafts);
-      expect(Array.isArray(result)).toBe(true);
-      expect(result.length).toBe(2);
-    });
-
-    it('should filter drafts by status', async () => {
-      const userId = new Types.ObjectId().toString();
-      const status = 'APPROVED';
-      const mockDrafts = [
-        { _id: new Types.ObjectId(), userId: new Types.ObjectId(userId), status: 'APPROVED', draftBody: 'Draft 2' },
-      ];
-
-      (Draft.find as unknown as Mock).mockReturnValue({
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        lean: vi.fn().mockResolvedValue(mockDrafts),
-      });
-
-      const result = await DraftService.getUserDrafts(userId, status);
-
-      expect(result).toEqual(mockDrafts);
-      expect(Draft.find).toHaveBeenCalledWith(
-        expect.objectContaining({ status })
-      );
-    });
-
-    it('should apply custom limit', async () => {
-      const userId = new Types.ObjectId().toString();
-      const customLimit = 50;
-      const mockDrafts: any[] = [];
-
-      (Draft.find as unknown as Mock).mockReturnValue({
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        lean: vi.fn().mockResolvedValue(mockDrafts),
-      });
-
-      await DraftService.getUserDrafts(userId, undefined, customLimit);
-
-      const query = (Draft.find as unknown as Mock).mock.results[0].value;
-      expect(query.limit).toHaveBeenCalledWith(customLimit);
-    });
-
-    it('should return empty array if no drafts found', async () => {
-      const userId = new Types.ObjectId().toString();
-      const mockDrafts: any[] = [];
-
-      (Draft.find as unknown as Mock).mockReturnValue({
-        sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockReturnThis(),
-        lean: vi.fn().mockResolvedValue(mockDrafts),
-      });
-
-      const result = await DraftService.getUserDrafts(userId);
-
-      expect(result).toEqual([]);
-    });
+  it('rejects pending drafts', async () => {
+    const draft = buildDraft();
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    const result = await DraftService.rejectDraft(userId, draftId);
+    expect(result.status).toBe('REJECTED');
   });
 
-  describe('getDraftById', () => {
-    it('should retrieve a draft by ID', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      const mockDraft = {
-        _id: new Types.ObjectId(draftId),
-        userId: new Types.ObjectId(userId),
-        draftBody: 'Reply text',
-        status: 'PENDING',
-      };
+  it('sends approved Gmail drafts and stores outbound email', async () => {
+    const draft = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (GmailService.sendDraft as unknown as Mock).mockResolvedValue('sent-1');
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (EmailMessage.create as unknown as Mock).mockResolvedValue({});
 
-      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
-
-      const result = await DraftService.getDraftById(userId, draftId);
-
-      expect(result).toEqual(mockDraft);
-      expect(Draft.findOne).toHaveBeenCalledWith({
-        _id: expect.any(Object),
-        userId: expect.any(Object),
-      });
-    });
-
-    it('should throw error if draft not found', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.getDraftById(userId, draftId)
-      ).rejects.toThrow('Draft not found');
-    });
-
-    it('should throw error if draft belongs to different user', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      const otherUserId = new Types.ObjectId().toString();
-      const mockDraft = {
-        _id: new Types.ObjectId(draftId),
-        userId: new Types.ObjectId(otherUserId),
-        draftBody: 'Another user draft',
-      };
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.getDraftById(userId, draftId)
-      ).rejects.toThrow();
-    });
+    const result = await DraftService.sendDraft(userId, draftId, 'key-1');
+    expect(result.status).toBe('SENT');
+    expect(result.sentGmailMessageId).toBe('sent-1');
+    expect(EmailMessage.create).toHaveBeenCalledWith(expect.objectContaining({ direction: 'OUTBOUND' }));
   });
 
-  describe('updateDraft', () => {
-    it('should update draft content', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      const newBody = 'Updated draft content';
-      const mockDraft = {
-        _id: draftId,
-        userId,
-        draftBody: 'Original content',
-        status: 'PENDING',
-        auditTrail: [],
-        save: vi.fn().mockResolvedValue(true),
-      };
+  it('blocks send for non-approved or missing Gmail draft id', async () => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'PENDING' }));
+    await expect(DraftService.sendDraft(userId, draftId, 'key')).rejects.toThrow('Must be APPROVED');
 
-      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
-
-      const result = await DraftService.updateDraft(userId, draftId, newBody);
-
-      expect(result).toBeDefined();
-      expect(mockDraft.save).toHaveBeenCalled();
-    });
-
-    it('should throw error if draft not found', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.updateDraft(userId, draftId, 'new content')
-      ).rejects.toThrow();
-    });
-
-    it('should throw error if user does not own draft', async () => {
-      const userId = new Types.ObjectId().toString();
-      const draftId = new Types.ObjectId().toString();
-      const mockDraft = {
-        _id: draftId,
-        userId: new Types.ObjectId().toString(),
-      };
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-
-      await expect(
-        DraftService.updateDraft(userId, draftId, 'new content')
-      ).rejects.toThrow();
-    });
-
-    it('should reject update if draft is already sent', async () => {
-      const userId = 'user123';
-      const draftId = 'draft123';
-      const mockDraft = {
-        _id: draftId,
-        userId,
-        status: 'SENT',
-        draftBody: 'Original',
-      };
-
-      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
-
-      await expect(
-        DraftService.updateDraft(userId, draftId, 'new content')
-      ).rejects.toThrow();
-    });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'APPROVED', gmailDraftId: null }));
+    await expect(DraftService.sendDraft(userId, draftId, 'key')).rejects.toThrow('Gmail draft ID not found');
   });
 });

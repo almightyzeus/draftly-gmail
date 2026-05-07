@@ -8,5 +8,7 @@
     "skipLibCheck": true,
     "outDir": "dist",
     "rootDir": "src"
-  }
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["tests", "dist", "node_modules", "vitest.config.ts"]
 }

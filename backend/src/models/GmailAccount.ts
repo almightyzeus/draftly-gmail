@@ -52,5 +52,6 @@ const gmailAccountSchema = new Schema<IGmailAccount>(
 
 // Index for quick lookup by userId
 gmailAccountSchema.index({ userId: 1, revokedAt: 1 });
+gmailAccountSchema.index({ userId: 1, gmailEmail: 1 }, { unique: true });
 
 export const GmailAccount = model<IGmailAccount>('GmailAccount', gmailAccountSchema);

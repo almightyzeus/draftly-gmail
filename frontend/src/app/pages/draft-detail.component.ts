@@ -137,12 +137,12 @@ export class DraftDetailComponent implements OnInit {
       (updated) => {
         this.draft = updated;
         this.isApproving = false;
-        this.successMessage = '✓ Draft approved! Saved to Gmail drafts. You can now send or edit further.';
+        this.successMessage = 'Draft approved and saved to Gmail drafts. You can now send or edit further.';
         this.hasChanges = false;
       },
       (error) => {
         console.error('Failed to approve draft:', error);
-        this.error = 'Failed to approve draft';
+        this.error = 'Failed to approve draft. Please confirm Gmail is connected and try again.';
         this.isApproving = false;
       }
     );
@@ -191,7 +191,7 @@ export class DraftDetailComponent implements OnInit {
         (updated) => {
           this.draft = updated;
           this.isSending = false;
-          this.successMessage = '✓ Draft sent successfully! Message ID: ' + updated.sentGmailMessageId;
+          this.successMessage = 'Draft sent successfully. Message ID: ' + updated.sentGmailMessageId;
           setTimeout(() => this.router.navigate(['/dashboard']), 2000);
         },
         (error) => {
