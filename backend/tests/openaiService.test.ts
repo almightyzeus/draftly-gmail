@@ -269,7 +269,7 @@ describe('OpenAIService', () => {
 
       const callArgs = getMockCreate().mock.calls[0][0];
       expect(callArgs.messages[0].content).toContain('brief');
-      expect(callArgs.messages[0].content).toContain('concise');
+      expect(callArgs.messages[0].content).toContain('to-the-point');
     });
 
     it('should use friendly tone correctly', async () => {

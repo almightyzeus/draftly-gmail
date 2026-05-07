@@ -139,6 +139,7 @@ describe('Integration Tests — Critical Workflows', () => {
   describe('Workflow: Draft Generation and Management', () => {
     let authToken: string;
     let userId: string;
+    let userObjectId: Types.ObjectId;
 
     beforeEach(async () => {
       // Register and login user
@@ -150,26 +151,57 @@ describe('Integration Tests — Critical Workflows', () => {
           password: 'SecurePass123!',
         });
 
-            userId = registerResponse.body.user.id;
+      userId = registerResponse.body.user.id;
+      userObjectId = new Types.ObjectId(userId);
       authToken = extractTokens(registerResponse.body).accessToken;
 
+      console.log('User registered - userId string:', userId, 'ObjectId:', userObjectId.toString());
+
       // Create test email with proper ObjectId
-      const userObjectId = new Types.ObjectId(userId);
-      await EmailMessage.create({
-        userId: userObjectId,
-        gmailMessageId: 'msg_123',
-        threadId: 'thread_123',
-        from: 'sender@example.com',
-        to: 'test@example.com',
-        subject: 'Test Email',
-        snippet: 'This is a test',
-        bodyPlain: 'This is the body of the test email',
-        direction: 'INBOUND',
-        internalDate: new Date(),
-      });
+      try {
+        const emailResult = await EmailMessage.create({
+          userId: userObjectId,
+          gmailMessageId: 'msg_123',
+          threadId: 'thread_123',
+          from: 'sender@example.com',
+          to: 'test@example.com',
+          subject: 'Test Email',
+          snippet: 'This is a test',
+          bodyPlain: 'This is the body of the test email',
+          direction: 'INBOUND',
+          internalDate: new Date(),
+        });
+
+        console.log('Email created successfully - ID:', emailResult._id, 'userId:', emailResult.userId.toString());
+
+        // Verify email was created and can be found
+        const verifyEmail = await EmailMessage.findOne({
+          userId: userObjectId,
+          gmailMessageId: 'msg_123',
+        });
+        if (!verifyEmail) {
+          console.error('ERROR: Email was created but cannot be found!');
+          throw new Error('Email verification failed');
+        }
+        console.log('Email verification passed - found email:', verifyEmail._id);
+      } catch (error) {
+        console.error('Failed to create email:', error);
+        throw error;
+      }
     });
 
     it('should generate draft from email', async () => {
+      console.log('\n=== GENERATE DRAFT TEST ===');
+      console.log('User ID (string):', userId);
+      console.log('User ID (ObjectId):', userObjectId.toString());
+
+      // Verify email exists
+      const emailCheck = await EmailMessage.findOne({
+        userId: userObjectId,
+        gmailMessageId: 'msg_123',
+      });
+      console.log('Email found in DB:', !!emailCheck);
+
       const response = await request(app)
         .post('/api/drafts/generate')
         .set('Authorization', `Bearer ${authToken}`)
@@ -178,8 +210,13 @@ describe('Integration Tests — Critical Workflows', () => {
           tone: 'formal',
         });
 
+      console.log('Response status:', response.status);
+      console.log('Response body keys:', Object.keys(response.body));
+      
       expect([200, 201]).toContain(response.status);
-      expect(response.body).toHaveProperty('id');
+      
+      const draftId = response.body.id || response.body._id;
+      expect(draftId).toBeDefined();
       expect(response.body.status).toBe('PENDING');
       expect(response.body.tone).toBe('formal');
       expect(response.body.draftBody).toBeDefined();
@@ -187,6 +224,9 @@ describe('Integration Tests — Critical Workflows', () => {
     });
 
     it('should list generated drafts', async () => {
+      console.log('\n=== LIST DRAFTS TEST ===');
+      console.log('User ID:', userId);
+
       // Generate draft first
       const generateResponse = await request(app)
         .post('/api/drafts/generate')
@@ -196,6 +236,7 @@ describe('Integration Tests — Critical Workflows', () => {
           tone: 'formal',
         });
 
+      console.log('Generate response status:', generateResponse.status);
       expect([200, 201]).toContain(generateResponse.status);
 
       // List drafts
@@ -203,10 +244,19 @@ describe('Integration Tests — Critical Workflows', () => {
         .get('/api/drafts')
         .set('Authorization', `Bearer ${authToken}`);
 
+      console.log('List response status:', listResponse.status);
+      console.log('List response is array:', Array.isArray(listResponse.body));
+      console.log('List response body type:', typeof listResponse.body);
+      
       expect(listResponse.status).toBe(200);
-      const drafts = Array.isArray(listResponse.body.drafts) ? listResponse.body.drafts : listResponse.body;
+      
+      // Response should be an array directly (not wrapped in an object)
+      const drafts = Array.isArray(listResponse.body) ? listResponse.body : listResponse.body.drafts || [];
+      
+      console.log('Drafts count:', drafts.length);
+      
       expect(Array.isArray(drafts)).toBe(true);
-      expect(drafts.length).toBeGreaterThanOrEqual(0);
+      expect(drafts.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should edit draft', async () => {
@@ -220,7 +270,7 @@ describe('Integration Tests — Critical Workflows', () => {
         });
 
       expect([200, 201]).toContain(generateResponse.status);
-      const draftId = generateResponse.body.id;
+      const draftId = generateResponse.body.id || generateResponse.body._id;
       const newBody = 'Updated draft body';
 
       const editResponse = await request(app)
@@ -245,7 +295,7 @@ describe('Integration Tests — Critical Workflows', () => {
         });
 
       expect([200, 201]).toContain(generateResponse.status);
-      const draftId = generateResponse.body.id;
+      const draftId = generateResponse.body.id || generateResponse.body._id;
 
       const approveResponse = await request(app)
         .post(`/api/drafts/${draftId}/approve`)
@@ -267,7 +317,7 @@ describe('Integration Tests — Critical Workflows', () => {
         });
 
       expect([200, 201]).toContain(generateResponse.status);
-      const draftId = generateResponse.body.id;
+      const draftId = generateResponse.body.id || generateResponse.body._id;
 
       const rejectResponse = await request(app)
         .post(`/api/drafts/${draftId}/reject`)

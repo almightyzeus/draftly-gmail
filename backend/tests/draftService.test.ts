@@ -1,4 +1,5 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
+import { Types } from 'mongoose';
 import { DraftService } from '../src/services/draftService.js';
 import { Draft } from '../src/models/Draft.js';
 import { EmailMessage } from '../src/models/EmailMessage.js';
@@ -16,9 +17,12 @@ describe('DraftService', () => {
 
   describe('generateDraft', () => {
     it('should generate a draft from an email', async () => {
+      const userId = new Types.ObjectId().toString();
+      const emailId = new Types.ObjectId().toString();
+      
       const mockEmail = {
-        _id: 'email123',
-        userId: 'user123',
+        _id: emailId,
+        userId: userId,
         gmailMessageId: 'msg123',
         threadId: 'thread123',
         from: 'sender@example.com',
@@ -28,9 +32,9 @@ describe('DraftService', () => {
         direction: 'INBOUND',
       };
 
-      (EmailMessage.findById as unknown as Mock).mockResolvedValue(mockEmail);
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(mockEmail);
       (Draft as unknown as Mock).mockReturnValue({
-        userId: 'user123',
+        userId: userId,
         gmailMessageId: 'msg123',
         draftBody: 'Generated reply...',
         status: 'PENDING',
@@ -38,45 +42,70 @@ describe('DraftService', () => {
         save: vi.fn().mockResolvedValue(true),
       });
 
-      const result = await DraftService.generateDraft('user123', 'email123', 'formal');
+      const result = await DraftService.generateDraft(userId, 'msg123', 'formal');
 
       expect(result).toBeDefined();
       expect(result.status).toBe('PENDING');
     });
 
     it('should throw error if email not found', async () => {
-      (EmailMessage.findById as unknown as Mock).mockResolvedValue(null);
+      const userId = new Types.ObjectId().toString();
+      
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(null);
 
       await expect(
-        DraftService.generateDraft('user123', 'nonexistent', 'formal')
+        DraftService.generateDraft(userId, 'nonexistent', 'formal')
       ).rejects.toThrow();
     });
   });
 
   describe('approveDraft', () => {
     it('should approve a draft', async () => {
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
+      
       const mockDraft = {
-        _id: 'draft123',
-        userId: 'user123',
+        _id: draftId,
+        userId: userId,
         status: 'PENDING',
+        gmailMessageId: 'msg123',
+        threadId: 'thread123',
+        auditTrail: [],
         save: vi.fn().mockResolvedValue(true),
       };
 
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
+      const mockEmail = {
+        _id: new Types.ObjectId().toString(),
+        userId: userId,
+        gmailMessageId: 'msg123',
+        threadId: 'thread123',
+        from: 'sender@example.com',
+        to: 'user@gmail.com',
+        subject: 'Test Email',
+        bodyPlain: 'This is a test email',
+        direction: 'INBOUND',
+      };
 
-      const result = await DraftService.approveDraft('draft123', 'user123');
+      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(mockEmail);
+
+      const result = await DraftService.approveDraft(userId, draftId);
 
       expect(result).toBeDefined();
     });
 
     it('should throw error if draft not found', async () => {
-      (Draft.findById as unknown as Mock).mockResolvedValue(null);
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
+      
+      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
 
       await expect(
-        DraftService.approveDraft('nonexistent', 'user123')
+        DraftService.approveDraft(userId, draftId)
       ).rejects.toThrow();
     });
   });
+
 
   describe('rejectDraft', () => {
     it('should reject a draft', async () => {
@@ -155,68 +184,78 @@ describe('DraftService', () => {
 
   describe('sendDraft', () => {
     it('should send approved draft', async () => {
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
       const mockDraft = {
-        _id: 'draft123',
-        userId: 'user123',
+        _id: new Types.ObjectId(draftId),
+        userId: new Types.ObjectId(userId),
         status: 'APPROVED',
         save: vi.fn().mockResolvedValue(true),
       };
 
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
+      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
 
-      const result = await DraftService.sendDraft('draft123', 'user123', 'unique-key-123');
+      const result = await DraftService.sendDraft(userId, draftId, 'unique-key-123');
 
       expect(result).toBeDefined();
     });
 
     it('should throw error if draft not approved', async () => {
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
       const mockDraft = {
-        _id: 'draft123',
-        userId: 'user123',
+        _id: new Types.ObjectId(draftId),
+        userId: new Types.ObjectId(userId),
         status: 'PENDING',
       };
 
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
+      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
 
       await expect(
-        DraftService.sendDraft('draft123', 'user123', 'unique-key')
+        DraftService.sendDraft(userId, draftId, 'unique-key')
       ).rejects.toThrow();
     });
 
     it('should throw error if draft not found', async () => {
-      (Draft.findById as unknown as Mock).mockResolvedValue(null);
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
+      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
 
       await expect(
-        DraftService.sendDraft('nonexistent', 'user123', 'unique-key')
+        DraftService.sendDraft(userId, draftId, 'unique-key')
       ).rejects.toThrow();
     });
 
     it('should throw error if user does not own draft', async () => {
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
+      const otherUserId = new Types.ObjectId().toString();
       const mockDraft = {
-        _id: 'draft123',
-        userId: 'other-user',
+        _id: new Types.ObjectId(draftId),
+        userId: new Types.ObjectId(otherUserId),
         status: 'APPROVED',
       };
 
-      (Draft.findById as unknown as Mock).mockResolvedValue(mockDraft);
+      (Draft.findOne as unknown as Mock).mockResolvedValue(mockDraft);
 
       await expect(
-        DraftService.sendDraft('draft123', 'user123', 'unique-key')
+        DraftService.sendDraft(userId, draftId, 'unique-key')
       ).rejects.toThrow();
     });
   });
 
   describe('getUserDrafts', () => {
     it('should retrieve all drafts for a user', async () => {
-      const userId = 'user123';
+      const userId = new Types.ObjectId().toString();
       const mockDrafts = [
-        { _id: 'draft1', userId, status: 'PENDING', draftBody: 'Draft 1' },
-        { _id: 'draft2', userId, status: 'APPROVED', draftBody: 'Draft 2' },
+        { _id: new Types.ObjectId(), userId: new Types.ObjectId(userId), status: 'PENDING', draftBody: 'Draft 1' },
+        { _id: new Types.ObjectId(), userId: new Types.ObjectId(userId), status: 'APPROVED', draftBody: 'Draft 2' },
       ];
 
       (Draft.find as unknown as Mock).mockReturnValue({
         sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue(mockDrafts),
+        limit: vi.fn().mockReturnThis(),
+        lean: vi.fn().mockResolvedValue(mockDrafts),
       });
 
       const result = await DraftService.getUserDrafts(userId);
@@ -227,15 +266,16 @@ describe('DraftService', () => {
     });
 
     it('should filter drafts by status', async () => {
-      const userId = 'user123';
+      const userId = new Types.ObjectId().toString();
       const status = 'APPROVED';
       const mockDrafts = [
-        { _id: 'draft2', userId, status: 'APPROVED', draftBody: 'Draft 2' },
+        { _id: new Types.ObjectId(), userId: new Types.ObjectId(userId), status: 'APPROVED', draftBody: 'Draft 2' },
       ];
 
       (Draft.find as unknown as Mock).mockReturnValue({
         sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue(mockDrafts),
+        limit: vi.fn().mockReturnThis(),
+        lean: vi.fn().mockResolvedValue(mockDrafts),
       });
 
       const result = await DraftService.getUserDrafts(userId, status);
@@ -247,13 +287,14 @@ describe('DraftService', () => {
     });
 
     it('should apply custom limit', async () => {
-      const userId = 'user123';
+      const userId = new Types.ObjectId().toString();
       const customLimit = 50;
       const mockDrafts: any[] = [];
 
       (Draft.find as unknown as Mock).mockReturnValue({
         sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue(mockDrafts),
+        limit: vi.fn().mockReturnThis(),
+        lean: vi.fn().mockResolvedValue(mockDrafts),
       });
 
       await DraftService.getUserDrafts(userId, undefined, customLimit);
@@ -263,12 +304,13 @@ describe('DraftService', () => {
     });
 
     it('should return empty array if no drafts found', async () => {
-      const userId = 'user123';
+      const userId = new Types.ObjectId().toString();
       const mockDrafts: any[] = [];
 
       (Draft.find as unknown as Mock).mockReturnValue({
         sort: vi.fn().mockReturnThis(),
-        limit: vi.fn().mockResolvedValue(mockDrafts),
+        limit: vi.fn().mockReturnThis(),
+        lean: vi.fn().mockResolvedValue(mockDrafts),
       });
 
       const result = await DraftService.getUserDrafts(userId);
@@ -279,11 +321,11 @@ describe('DraftService', () => {
 
   describe('getDraftById', () => {
     it('should retrieve a draft by ID', async () => {
-      const userId = 'user123';
-      const draftId = 'draft123';
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
       const mockDraft = {
-        _id: draftId,
-        userId,
+        _id: new Types.ObjectId(draftId),
+        userId: new Types.ObjectId(userId),
         draftBody: 'Reply text',
         status: 'PENDING',
       };
@@ -300,8 +342,8 @@ describe('DraftService', () => {
     });
 
     it('should throw error if draft not found', async () => {
-      const userId = 'user123';
-      const draftId = 'nonexistent';
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
 
       (Draft.findOne as unknown as Mock).mockResolvedValue(null);
 
@@ -311,11 +353,12 @@ describe('DraftService', () => {
     });
 
     it('should throw error if draft belongs to different user', async () => {
-      const userId = 'user123';
-      const draftId = 'draft456';
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
+      const otherUserId = new Types.ObjectId().toString();
       const mockDraft = {
-        _id: draftId,
-        userId: 'other-user',
+        _id: new Types.ObjectId(draftId),
+        userId: new Types.ObjectId(otherUserId),
         draftBody: 'Another user draft',
       };
 
@@ -329,13 +372,15 @@ describe('DraftService', () => {
 
   describe('updateDraft', () => {
     it('should update draft content', async () => {
-      const userId = 'user123';
-      const draftId = 'draft123';
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
       const newBody = 'Updated draft content';
       const mockDraft = {
         _id: draftId,
         userId,
         draftBody: 'Original content',
+        status: 'PENDING',
+        auditTrail: [],
         save: vi.fn().mockResolvedValue(true),
       };
 
@@ -348,8 +393,8 @@ describe('DraftService', () => {
     });
 
     it('should throw error if draft not found', async () => {
-      const userId = 'user123';
-      const draftId = 'nonexistent';
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
 
       (Draft.findOne as unknown as Mock).mockResolvedValue(null);
 
@@ -359,11 +404,11 @@ describe('DraftService', () => {
     });
 
     it('should throw error if user does not own draft', async () => {
-      const userId = 'user123';
-      const draftId = 'draft123';
+      const userId = new Types.ObjectId().toString();
+      const draftId = new Types.ObjectId().toString();
       const mockDraft = {
         _id: draftId,
-        userId: 'other-user',
+        userId: new Types.ObjectId().toString(),
       };
 
       (Draft.findOne as unknown as Mock).mockResolvedValue(null);
