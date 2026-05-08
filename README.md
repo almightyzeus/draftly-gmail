@@ -2,7 +2,7 @@
 
 Draftly is a local MVP for the Airtribe Backend Engineering Launchpad capstone. It connects to Gmail, fetches inbox emails, generates AI reply drafts, lets the user review/edit/approve/reject drafts, and sends approved replies through Gmail.
 
-The project is intentionally scoped as an MVP. The core workflow is implemented and demoable locally; Docker deployment is listed as a known limitation.
+The project is intentionally scoped as an MVP. The core workflow is implemented, containerized with Docker, and demoable locally using Docker Compose.
 
 ## Capstone Objective
 
@@ -28,6 +28,14 @@ The system supports:
 - Auth: JWT
 - Security: bcrypt password hashing, AES-256-GCM token encryption, Helmet, CORS, auth rate limiting
 
+## Architecture Overview
+
+- Angular frontend served through nginx
+- nginx reverse proxy forwards `/api` requests to the backend container
+- Express backend exposes REST APIs and integrates with Gmail/OpenAI
+- MongoDB stores users, emails, drafts, preferences, and activity logs
+- Docker Compose orchestrates frontend, backend, and MongoDB services locally
+
 ## Current MVP Status
 
 Implemented:
@@ -45,7 +53,7 @@ Implemented:
 
 Known limitations:
 
-- Docker and deployment are not included in the MVP submission.
+- The project is optimized for local Docker Compose deployment and demo usage rather than production cloud deployment.
 - Backend and frontend tests are passing with coverage above the MVP target.
 - Send retry/backoff is not fully implemented.
 - Send idempotency requires a key and prevents obvious duplicate status transitions, but it is not a complete production-grade idempotency store.
@@ -69,19 +77,76 @@ backend/
   tests/
 
 frontend/
+  nginx.conf
   src/app/
     pages/
     services/
+
+docker-compose.yml
 ```
 
 ## Prerequisites
 
 - Node.js 20.19.5
-- MongoDB running locally or a MongoDB Atlas connection string
 - Google Cloud OAuth2 credentials with Gmail API enabled
+- Docker Desktop / Docker Engine with Docker Compose
 - OpenAI API key
 
-## Backend Setup
+## Docker Setup
+
+The recommended way to run Draftly locally is with Docker Compose. The stack includes:
+
+- Angular frontend served through nginx
+- Express backend API
+- MongoDB database
+- nginx reverse proxying for `/api` requests
+
+### Environment Setup
+
+1. Copy the example environment file:
+
+```bash
+cp backend/.env.example backend/.env.docker
+```
+
+2. Update the MongoDB connection string inside `backend/.env.docker`:
+
+```env
+MONGODB_URI=mongodb://mongodb:27017/draftly
+```
+
+All other environment variables remain the same as local development.
+
+### Start the Full Stack
+
+From the project root:
+
+```bash
+docker compose up --build
+```
+
+### Services
+
+| Service | URL |
+|---|---|
+| Frontend | http://localhost:4200 |
+| Backend API | http://localhost:3000 |
+| MongoDB | mongodb://localhost:27017 |
+
+### Stop the Stack
+
+```bash
+docker compose down
+```
+
+### Notes
+
+- MongoDB data is persisted using Docker volumes.
+- Frontend API calls continue to use `/api` routes through nginx reverse proxying.
+- Docker Compose orchestrates frontend, backend, and MongoDB containers locally.
+- The setup is optimized for local MVP/demo usage rather than production cloud deployment.
+
+## Local Development Setup
 
 Create `backend/.env`:
 
@@ -143,6 +208,8 @@ http://localhost:4200
 
 The Angular dev server proxies `/api` requests to `http://localhost:3000`.
 
+In Docker Compose, nginx reverse proxying is used so frontend API calls continue to work with `/api` routes without frontend code changes.
+
 ## Gmail OAuth Setup
 
 In Google Cloud Console:
@@ -161,17 +228,16 @@ The backend requests Gmail read, modify, and send scopes.
 
 ## Demo Flow
 
-1. Start MongoDB.
-2. Start the backend with `npm run dev`.
-3. Start the frontend with `npm start`.
-4. Register or log in.
-5. Click "Connect Gmail" and complete Google OAuth.
-6. Return to the dashboard and fetch inbox emails.
-7. Open an email.
-8. Select a tone and generate a draft.
-9. Edit the draft if needed.
-10. Approve the draft. This creates a Gmail draft.
-11. Send the approved draft.
+1. Run `docker compose up --build`.
+2. Open `http://localhost:4200`.
+3. Register or log in.
+4. Click "Connect Gmail" and complete Google OAuth.
+5. Return to the dashboard and fetch inbox emails.
+6. Open an email.
+7. Select a tone and generate a draft.
+8. Edit the draft if needed.
+9. Approve the draft. This creates a Gmail draft.
+10. Send the approved draft.
 
 ## REST API
 
@@ -352,11 +418,11 @@ For submission, the recommended validation is:
 
 ## Future Improvements
 
-- Dockerfiles and docker-compose
-- Production deployment
+- Cloud deployment (AWS/GCP/Azure)
+- Production-grade secrets management
+- CI/CD pipeline for automated testing and deployment
 - Stronger retry and backoff for Gmail send failures
 - More complete idempotency table for send requests
 - Full preferences and activity log UI
 - More robust Gmail RFC Message-ID handling
-- CI pipeline for build/test/coverage
 - Better token refresh persistence
