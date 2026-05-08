@@ -64,7 +64,15 @@ export class OpenAIService {
     const instructions = (toneInstructions as any)[tone] || toneInstructions.formal;
     const sigBlock = signature ? `\n\nAlways end with this signature:\n${signature}` : '';
 
-    return `You are an email assistant that helps draft replies to emails. ${instructions}${sigBlock}`;
+    return `You are an email assistant that helps draft replies to emails.
+
+  ${instructions}
+
+  IMPORTANT RULES:
+  - Return ONLY the email body.
+  - DO NOT include a subject line.
+  - DO NOT include "Subject:" anywhere in the response.
+  - The response should be ready to send as the email body directly.${sigBlock}`;
   }
 
   /**
