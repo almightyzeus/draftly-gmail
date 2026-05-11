@@ -1,8 +1,12 @@
-import { Router, Request, Response, NextFunction } from 'express';
-import { GmailOAuthService } from '../services/gmailOAuthService.js';
-import { GmailService } from '../services/gmailService.js';
+import { Router } from 'express';
+import {
+  connectOAuth,
+  handleOAuthCallback,
+  revokeOAuth,
+  fetchEmails,
+  getEmail,
+} from '../controllers/gmailController.js';
 import { authenticateJWT } from '../middleware/auth.js';
-import { logger } from '../utils/logger.js';
 
 const router = Router();
 
@@ -10,100 +14,32 @@ const router = Router();
  * GET /api/gmail/oauth/connect
  * Redirects user to Google OAuth consent screen
  */
-router.get('/oauth/connect', authenticateJWT, (req: Request, res: Response) => {
-  try {
-    const userId = (req as any).userId;
-    const userEmail = (req as any).email;
-    const url = GmailOAuthService.generateAuthUrl(userId, userEmail);
-    res.redirect(url);
-  } catch (error) {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth connect error');
-    res.status(500).json({ error: 'Failed to generate auth URL' });
-  }
-});
+router.get('/oauth/connect', authenticateJWT, connectOAuth);
 
 /**
  * GET /api/gmail/oauth/callback
  * Handles OAuth callback from Google
  * Note: No auth middleware - userId comes from state parameter
  */
-router.get('/oauth/callback', async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const code = req.query.code as string;
-    const userId = req.query.state as string;
-
-    if (!code) {
-      return res.status(400).json({ error: 'Missing authorization code' });
-    }
-
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID missing in state' });
-    }
-
-    await GmailOAuthService.handleCallback(code, userId);
-
-    // Redirect to dashboard
-    res.redirect('http://localhost:4200/dashboard');
-  } catch (error) {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth callback error');
-    res.redirect('http://localhost:4200/login?error=gmail_connection_failed');
-  }
-});
+router.get('/oauth/callback', handleOAuthCallback);
 
 /**
  * POST /api/gmail/oauth/revoke
  * Revoke Gmail account access
  */
-router.post('/oauth/revoke', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = (req as any).userId;
-    await GmailOAuthService.revoke(userId);
-    res.json({ message: 'Gmail account revoked' });
-  } catch (error) {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'Revoke error');
-    res.status(500).json({ error: 'Failed to revoke account' });
-  }
-});
+router.post('/oauth/revoke', authenticateJWT, revokeOAuth);
 
 /**
  * GET /api/gmail/emails
  * Fetch emails from Gmail
  * Query params: label, unread, limit
  */
-router.get('/emails', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = (req as any).userId;
-    const { label = 'INBOX', unread, limit = 20 } = req.query;
-
-    const options = {
-      label: label as string,
-      unread: unread === 'true',
-      limit: parseInt(limit as string) || 20,
-    };
-
-    const emails = await GmailService.fetchEmails(userId, options);
-    res.json(emails);
-  } catch (error) {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'Failed to fetch emails');
-    res.status(500).json({ error: 'Failed to fetch emails' });
-  }
-});
+router.get('/emails', authenticateJWT, fetchEmails);
 
 /**
  * GET /api/gmail/emails/:gmailMessageId
  * Get a single email
  */
-router.get('/emails/:gmailMessageId', authenticateJWT, async (req: Request, res: Response, next: NextFunction) => {
-  try {
-    const userId = (req as any).userId;
-    const gmailMessageId = req.params.gmailMessageId as string;
-
-    const email = await GmailService.getEmail(userId, gmailMessageId);
-    res.json(email);
-  } catch (error) {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'Failed to get email');
-    res.status(500).json({ error: 'Failed to get email' });
-  }
-});
+router.get('/emails/:gmailMessageId', authenticateJWT, getEmail);
 
 export default router;
