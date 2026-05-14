@@ -125,6 +125,12 @@ From the project root:
 docker compose up --build
 ```
 
+Note: Some Linux environments may require using `docker-compose` instead of `docker compose`.
+
+```bash
+docker-compose up --build
+```
+
 ### Services
 
 | Service | URL |
