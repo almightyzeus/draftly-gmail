@@ -28,15 +28,24 @@ The system supports:
 - Auth: JWT
 - Security: bcrypt password hashing, AES-256-GCM token encryption, Helmet, CORS, auth rate limiting
 
+## Features
+
+- Gmail OAuth2 integration
+- AI-generated email reply drafts
+- Human-in-the-loop approval workflow
+- Thread-aware contextual replies
+- Personalized writing style learning
+- Dockerized local deployment with Docker Compose
+
 ## Architecture Overview
 
-- Angular frontend served through nginx
+- Angular frontend served through an nginx container
 - nginx reverse proxy forwards `/api` requests to the backend container
 - Express backend exposes REST APIs and integrates with Gmail/OpenAI
 - MongoDB stores users, emails, drafts, preferences, and activity logs
 - Docker Compose orchestrates frontend, backend, and MongoDB services locally
 
-## Current MVP Status
+## Implemented Features
 
 Implemented:
 
@@ -50,15 +59,6 @@ Implemented:
 - Gmail draft send for approved drafts
 - Basic preferences and activity log APIs
 - Angular UI for login, register, dashboard/inbox, email detail, and draft detail
-
-Known limitations:
-
-- The project is optimized for local Docker Compose deployment and demo usage rather than production cloud deployment.
-- Backend and frontend tests are passing with coverage above the MVP target.
-- Send retry/backoff is not fully implemented.
-- Send idempotency requires a key and prevents obvious duplicate status transitions, but it is not a complete production-grade idempotency store.
-- Gmail threading is implemented with Gmail thread IDs and reply headers, but should be hardened further for production.
-- Preferences and logs are exposed as basic APIs but do not yet have full frontend screens.
 
 ## Project Structure
 
@@ -144,7 +144,7 @@ docker compose down
 - MongoDB data is persisted using Docker volumes.
 - Frontend API calls continue to use `/api` routes through nginx reverse proxying.
 - Docker Compose orchestrates frontend, backend, and MongoDB containers locally.
-- The setup is optimized for local MVP/demo usage rather than production cloud deployment.
+- The current setup is optimized for local MVP/demo workflows rather than production-scale cloud deployment.
 
 ## Local Development Setup
 
@@ -383,29 +383,34 @@ npm run test:coverage
 
 ## Testing Status
 
-Backend tests cover services, models, middleware, controllers, and critical API workflows. The backend test suite currently passes, and coverage is above the MVP target:
+Backend tests cover services, models, middleware, controllers, and critical API workflows. Frontend tests cover service APIs along with component and page behavior using Vitest.
+
+Current test coverage:
+
+### Backend
 
 - Statements: 84%+
 - Lines: 84%+
 - Functions: 91%+
 - Branches: 61%+
 
-Frontend tests use Vitest and cover service APIs plus page/component class behavior. Frontend coverage is also above the MVP target:
+### Frontend
 
 - Statements: 89%+
 - Lines: 89%+
 - Functions: 93%+
 - Branches: 82%+
 
-For submission, the recommended validation is:
+Recommended validation before running the demo:
 
-1. `cd backend && npm run build`
-2. `cd backend && npm test`
-3. `cd backend && npm run test:coverage`
-4. `cd frontend && npm run build`
-5. `cd frontend && npm test`
-6. `cd frontend && npm run test:coverage`
-7. Run the local demo flow from registration through sending an approved Gmail draft.
+```bash
+cd backend && npm run build
+cd backend && npm test
+cd frontend && npm run build
+cd frontend && npm test
+```
+
+The Dockerized stack is validated through the end-to-end demo flow from authentication through Gmail draft generation and sending.
 
 ## Design Notes
 
@@ -415,6 +420,15 @@ For submission, the recommended validation is:
 - Approval creates a Gmail draft so the user can inspect it in Gmail before sending.
 - User style learning is implemented by retrieving recent outbound emails and including them as examples in the OpenAI prompt.
 - The app keeps the human-in-the-loop requirement by never sending generated text automatically.
+
+## Known limitations:
+
+- The project is optimized for local Docker Compose deployment and demo usage rather than production cloud deployment.
+- Backend and frontend tests are passing with coverage above the MVP target.
+- Send retry/backoff is not fully implemented.
+- Send idempotency requires a key and prevents obvious duplicate status transitions, but it is not a complete production-grade idempotency store.
+- Gmail threading is implemented with Gmail thread IDs and reply headers, but should be hardened further for production.
+- Preferences and logs are exposed as basic APIs but do not yet have full frontend screens.
 
 ## Future Improvements
 
