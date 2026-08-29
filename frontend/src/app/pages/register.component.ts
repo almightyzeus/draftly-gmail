@@ -1,5 +1,5 @@
 import { Component } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { RouterModule, Router } from '@angular/router';
 import { MatInputModule } from '@angular/material/input';
@@ -12,15 +12,14 @@ import { AuthService } from '../services/auth.service';
 @Component({
     selector: 'app-register',
     imports: [
-        CommonModule,
-        ReactiveFormsModule,
-        RouterModule,
-        MatInputModule,
-        MatButtonModule,
-        MatCardModule,
-        MatProgressSpinnerModule,
-        MatSnackBarModule,
-    ],
+    ReactiveFormsModule,
+    RouterModule,
+    MatInputModule,
+    MatButtonModule,
+    MatCardModule,
+    MatProgressSpinnerModule,
+    MatSnackBarModule
+],
     templateUrl: './register.component.html',
     styleUrls: ['./register.component.css']
 })

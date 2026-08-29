@@ -10,45 +10,61 @@
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Full Name</mat-label>
           <input matInput type="text" formControlName="name" required />
-          <mat-error *ngIf="registerForm.get('name')?.hasError('required')">
-            Name is required
-          </mat-error>
-          <mat-error *ngIf="registerForm.get('name')?.hasError('minlength')">
-            Name must be at least 2 characters
-          </mat-error>
+          @if (registerForm.get('name')?.hasError('required')) {
+            <mat-error>
+              Name is required
+            </mat-error>
+          }
+          @if (registerForm.get('name')?.hasError('minlength')) {
+            <mat-error>
+              Name must be at least 2 characters
+            </mat-error>
+          }
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Email</mat-label>
           <input matInput type="email" formControlName="email" required />
-          <mat-error *ngIf="registerForm.get('email')?.hasError('required')">
-            Email is required
-          </mat-error>
-          <mat-error *ngIf="registerForm.get('email')?.hasError('email')">
-            Please enter a valid email
-          </mat-error>
+          @if (registerForm.get('email')?.hasError('required')) {
+            <mat-error>
+              Email is required
+            </mat-error>
+          }
+          @if (registerForm.get('email')?.hasError('email')) {
+            <mat-error>
+              Please enter a valid email
+            </mat-error>
+          }
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Password</mat-label>
           <input matInput type="password" formControlName="password" required />
-          <mat-error *ngIf="registerForm.get('password')?.hasError('required')">
-            Password is required
-          </mat-error>
-          <mat-error *ngIf="registerForm.get('password')?.hasError('minlength')">
-            Password must be at least 6 characters
-          </mat-error>
+          @if (registerForm.get('password')?.hasError('required')) {
+            <mat-error>
+              Password is required
+            </mat-error>
+          }
+          @if (registerForm.get('password')?.hasError('minlength')) {
+            <mat-error>
+              Password must be at least 6 characters
+            </mat-error>
+          }
         </mat-form-field>
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Confirm Password</mat-label>
           <input matInput type="password" formControlName="confirmPassword" required />
-          <mat-error *ngIf="registerForm.get('confirmPassword')?.hasError('required')">
-            Please confirm your password
-          </mat-error>
-          <mat-error *ngIf="registerForm.hasError('passwordMismatch')">
-            Passwords do not match
-          </mat-error>
+          @if (registerForm.get('confirmPassword')?.hasError('required')) {
+            <mat-error>
+              Please confirm your password
+            </mat-error>
+          }
+          @if (registerForm.hasError('passwordMismatch')) {
+            <mat-error>
+              Passwords do not match
+            </mat-error>
+          }
         </mat-form-field>
 
         <button
@@ -57,12 +73,16 @@
           type="submit"
           class="full-width"
           [disabled]="registerForm.invalid || isLoading"
-        >
-          <span *ngIf="!isLoading">Create Account</span>
-          <span *ngIf="isLoading">
-            <mat-spinner diameter="20" class="inline-spinner"></mat-spinner>
-            Creating...
-          </span>
+          >
+          @if (!isLoading) {
+            <span>Create Account</span>
+          }
+          @if (isLoading) {
+            <span>
+              <mat-spinner diameter="20" class="inline-spinner"></mat-spinner>
+              Creating...
+            </span>
+          }
         </button>
       </form>
 

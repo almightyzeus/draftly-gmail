@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { RouterModule, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -28,17 +28,16 @@ interface Email {
 @Component({
     selector: 'app-dashboard',
     imports: [
-        CommonModule,
-        RouterModule,
-        MatButtonModule,
-        MatCardModule,
-        MatToolbarModule,
-        MatIconModule,
-        MatMenuModule,
-        MatTableModule,
-        MatProgressSpinnerModule,
-        MatDividerModule,
-    ],
+    RouterModule,
+    MatButtonModule,
+    MatCardModule,
+    MatToolbarModule,
+    MatIconModule,
+    MatMenuModule,
+    MatTableModule,
+    MatProgressSpinnerModule,
+    MatDividerModule
+],
     templateUrl: './dashboard.component.html',
     styleUrls: ['./dashboard.component.css']
 })
