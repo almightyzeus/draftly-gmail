@@ -26,22 +26,21 @@ interface Email {
 }
 
 @Component({
-  selector: 'app-dashboard',
-  standalone: true,
-  imports: [
-    CommonModule,
-    RouterModule,
-    MatButtonModule,
-    MatCardModule,
-    MatToolbarModule,
-    MatIconModule,
-    MatMenuModule,
-    MatTableModule,
-    MatProgressSpinnerModule,
-    MatDividerModule,
-  ],
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css'],
+    selector: 'app-dashboard',
+    imports: [
+        CommonModule,
+        RouterModule,
+        MatButtonModule,
+        MatCardModule,
+        MatToolbarModule,
+        MatIconModule,
+        MatMenuModule,
+        MatTableModule,
+        MatProgressSpinnerModule,
+        MatDividerModule,
+    ],
+    templateUrl: './dashboard.component.html',
+    styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
   currentUser: User | null = null;
