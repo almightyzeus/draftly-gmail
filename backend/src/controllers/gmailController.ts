@@ -2,6 +2,7 @@ import { Response, NextFunction } from 'express';
 import { GmailOAuthService } from '../services/gmailOAuthService.js';
 import { GmailService } from '../services/gmailService.js';
 import { AppError } from '../utils/errors.js';
+import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -20,28 +21,34 @@ export const connectOAuth = (req: any, res: Response) => {
 
 /**
  * Handle OAuth callback from Google
- * Note: No auth middleware - userId comes from state parameter
+ * Verifies the state parameter to ensure secure user identification
  */
 export const handleOAuthCallback = async (req: any, res: Response, next: NextFunction) => {
   try {
     const code = req.query.code as string;
-    const userId = req.query.state as string;
+    const state = req.query.state as string;
 
     if (!code) {
       return res.status(400).json({ error: 'Missing authorization code' });
     }
 
-    if (!userId) {
-      return res.status(400).json({ error: 'User ID missing in state' });
+    // Verify state token and extract userId
+    let userId: string;
+    try {
+      userId = GmailOAuthService.verifyOAuthStateToken(state);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Invalid OAuth state';
+      logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth state verification failed');
+      return res.redirect(`${env.frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`);
     }
 
-    await GmailOAuthService.handleCallback(code, userId);
+    await GmailOAuthService.handleCallback(code, state);
 
-    // Redirect to dashboard
-    res.redirect('http://localhost:4200/dashboard');
+    // Redirect to dashboard using configured FRONTEND_URL
+    res.redirect(`${env.frontendUrl}/dashboard`);
   } catch (error) {
     logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth callback error');
-    res.redirect('http://localhost:4200/login?error=gmail_connection_failed');
+    res.redirect(`${env.frontendUrl}/login?error=${encodeURIComponent('gmail_connection_failed')}`);
   }
 };
 

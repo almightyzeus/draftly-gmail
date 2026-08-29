@@ -1,16 +1,70 @@
 import { google } from 'googleapis';
 import { Types } from 'mongoose';
+import jwt, { JwtPayload } from 'jsonwebtoken';
 import { oauth2Client } from './googleClient.js';
 import {GmailAccount} from '../models/GmailAccount.js';
 import { User } from '../models/User.js';
 import { CryptoService } from './cryptoService.js';
+import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
+
+interface OAuthStatePayload extends JwtPayload {
+  userId: string;
+  type: 'gmail_oauth';
+}
 
 export class GmailOAuthService {
   /**
-   * Generate Google OAuth authorization URL with user ID in state and email hint
+   * Generate a signed, short-lived OAuth state token
+   * The state token contains the user ID and expires in 10 minutes
+   */
+  static generateOAuthStateToken(userId: string): string {
+    const payload: OAuthStatePayload = {
+      userId,
+      type: 'gmail_oauth',
+    };
+
+    return jwt.sign(payload, env.jwt.accessSecret, {
+      expiresIn: '10m',
+      algorithm: 'HS256',
+    });
+  }
+
+  /**
+   * Verify and extract userId from OAuth state token
+   * Throws if token is invalid, expired, malformed, or missing
+   */
+  static verifyOAuthStateToken(state: string | undefined): string {
+    if (!state) {
+      throw new Error('Missing OAuth state parameter');
+    }
+
+    try {
+      const decoded = jwt.verify(state, env.jwt.accessSecret, {
+        algorithms: ['HS256'],
+      }) as OAuthStatePayload;
+
+      if (decoded.type !== 'gmail_oauth') {
+        throw new Error('Invalid state token type');
+      }
+
+      return decoded.userId;
+    } catch (error) {
+      if (error instanceof jwt.TokenExpiredError) {
+        throw new Error('OAuth state token has expired. Please try connecting Gmail again.');
+      }
+      if (error instanceof jwt.JsonWebTokenError) {
+        throw new Error('Invalid or tampered OAuth state parameter');
+      }
+      throw error;
+    }
+  }
+
+  /**
+   * Generate Google OAuth authorization URL with signed state and email hint
    */
   static generateAuthUrl(userId: string, userEmail: string): string {
+    const stateToken = this.generateOAuthStateToken(userId);
     return oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: [
@@ -19,15 +73,18 @@ export class GmailOAuthService {
         'https://www.googleapis.com/auth/gmail.send',
       ],
       prompt: 'consent', // Force refresh token
-      state: userId, // Pass userId via state parameter
+      state: stateToken, // Pass signed state token instead of raw userId
       login_hint: userEmail, // Pre-fill email on consent screen
     });
   }
 
   /**
    * Handle OAuth callback and save tokens
+   * Verifies the state token before processing the authorization code
    */
-  static async handleCallback(code: string, userId: string): Promise<void> {
+  static async handleCallback(code: string, state: string): Promise<void> {
+    // Verify state token and extract userId
+    const userId = this.verifyOAuthStateToken(state);
     try {
       const { tokens } = await oauth2Client.getToken(code);
 
