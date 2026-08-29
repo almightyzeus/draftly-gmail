@@ -30,7 +30,6 @@
     "@angular-devkit/build-angular": "^17.3.17",
     "@angular/cli": "^17.3.17",
     "@angular/compiler-cli": "^17.3.12",
-    "@testing-library/angular": "^19.2.1",
     "@vitest/coverage-v8": "^1.6.1",
     "typescript": "~5.2.2",
     "vitest": "^1.6.1"
