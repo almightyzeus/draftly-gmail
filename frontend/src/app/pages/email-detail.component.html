@@ -9,123 +9,131 @@
 
   <div class="content">
     <!-- Loading state -->
-    <div *ngIf="isLoading" class="loading-state">
-      <mat-spinner diameter="40"></mat-spinner>
-      <p>Loading email...</p>
-    </div>
+    @if (isLoading) {
+      <div class="loading-state">
+        <mat-spinner diameter="40"></mat-spinner>
+        <p>Loading email...</p>
+      </div>
+    }
 
     <!-- Error state -->
-    <div *ngIf="error && !isLoading" class="error-state">
-      <mat-card class="error-card">
-        <mat-card-content>
-          <mat-icon class="error-icon">error_outline</mat-icon>
-          <p>{{ error }}</p>
-          <button mat-raised-button color="primary" (click)="goBack()">
-            Go Back
-          </button>
-        </mat-card-content>
-      </mat-card>
-    </div>
+    @if (error && !isLoading) {
+      <div class="error-state">
+        <mat-card class="error-card">
+          <mat-card-content>
+            <mat-icon class="error-icon">error_outline</mat-icon>
+            <p>{{ error }}</p>
+            <button mat-raised-button color="primary" (click)="goBack()">
+              Go Back
+            </button>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    }
 
     <!-- Email content -->
-    <div *ngIf="email && !isLoading && !error" class="email-content">
-      <mat-card class="email-card">
-        <mat-card-header>
-          <div class="header-row">
-            <div class="sender-info">
-              <strong>From:</strong> {{ email.from }}
+    @if (email && !isLoading && !error) {
+      <div class="email-content">
+        <mat-card class="email-card">
+          <mat-card-header>
+            <div class="header-row">
+              <div class="sender-info">
+                <strong>From:</strong> {{ email.from }}
+              </div>
+              <div class="date-info">
+                {{ email.internalDate | date : 'short' }}
+              </div>
             </div>
-            <div class="date-info">
-              {{ email.internalDate | date : 'short' }}
+            <div class="to-info">
+              <strong>To:</strong> {{ email.to }}
             </div>
-          </div>
-          <div class="to-info">
-            <strong>To:</strong> {{ email.to }}
-          </div>
-        </mat-card-header>
-
-        <mat-card-content>
-          <div class="subject">
-            <h2>{{ email.subject }}</h2>
-          </div>
-
-          <mat-divider class="divider"></mat-divider>
-
-          <div class="body">
-            <!-- Display HTML version if available, otherwise plain text -->
-            <div *ngIf="email.bodyHtml" [innerHTML]="sanitizeHtml(email.bodyHtml)"></div>
-            <p *ngIf="!email.bodyHtml && email.bodyPlain" [innerHTML]="formatPlainText(email.bodyPlain)"></p>
-            <p *ngIf="!email.bodyHtml && !email.bodyPlain" class="no-body">No email body available</p>
-          </div>
-        </mat-card-content>
-      </mat-card>
-
-      <!-- Draft generation section -->
-      <mat-card class="draft-generation-card">
-        <mat-card-header>
-          <mat-card-title>Generate Draft Reply</mat-card-title>
-        </mat-card-header>
-
-        <mat-card-content>
-          <div class="tone-selector">
-            <mat-form-field appearance="fill">
-              <mat-label>Select Tone</mat-label>
-              <mat-select
-                [(ngModel)]="selectedTone"
+          </mat-card-header>
+          <mat-card-content>
+            <div class="subject">
+              <h2>{{ email.subject }}</h2>
+            </div>
+            <mat-divider class="divider"></mat-divider>
+            <div class="body">
+              <!-- Display HTML version if available, otherwise plain text -->
+              @if (email.bodyHtml) {
+                <div [innerHTML]="sanitizeHtml(email.bodyHtml)"></div>
+              }
+              @if (!email.bodyHtml && email.bodyPlain) {
+                <p [innerHTML]="formatPlainText(email.bodyPlain)"></p>
+              }
+              @if (!email.bodyHtml && !email.bodyPlain) {
+                <p class="no-body">No email body available</p>
+              }
+            </div>
+          </mat-card-content>
+        </mat-card>
+        <!-- Draft generation section -->
+        <mat-card class="draft-generation-card">
+          <mat-card-header>
+            <mat-card-title>Generate Draft Reply</mat-card-title>
+          </mat-card-header>
+          <mat-card-content>
+            <div class="tone-selector">
+              <mat-form-field appearance="fill">
+                <mat-label>Select Tone</mat-label>
+                <mat-select
+                  [(ngModel)]="selectedTone"
+                  [disabled]="isGenerating"
+                  >
+                  @for (tone of toneOptions; track tone) {
+                    <mat-option
+                      [value]="tone"
+                      >
+                      {{ tone | titlecase }}
+                    </mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
+            </div>
+            <div class="custom-context">
+              <mat-form-field appearance="fill" class="full-width">
+                <mat-label>Additional Context (Optional)</mat-label>
+                <textarea
+                  matInput
+                  [(ngModel)]="customContext"
+                  [disabled]="isGenerating"
+                  rows="4"
+                  placeholder="Add any additional context or instructions for the draft generation. Example: 'I will not be free on Saturday' or 'Please mention my availability'"
+                ></textarea>
+              </mat-form-field>
+            </div>
+            <div class="button-group">
+              <button
+                mat-raised-button
+                color="primary"
+                (click)="generateDraft()"
                 [disabled]="isGenerating"
-              >
-                <mat-option
-                  *ngFor="let tone of toneOptions"
-                  [value]="tone"
+                class="generate-btn"
                 >
-                  {{ tone | titlecase }}
-                </mat-option>
-              </mat-select>
-            </mat-form-field>
-          </div>
-
-          <div class="custom-context">
-            <mat-form-field appearance="fill" class="full-width">
-              <mat-label>Additional Context (Optional)</mat-label>
-              <textarea
-                matInput
-                [(ngModel)]="customContext"
-                [disabled]="isGenerating"
-                rows="4"
-                placeholder="Add any additional context or instructions for the draft generation. Example: 'I will not be free on Saturday' or 'Please mention my availability'"
-              ></textarea>
-            </mat-form-field>
-          </div>
-
-          <div class="button-group">
-            <button
-              mat-raised-button
-              color="primary"
-              (click)="generateDraft()"
-              [disabled]="isGenerating"
-              class="generate-btn"
-            >
-              <mat-icon *ngIf="!isGenerating">auto_awesome</mat-icon>
-              <mat-spinner
-                *ngIf="isGenerating"
-                diameter="20"
-                class="inline-spinner"
-              ></mat-spinner>
-              {{
+                @if (!isGenerating) {
+                  <mat-icon>auto_awesome</mat-icon>
+                }
+                @if (isGenerating) {
+                  <mat-spinner
+                    diameter="20"
+                    class="inline-spinner"
+                  ></mat-spinner>
+                }
+                {{
                 isGenerating ? 'Generating Draft...' : 'Generate Draft with AI'
-              }}
-            </button>
-
-            <button
-              mat-stroked-button
-              (click)="goBack()"
-              [disabled]="isGenerating"
-            >
-              Cancel
-            </button>
-          </div>
-        </mat-card-content>
-      </mat-card>
-    </div>
+                }}
+              </button>
+              <button
+                mat-stroked-button
+                (click)="goBack()"
+                [disabled]="isGenerating"
+                >
+                Cancel
+              </button>
+            </div>
+          </mat-card-content>
+        </mat-card>
+      </div>
+    }
   </div>
 </div>

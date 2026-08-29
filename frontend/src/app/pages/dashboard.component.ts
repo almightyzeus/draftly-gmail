@@ -1,5 +1,5 @@
 import { Component, OnInit } from '@angular/core';
-import { CommonModule } from '@angular/common';
+
 import { RouterModule, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -26,10 +26,8 @@ interface Email {
 }
 
 @Component({
-  selector: 'app-dashboard',
-  standalone: true,
-  imports: [
-    CommonModule,
+    selector: 'app-dashboard',
+    imports: [
     RouterModule,
     MatButtonModule,
     MatCardModule,
@@ -38,10 +36,10 @@ interface Email {
     MatMenuModule,
     MatTableModule,
     MatProgressSpinnerModule,
-    MatDividerModule,
-  ],
-  templateUrl: './dashboard.component.html',
-  styleUrls: ['./dashboard.component.css'],
+    MatDividerModule
+],
+    templateUrl: './dashboard.component.html',
+    styleUrls: ['./dashboard.component.css']
 })
 export class DashboardComponent implements OnInit {
   currentUser: User | null = null;

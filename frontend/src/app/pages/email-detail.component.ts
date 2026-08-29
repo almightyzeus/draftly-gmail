@@ -30,24 +30,23 @@ interface Email {
 }
 
 @Component({
-  selector: 'app-email-detail',
-  standalone: true,
-  imports: [
-    CommonModule,
-    RouterModule,
-    FormsModule,
-    MatButtonModule,
-    MatCardModule,
-    MatToolbarModule,
-    MatIconModule,
-    MatSelectModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatProgressSpinnerModule,
-    MatDividerModule,
-  ],
-  templateUrl: './email-detail.component.html',
-  styleUrls: ['./email-detail.component.css'],
+    selector: 'app-email-detail',
+    imports: [
+        CommonModule,
+        RouterModule,
+        FormsModule,
+        MatButtonModule,
+        MatCardModule,
+        MatToolbarModule,
+        MatIconModule,
+        MatSelectModule,
+        MatFormFieldModule,
+        MatInputModule,
+        MatProgressSpinnerModule,
+        MatDividerModule,
+    ],
+    templateUrl: './email-detail.component.html',
+    styleUrls: ['./email-detail.component.css']
 })
 export class EmailDetailComponent implements OnInit {
   email: Email | null = null;

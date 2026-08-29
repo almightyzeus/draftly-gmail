@@ -25,24 +25,23 @@ interface Draft {
 }
 
 @Component({
-  selector: 'app-draft-detail',
-  standalone: true,
-  imports: [
-    CommonModule,
-    RouterModule,
-    FormsModule,
-    MatButtonModule,
-    MatCardModule,
-    MatToolbarModule,
-    MatIconModule,
-    MatFormFieldModule,
-    MatInputModule,
-    MatProgressSpinnerModule,
-    MatDividerModule,
-    MatDialogModule,
-  ],
-  templateUrl: './draft-detail.component.html',
-  styleUrls: ['./draft-detail.component.css'],
+    selector: 'app-draft-detail',
+    imports: [
+        CommonModule,
+        RouterModule,
+        FormsModule,
+        MatButtonModule,
+        MatCardModule,
+        MatToolbarModule,
+        MatIconModule,
+        MatFormFieldModule,
+        MatInputModule,
+        MatProgressSpinnerModule,
+        MatDividerModule,
+        MatDialogModule,
+    ],
+    templateUrl: './draft-detail.component.html',
+    styleUrls: ['./draft-detail.component.css']
 })
 export class DraftDetailComponent implements OnInit {
   draft: Draft | null = null;
