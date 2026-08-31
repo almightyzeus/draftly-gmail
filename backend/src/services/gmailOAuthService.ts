@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import { Types } from 'mongoose';
 import jwt, { JwtPayload } from 'jsonwebtoken';
-import { oauth2Client } from './googleClient.js';
+import { createOAuth2Client, oauth2Client } from './googleClient.js';
 import {GmailAccount} from '../models/GmailAccount.js';
 import { User } from '../models/User.js';
 import { CryptoService } from './cryptoService.js';
@@ -14,6 +14,58 @@ interface OAuthStatePayload extends JwtPayload {
 }
 
 export class GmailOAuthService {
+  /**
+   * Persist refreshed tokens to the database
+   * Called after Google OAuth2 client auto-refreshes an access token
+   */
+  private static async persistRefreshedTokens(
+    userId: string,
+    gmailEmail: string,
+    accessToken: string,
+    refreshToken: string | undefined,
+    expiryDate: number | null | undefined
+  ): Promise<void> {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      const account = await GmailAccount.findOne({ userId: userObjectId, gmailEmail });
+
+      if (!account) {
+        logger.warn(`Cannot persist refreshed tokens: GmailAccount not found for user ${userId}, email ${gmailEmail}`);
+        return;
+      }
+
+      // Only update if values have changed
+      const accessTokenEnc = CryptoService.encryptToken(accessToken);
+      const updates: any = {
+        accessTokenEnc,
+      };
+
+      // Only update refresh token if Google provided a new one
+      if (refreshToken) {
+        updates.refreshTokenEnc = CryptoService.encryptToken(refreshToken);
+      }
+
+      // Only update expiry if it's provided
+      if (expiryDate) {
+        updates.tokenExpiry = new Date(expiryDate);
+      }
+
+      await GmailAccount.findOneAndUpdate(
+        { userId: userObjectId, gmailEmail },
+        updates,
+        { new: true }
+      );
+
+      logger.info(`Refreshed tokens persisted for user ${userId}, email ${gmailEmail}`);
+    } catch (error) {
+      // Log error but don't throw - token refresh succeeded, only persistence failed
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        `Failed to persist refreshed tokens for user ${userId}`
+      );
+    }
+  }
+
   /**
    * Generate a signed, short-lived OAuth state token
    * The state token contains the user ID and expires in 10 minutes
@@ -136,6 +188,10 @@ export class GmailOAuthService {
 
   /**
    * Get and refresh tokens for user
+   * Sets up a token refresh listener that persists refreshed credentials after Google's API call.
+   * Note: If the returned tokens are used by the caller to create a different OAuth2 client,
+   * the persistence will not be triggered. For Gmail operations, use gmailService.getGmailClient()
+   * which properly sets up the listener before making API calls.
    */
   static async getValidTokens(userId: string): Promise<{ access_token: string; refresh_token: string }> {
     const userObjectId = new Types.ObjectId(userId);
@@ -148,29 +204,93 @@ export class GmailOAuthService {
     const accessToken = CryptoService.decryptToken(account.accessTokenEnc);
     const refreshToken = CryptoService.decryptToken(account.refreshTokenEnc);
 
-    // Set credentials for potential refresh
-    oauth2Client.setCredentials({
+    // Create a fresh OAuth2 client for this user to avoid credential mixing
+    const userClient = createOAuth2Client();
+    
+    // Set up listener for token refresh events (fired AFTER Google's API call)
+    // This listener will only fire if the caller makes API calls using this same OAuth2 client
+    userClient.on('tokens', async (tokens: any) => {
+      try {
+        await this.persistRefreshedTokens(
+          userId,
+          account.gmailEmail,
+          tokens.access_token,
+          tokens.refresh_token,
+          tokens.expiry_date
+        );
+      } catch (error) {
+        // Log but don't throw - we don't want to break the caller's operation
+        logger.error(
+          error instanceof Error ? error : new Error(String(error)),
+          `Failed to persist refreshed tokens in token event listener for user ${userId}`
+        );
+      }
+    });
+    
+    userClient.setCredentials({
       access_token: accessToken,
       refresh_token: refreshToken,
       expiry_date: account.tokenExpiry.getTime(),
     });
 
-    // Google client auto-refreshes if needed
-    return { access_token: accessToken, refresh_token: refreshToken };
+    // Return the tokens from the client (these may have been refreshed by the listener)
+    return { 
+      access_token: userClient.credentials.access_token || accessToken, 
+      refresh_token: userClient.credentials.refresh_token || refreshToken 
+    };
   }
 
   /**
    * Revoke Gmail account access
+   * Calls Google's token revocation endpoint, then marks the account as revoked locally
+   * Throws if Google revocation fails with a transient error
    */
   static async revoke(userId: string): Promise<void> {
     const userObjectId = new Types.ObjectId(userId);
     const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
 
-    if (account) {
+    if (!account) {
+      // No active account to revoke
+      logger.info(`No active Gmail account found for user ${userId} to revoke`);
+      return;
+    }
+
+    try {
+      // Decrypt the refresh token
+      const refreshToken = CryptoService.decryptToken(account.refreshTokenEnc);
+
+      // Create a fresh OAuth2 client for this revocation
+      const userClient = createOAuth2Client();
+      userClient.setCredentials({
+        refresh_token: refreshToken,
+      });
+
+      // Call Google's revoke endpoint with the refresh token
+      // This revokes all access and refresh tokens for this application
+      try {
+        await userClient.revokeToken(refreshToken);
+        logger.info(`Successfully revoked refresh token for user ${userId}`);
+      } catch (revokeError: any) {
+        // Check if the error is because the token is already invalid/revoked
+        // Google returns 400 with error_description containing "invalid_grant" for already-revoked tokens
+        const isAlreadyRevoked = 
+          revokeError.status === 400 || 
+          revokeError.message?.includes('invalid_grant') ||
+          revokeError.message?.includes('Token has been revoked');
+        
+        if (isAlreadyRevoked) {
+          logger.info(`Token already revoked for user ${userId}, proceeding with cleanup`);
+        } else {
+          // Unexpected error - propagate it
+          throw revokeError;
+        }
+      }
+
+      // Mark account as revoked in database
       account.revokedAt = new Date();
       await account.save();
 
-      // Update User model - set googleConnected to false
+      // Update User model - set googleConnected to false and clear gmailEmail
       await User.findByIdAndUpdate(
         userObjectId,
         {
@@ -181,6 +301,13 @@ export class GmailOAuthService {
       );
 
       logger.info(`Gmail account revoked for user ${userId}`);
+    } catch (error) {
+      // Don't silently fail - propagate errors so user knows revocation didn't complete
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        `Failed to revoke Gmail account for user ${userId}`
+      );
+      throw error;
     }
   }
 }

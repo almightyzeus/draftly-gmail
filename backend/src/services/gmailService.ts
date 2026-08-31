@@ -1,6 +1,6 @@
 import { google } from 'googleapis';
 import { Types } from 'mongoose';
-import { oauth2Client } from './googleClient.js';
+import { createOAuth2Client } from './googleClient.js';
 import { GmailAccount } from '../models/GmailAccount.js';
 import { EmailMessage } from '../models/EmailMessage.js';
 import { CryptoService } from './cryptoService.js';
@@ -10,6 +10,58 @@ import { logger } from '../utils/logger.js';
  * GmailService - Handles Gmail email fetching and sending
  */
 export class GmailService {
+  /**
+   * Persist refreshed tokens to the database
+   * Called after Google OAuth2 client auto-refreshes an access token
+   */
+  private static async persistRefreshedTokens(
+    userId: string,
+    gmailEmail: string,
+    accessToken: string,
+    refreshToken: string | undefined,
+    expiryDate: number | null | undefined
+  ): Promise<void> {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      const account = await GmailAccount.findOne({ userId: userObjectId, gmailEmail });
+
+      if (!account) {
+        logger.warn(`Cannot persist refreshed tokens: GmailAccount not found for user ${userId}, email ${gmailEmail}`);
+        return;
+      }
+
+      // Only update if values have changed
+      const accessTokenEnc = CryptoService.encryptToken(accessToken);
+      const updates: any = {
+        accessTokenEnc,
+      };
+
+      // Only update refresh token if Google provided a new one
+      if (refreshToken) {
+        updates.refreshTokenEnc = CryptoService.encryptToken(refreshToken);
+      }
+
+      // Only update expiry if it's provided
+      if (expiryDate) {
+        updates.tokenExpiry = new Date(expiryDate);
+      }
+
+      await GmailAccount.findOneAndUpdate(
+        { userId: userObjectId, gmailEmail },
+        updates,
+        { new: true }
+      );
+
+      logger.debug(`Refreshed tokens persisted for user ${userId}, email ${gmailEmail}`);
+    } catch (error) {
+      // Log error but don't throw - token refresh succeeded, only persistence failed
+      logger.error(
+        error instanceof Error ? error : new Error(String(error)),
+        `Failed to persist refreshed tokens for user ${userId}`
+      );
+    }
+  }
+
   /**
    * Convert plain text to HTML by escaping special chars and converting newlines to <br>
    */
@@ -25,6 +77,7 @@ export class GmailService {
 
   /**
    * Get Gmail client with user's credentials
+   * Sets up a token refresh listener that persists refreshed credentials after Google's API call
    */
   private static async getGmailClient(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
@@ -36,13 +89,38 @@ export class GmailService {
     const accessToken = CryptoService.decryptToken(account.accessTokenEnc);
     const refreshToken = CryptoService.decryptToken(account.refreshTokenEnc);
 
-    oauth2Client.setCredentials({
+    // Create a fresh OAuth2 client for this user to avoid credential mixing
+    const userClient = createOAuth2Client();
+    
+    // Set up listener for token refresh events (fired AFTER Google's API call)
+    userClient.on('tokens', async (tokens: any) => {
+      try {
+        // tokens.access_token: new access token
+        // tokens.refresh_token: new refresh token (if provided by Google)
+        // tokens.expiry_date: new expiry date
+        await this.persistRefreshedTokens(
+          userId,
+          account.gmailEmail,
+          tokens.access_token,
+          tokens.refresh_token, // undefined if Google didn't provide a new one
+          tokens.expiry_date
+        );
+      } catch (error) {
+        // Log but don't throw - we don't want to break the API call
+        logger.error(
+          error instanceof Error ? error : new Error(String(error)),
+          `Failed to persist refreshed tokens in token event listener for user ${userId}`
+        );
+      }
+    });
+    
+    userClient.setCredentials({
       access_token: accessToken,
       refresh_token: refreshToken,
       expiry_date: account.tokenExpiry.getTime(),
     });
 
-    return google.gmail({ version: 'v1', auth: oauth2Client });
+    return google.gmail({ version: 'v1', auth: userClient });
   }
 
   /**
