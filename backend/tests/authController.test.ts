@@ -1,6 +1,6 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { Response } from 'express';
-import { register, login, me } from '../src/controllers/authController';
+import { register, login, refresh, me } from '../src/controllers/authController';
 import { AuthService } from '../src/services/authService';
 import { ConflictError, UnauthorizedError, AppError } from '../src/utils/errors';
 
@@ -329,6 +329,36 @@ describe('AuthController', () => {
       expect(mockRes.json).toHaveBeenCalledWith({
         error: 'Internal server error',
       });
+    });
+  });
+
+  describe('refresh', () => {
+    it('returns a rotated token pair from the request body', async () => {
+      mockReq.body = { refreshToken: 'refresh-token' };
+      (AuthService.refreshTokens as unknown as Mock).mockResolvedValue({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+      });
+
+      await refresh(mockReq, mockRes as Response);
+
+      expect(AuthService.refreshTokens).toHaveBeenCalledWith('refresh-token');
+      expect(mockRes.json).toHaveBeenCalledWith({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+      });
+    });
+
+    it('uses the refresh-token cookie when no body token is supplied', async () => {
+      mockReq.cookies = { refreshToken: 'cookie-refresh-token' };
+      (AuthService.refreshTokens as unknown as Mock).mockResolvedValue({
+        accessToken: 'new-access-token',
+        refreshToken: 'new-refresh-token',
+      });
+
+      await refresh(mockReq, mockRes as Response);
+
+      expect(AuthService.refreshTokens).toHaveBeenCalledWith('cookie-refresh-token');
     });
   });
 });

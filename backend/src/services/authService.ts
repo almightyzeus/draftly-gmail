@@ -47,6 +47,36 @@ export class AuthService {
   }
 
   /**
+   * Exchange a valid refresh token for a rotated token pair.
+   * Refresh tokens remain stateless for this local MVP, but we still verify that
+   * their user exists before issuing new credentials.
+   */
+  static async refreshTokens(refreshToken: string): Promise<TokenPair> {
+    if (!refreshToken) {
+      throw new UnauthorizedError('Refresh token is required');
+    }
+
+    try {
+      const decoded = jwt.verify(refreshToken, env.jwt.refreshSecret, {
+        algorithms: ['HS256'],
+      }) as { userId: string; email: string };
+
+      const user = await User.findById(decoded.userId);
+      if (!user) {
+        throw new UnauthorizedError('User not found');
+      }
+
+      return this.generateTokens(user._id.toString(), user.email);
+    } catch (error) {
+      if (error instanceof UnauthorizedError) {
+        throw error;
+      }
+      logger.info('Invalid or expired refresh token presented');
+      throw new UnauthorizedError('Invalid or expired refresh token');
+    }
+  }
+
+  /**
    * Register a new user
    */
   static async register(
@@ -209,4 +239,3 @@ export class AuthService {
     }
   }
 }
-

@@ -44,6 +44,20 @@ export const login = async (req: any, res: Response) => {
 };
 
 /**
+ * Exchange a refresh token for a new access/refresh token pair.
+ * The cookie fallback supports the full-page Gmail OAuth redirect flow.
+ */
+export const refresh = async (req: any, res: Response) => {
+  try {
+    const refreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
+    const tokens = await AuthService.refreshTokens(refreshToken);
+    res.json(tokens);
+  } catch (error) {
+    handleError(error, res);
+  }
+};
+
+/**
  * Get authenticated user info
  */
 export const me = async (req: AuthRequest, res: Response) => {
@@ -77,5 +91,4 @@ function handleError(error: any, res: Response): void {
     res.status(500).json({ error: 'Internal server error' });
   }
 }
-
 

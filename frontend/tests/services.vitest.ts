@@ -61,6 +61,21 @@ describe('frontend services', () => {
     expect(http.get).toHaveBeenCalledWith('api/auth/me');
   });
 
+  it('AuthService refreshes and rotates stored tokens', () => {
+    localStorage.setItem('refreshToken', 'stored-refresh-token');
+    const http = {
+      post: vi.fn().mockReturnValue(of({ accessToken: 'new-access', refreshToken: 'new-refresh' })),
+      get: vi.fn(),
+    };
+    const service = new AuthService(http as any);
+
+    service.refreshAccessToken().subscribe();
+
+    expect(http.post).toHaveBeenCalledWith('api/auth/refresh', { refreshToken: 'stored-refresh-token' });
+    expect(localStorage.getItem('accessToken')).toBe('new-access');
+    expect(localStorage.getItem('refreshToken')).toBe('new-refresh');
+  });
+
   it('AuthService redirects to Gmail OAuth endpoint', () => {
     const service = new AuthService({ post: vi.fn(), get: vi.fn() } as any);
     service.connectGmail();
@@ -118,26 +133,32 @@ describe('frontend services', () => {
     expect(http.post).toHaveBeenCalledWith('api/drafts/draft-1/send', { idempotencyKey: 'key' });
   });
 
-  it('AuthInterceptor adds bearer token and handles 401 responses', () => {
+  it('AuthInterceptor adds a bearer token, refreshes once, and retries a 401 request', () => {
     const auth = {
-      getAccessToken: vi.fn().mockReturnValue('token'),
+      getAccessToken: vi.fn().mockReturnValueOnce('expired-token').mockReturnValue('refreshed-token'),
+      refreshAccessToken: vi.fn().mockReturnValue(of({ accessToken: 'refreshed-token', refreshToken: 'refresh-token' })),
       logout: vi.fn(),
     };
     const router = { navigate: vi.fn() };
     const interceptor = new AuthInterceptor(auth as any, router as any);
     const request = new HttpRequest('GET', '/api/drafts');
     const next = {
-      handle: vi.fn((req: HttpRequest<any>) => {
-        expect(req.headers.get('Authorization')).toBe('Bearer token');
+      handle: vi.fn()
+        .mockImplementationOnce((req: HttpRequest<any>) => {
+        expect(req.headers.get('Authorization')).toBe('Bearer expired-token');
         expect(req.withCredentials).toBe(true);
         return throwError(() => new HttpErrorResponse({ status: 401 }));
-      }),
+        })
+        .mockImplementationOnce((req: HttpRequest<any>) => {
+          expect(req.headers.get('Authorization')).toBe('Bearer refreshed-token');
+          return of({ type: 4 });
+        }),
     };
 
     interceptor.intercept(request, next as any).subscribe({
-      error: () => {
-        expect(auth.logout).toHaveBeenCalled();
-        expect(router.navigate).toHaveBeenCalledWith(['/login']);
+      complete: () => {
+        expect(auth.refreshAccessToken).toHaveBeenCalledTimes(1);
+        expect(auth.logout).not.toHaveBeenCalled();
       },
     });
   });

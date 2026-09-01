@@ -49,6 +49,22 @@ describe('AuthService', () => {
     expect(tokens.refreshToken.split('.')).toHaveLength(3);
   });
 
+  it('rotates a valid refresh token and rejects invalid or orphaned tokens', async () => {
+    const user = buildUser();
+    mocks.userFindById.mockResolvedValue(user);
+    const { refreshToken } = AuthService.generateTokens(user._id.toString(), user.email);
+
+    const tokens = await AuthService.refreshTokens(refreshToken);
+    expect(tokens.accessToken.split('.')).toHaveLength(3);
+    expect(tokens.refreshToken.split('.')).toHaveLength(3);
+    expect(mocks.userFindById).toHaveBeenCalledWith(user._id.toString());
+
+    await expect(AuthService.refreshTokens('invalid-token')).rejects.toThrow(UnauthorizedError);
+
+    mocks.userFindById.mockResolvedValue(null);
+    await expect(AuthService.refreshTokens(refreshToken)).rejects.toThrow('User not found');
+  });
+
   it('registers a new user and default preferences', async () => {
     const instance = buildUser({ email: 'new@example.com' });
     (User as unknown as Mock).mockImplementation(() => instance);

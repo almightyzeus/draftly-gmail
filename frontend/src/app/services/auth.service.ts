@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, BehaviorSubject, tap } from 'rxjs';
+import { Observable, BehaviorSubject, throwError, tap, finalize, shareReplay } from 'rxjs';
 
 export interface User {
   id: string;
@@ -16,6 +16,11 @@ export interface AuthResponse {
   refreshToken: string;
 }
 
+export interface TokenPair {
+  accessToken: string;
+  refreshToken: string;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -27,6 +32,7 @@ export class AuthService {
 
   private accessTokenSubject = new BehaviorSubject<string | null>(null);
   public accessToken$ = this.accessTokenSubject.asObservable();
+  private refreshRequest$: Observable<TokenPair> | null = null;
 
   constructor(private http: HttpClient) {
     this.loadTokenFromStorage();
@@ -86,6 +92,33 @@ export class AuthService {
    */
   getMe(): Observable<{ user: User }> {
     return this.http.get<{ user: User }>(`${this.apiUrl}/me`);
+  }
+
+  /**
+   * Refresh once for a group of concurrent failed requests, then let each
+   * request retry with the rotated access token.
+   */
+  refreshAccessToken(): Observable<TokenPair> {
+    if (this.refreshRequest$) {
+      return this.refreshRequest$;
+    }
+
+    const refreshToken = localStorage.getItem('refreshToken');
+    if (!refreshToken) {
+      return throwError(() => new Error('No refresh token available'));
+    }
+
+    this.refreshRequest$ = this.http
+      .post<TokenPair>(`${this.apiUrl}/refresh`, { refreshToken })
+      .pipe(
+        tap((tokens) => this.storeTokens(tokens.accessToken, tokens.refreshToken)),
+        finalize(() => {
+          this.refreshRequest$ = null;
+        }),
+        shareReplay({ bufferSize: 1, refCount: false })
+      );
+
+    return this.refreshRequest$;
   }
 
   /**

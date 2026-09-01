@@ -1,7 +1,7 @@
 import { Injectable } from '@angular/core';
 import { HttpInterceptor, HttpRequest, HttpHandler, HttpEvent, HttpErrorResponse } from '@angular/common/http';
 import { Observable, throwError } from 'rxjs';
-import { catchError } from 'rxjs/operators';
+import { catchError, switchMap } from 'rxjs/operators';
 import { AuthService } from './auth.service';
 import { Router } from '@angular/router';
 
@@ -13,9 +13,13 @@ export class AuthInterceptor implements HttpInterceptor {
     req: HttpRequest<any>,
     next: HttpHandler
   ): Observable<HttpEvent<any>> {
-    // Add Authorization header if token exists
+    const isAuthRequest = req.url.includes('/auth/register') ||
+      req.url.includes('/auth/login') ||
+      req.url.includes('/auth/refresh');
+
+    // Add Authorization header if token exists.
     const token = this.authService.getAccessToken();
-    if (token && !req.url.includes('/auth/register') && !req.url.includes('/auth/login')) {
+    if (token && !isAuthRequest) {
       req = req.clone({
         setHeaders: {
           Authorization: `Bearer ${token}`,
@@ -30,10 +34,23 @@ export class AuthInterceptor implements HttpInterceptor {
 
     return next.handle(req).pipe(
       catchError((error: HttpErrorResponse) => {
-        // If 401, token is invalid/expired
-        if (error.status === 401) {
-          this.authService.logout();
-          this.router.navigate(['/login']);
+        // A non-auth request gets one refresh-and-retry attempt. Refresh
+        // failures end the session, while a retried 401 is surfaced normally.
+        if (error.status === 401 && !isAuthRequest) {
+          return this.authService.refreshAccessToken().pipe(
+            switchMap(() => {
+              const refreshedToken = this.authService.getAccessToken();
+              const retry = refreshedToken
+                ? req.clone({ setHeaders: { Authorization: `Bearer ${refreshedToken}` } })
+                : req;
+              return next.handle(retry);
+            }),
+            catchError((refreshError: HttpErrorResponse) => {
+              this.authService.logout();
+              this.router.navigate(['/login'], { queryParams: { returnUrl: this.router.url } });
+              return throwError(() => refreshError);
+            })
+          );
         }
         return throwError(() => error);
       })

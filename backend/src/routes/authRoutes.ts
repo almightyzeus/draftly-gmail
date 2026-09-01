@@ -1,5 +1,5 @@
 import { Router } from 'express';
-import { register, login, me } from '../controllers/authController.js';
+import { register, login, refresh, me } from '../controllers/authController.js';
 import { authenticateJWT } from '../middleware/auth.js';
 
 const router = Router();
@@ -15,6 +15,12 @@ router.post('/register', register);
  * Login user and return JWT tokens
  */
 router.post('/login', login);
+
+/**
+ * POST /api/auth/refresh
+ * Rotate a refresh token into a new access/refresh token pair.
+ */
+router.post('/refresh', refresh);
 
 /**
  * GET /api/auth/me
