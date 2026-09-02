@@ -25,6 +25,10 @@ vi.mock('../src/services/gmailService.js', async () => {
       createDraft: vi.fn().mockResolvedValue('gmail-draft-1'),
       updateDraft: vi.fn().mockResolvedValue(undefined),
       sendDraft: vi.fn().mockResolvedValue('sent-message-1'),
+      getReplyMetadata: vi.fn().mockResolvedValue({
+        inReplyTo: '<message-1@example.com>',
+        references: '<message-1@example.com>',
+      }),
     },
   };
 });

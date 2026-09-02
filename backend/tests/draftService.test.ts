@@ -92,7 +92,7 @@ describe('DraftService', () => {
 
     expect(result.status).toBe('PENDING');
     expect(result.draftBody).toBe('Generated reply');
-    expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, 'msg-1', 'formal', undefined);
+    expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['msg-1'], 'formal', undefined);
     expect(ActivityLogService.logActivity).toHaveBeenCalledWith(userId, 'DRAFT_GENERATED', 'Draft', 'info', draftId, expect.any(Object));
   });
 
@@ -115,6 +115,13 @@ describe('DraftService', () => {
     const result = await DraftService.generateDraft(userId, undefined, 'friendly', 'thread-1');
     expect(result.isConsolidated).toBe(true);
     expect(result.gmailMessageId).toEqual(['msg-1', 'msg-2']);
+    expect(result.replyToGmailMessageId).toBe('msg-1');
+    expect(OpenAIService.generateDraft).toHaveBeenCalledWith(
+      userId,
+      ['msg-1', 'msg-2'],
+      'friendly',
+      undefined
+    );
   });
 
   it('lists and gets drafts for a user', async () => {

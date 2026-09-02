@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach, vi } from 'vitest';
+import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 
 const mockState = {
   create: vi.fn().mockResolvedValue({
@@ -26,8 +26,18 @@ vi.mock('openai', () => {
 
 vi.mock('../src/utils/logger');
 
+vi.mock('../src/models/EmailMessage.js', () => ({
+  EmailMessage: { findOne: vi.fn(), find: vi.fn() },
+}));
+
+vi.mock('../src/models/UserPreference.js', () => ({
+  UserPreference: { findOne: vi.fn() },
+}));
+
 // Import after mocking
 import { OpenAIService } from '../src/services/openaiService.js';
+import { EmailMessage } from '../src/models/EmailMessage.js';
+import { UserPreference } from '../src/models/UserPreference.js';
 
 describe('OpenAIService', () => {
   beforeEach(() => {
@@ -174,6 +184,62 @@ describe('OpenAIService', () => {
           ''
         )
       ).rejects.toThrow('OpenAI API error');
+    });
+  });
+
+  describe('generateDraft', () => {
+    it('puts every selected unread message in the prompt while retaining thread context and preferences', async () => {
+      const newestEmail = {
+        gmailMessageId: 'msg-2',
+        threadId: 'thread-1',
+        from: 'newest@example.com',
+        subject: 'Second question',
+        bodyPlain: 'Can you also confirm the timeline?',
+      };
+      const earlierEmail = {
+        gmailMessageId: 'msg-1',
+        threadId: 'thread-1',
+        from: 'earlier@example.com',
+        subject: 'First question',
+        bodyPlain: 'Can you review the proposal?',
+      };
+      const outboundContext = {
+        gmailMessageId: 'sent-1',
+        threadId: 'thread-1',
+        from: 'user@example.com',
+        subject: 'Earlier reply',
+        bodyPlain: 'Thanks for reaching out.',
+      };
+
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(newestEmail);
+      (EmailMessage.find as unknown as Mock)
+        .mockReturnValueOnce({
+          sort: vi.fn().mockReturnThis(),
+          lean: vi.fn().mockResolvedValue([earlierEmail, newestEmail, outboundContext]),
+        })
+        .mockReturnValueOnce({
+          sort: vi.fn().mockReturnThis(),
+          limit: vi.fn().mockReturnThis(),
+          lean: vi.fn().mockResolvedValue([outboundContext]),
+        });
+      (UserPreference.findOne as unknown as Mock).mockResolvedValue({
+        signature: 'Regards, User',
+        learningEmailCount: 1,
+      });
+
+      await OpenAIService.generateDraft(
+        '507f191e810c19729de860ea',
+        ['msg-2', 'msg-1'],
+        'friendly',
+        'Please mention Friday.'
+      );
+
+      const callArgs = getMockCreate().mock.calls[0][0];
+      expect(callArgs.messages[0].content).toContain('Regards, User');
+      expect(callArgs.messages[1].content).toContain('Can you also confirm the timeline?');
+      expect(callArgs.messages[1].content).toContain('Can you review the proposal?');
+      expect(callArgs.messages[1].content).toContain('Thanks for reaching out.');
+      expect(callArgs.messages[1].content).toContain('Please mention Friday.');
     });
   });
 

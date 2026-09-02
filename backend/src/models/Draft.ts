@@ -13,6 +13,8 @@ export interface IAuditTrailEntry {
 export interface IDraft extends Document {
   userId: Types.ObjectId;
   gmailMessageId: string | string[];
+  /** The message whose RFC headers are used when this reply is sent. */
+  replyToGmailMessageId?: string;
   threadId: string;
   tone: ToneType;
   promptVersion: string;
@@ -60,6 +62,10 @@ const draftSchema = new Schema<IDraft>(
     gmailMessageId: {
       type: Schema.Types.Mixed,
       required: true,
+    },
+    replyToGmailMessageId: {
+      type: String,
+      default: null,
     },
     threadId: {
       type: String,

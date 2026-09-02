@@ -108,10 +108,14 @@ export class DraftService {
         return existingDraft;
       }
 
-      // Generate draft using OpenAI
+      // fetchThreadEmails is newest-first, so the first selected message is the
+      // newest inbound message and the RFC reply target for this draft.
+      const replyToGmailMessageId = gmailMessageIds[0];
+
+      // Generate one reply that explicitly receives every relevant message.
       const draftBody = await OpenAIService.generateDraft(
         userId,
-        gmailMessageIds[0],
+        gmailMessageIds,
         tone,
         customContext
       );
@@ -120,6 +124,7 @@ export class DraftService {
       const draft = new Draft({
         userId: userObjectId,
         gmailMessageId: isConsolidated ? gmailMessageIds : gmailMessageIds[0],
+        replyToGmailMessageId,
         threadId: targetThreadId,
         tone,
         promptVersion: this.PROMPT_VERSION,
@@ -258,9 +263,9 @@ export class DraftService {
         try {
           const originalEmail = await EmailMessage.findOne({
             userId: userObjectId,
-            gmailMessageId: Array.isArray(draft.gmailMessageId)
+            gmailMessageId: draft.replyToGmailMessageId || (Array.isArray(draft.gmailMessageId)
               ? draft.gmailMessageId[0]
-              : draft.gmailMessageId,
+              : draft.gmailMessageId),
           });
 
           if (originalEmail) {
@@ -326,9 +331,9 @@ export class DraftService {
       // Get original email to extract info for Gmail draft
       const originalEmail = await EmailMessage.findOne({
         userId: userObjectId,
-        gmailMessageId: Array.isArray(draft.gmailMessageId)
+        gmailMessageId: draft.replyToGmailMessageId || (Array.isArray(draft.gmailMessageId)
           ? draft.gmailMessageId[0]
-          : draft.gmailMessageId,
+          : draft.gmailMessageId),
       });
 
       if (!originalEmail) {
@@ -466,9 +471,9 @@ export class DraftService {
       // Get original email for creating outbound EmailMessage record
       const originalEmail = await EmailMessage.findOne({
         userId: userObjectId,
-        gmailMessageId: Array.isArray(draft.gmailMessageId)
+        gmailMessageId: draft.replyToGmailMessageId || (Array.isArray(draft.gmailMessageId)
           ? draft.gmailMessageId[0]
-          : draft.gmailMessageId,
+          : draft.gmailMessageId),
       });
 
       // Update draft status

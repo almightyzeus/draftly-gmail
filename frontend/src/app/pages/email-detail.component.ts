@@ -100,7 +100,7 @@ export class EmailDetailComponent implements OnInit {
     this.error = null;
 
     this.draftService
-      .generateDraft(this.email.gmailMessageId, this.selectedTone, this.customContext || undefined)
+      .generateThreadDraft(this.email.threadId, this.selectedTone, this.customContext || undefined)
       .subscribe(
         (draft: any) => {
           this.isGenerating = false;

@@ -114,6 +114,13 @@ describe('frontend services', () => {
       customContext: 'extra',
     });
 
+    service.generateThreadDraft('thread-1', 'concise', 'thread context').subscribe();
+    expect(http.post).toHaveBeenLastCalledWith('api/drafts/generate', {
+      threadId: 'thread-1',
+      tone: 'concise',
+      customContext: 'thread context',
+    });
+
     service.getDrafts('PENDING', 5).subscribe();
     expect(http.get).toHaveBeenCalledWith('api/drafts?status=PENDING&limit=5');
 

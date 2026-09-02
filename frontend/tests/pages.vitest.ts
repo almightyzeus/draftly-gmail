@@ -105,8 +105,8 @@ describe('frontend page classes', () => {
 
   it('EmailDetailComponent loads email, generates drafts, sanitizes, and navigates back', () => {
     const route = { params: of({ gmailMessageId: 'msg-1' }) };
-    const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', bodyPlain: 'Hi' })) };
-    const draft = { generateDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1' })) };
+    const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 'thread-1', bodyPlain: 'Hi' })) };
+    const draft = { generateThreadDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1' })) };
     const sanitizer = {
       sanitize: vi.fn().mockReturnValue('<p>safe</p>'),
       bypassSecurityTrustHtml: vi.fn((value) => value),
@@ -118,7 +118,7 @@ describe('frontend page classes', () => {
 
     component.customContext = 'context';
     component.generateDraft();
-    expect(draft.generateDraft).toHaveBeenCalledWith('msg-1', 'formal', 'context');
+    expect(draft.generateThreadDraft).toHaveBeenCalledWith('thread-1', 'formal', 'context');
     expect(router.navigate).toHaveBeenCalledWith(['/draft', 'draft-1']);
 
     expect(component.sanitizeHtml('<p>x</p>')).toBe('<p>safe</p>');

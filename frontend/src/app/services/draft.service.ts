@@ -21,6 +21,15 @@ export class DraftService {
     });
   }
 
+  /** Generate one reply that considers every relevant unread email in a thread. */
+  generateThreadDraft(threadId: string, tone: string = 'formal', customContext?: string): Observable<any> {
+    return this.http.post<any>(`${this.draftsApiUrl}/generate`, {
+      threadId,
+      tone,
+      ...(customContext && { customContext }),
+    });
+  }
+
   /**
    * Get draft detail
    */

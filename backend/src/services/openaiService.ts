@@ -80,17 +80,22 @@ export class OpenAIService {
    */
   static async generateDraft(
     userId: string,
-    gmailMessageId: string,
+    gmailMessageIds: string | string[],
     tone: string = 'formal',
     customContext?: string
   ): Promise<string> {
     try {
       const userObjectId = new Types.ObjectId(userId);
+      const relevantMessageIds = Array.isArray(gmailMessageIds)
+        ? gmailMessageIds
+        : [gmailMessageIds];
+      const replyToGmailMessageId = relevantMessageIds[0];
 
-      // Fetch original email
+      // The first selected message is the explicit reply target. For a thread,
+      // the caller orders selected unread inbound messages newest-first.
       const originalEmail = await EmailMessage.findOne({
         userId: userObjectId,
-        gmailMessageId,
+        gmailMessageId: replyToGmailMessageId,
       });
 
       if (!originalEmail) {
@@ -112,23 +117,38 @@ export class OpenAIService {
 
       const learningEmailsContext = await this.fetchLearningEmails(userId, learningEmailCount);
 
-      // Build thread context
+      // Build full chronological context plus a separate, explicit list of the
+      // messages the reply must address. This prevents a consolidated draft
+      // from silently being generated from only its first message.
       const threadContext = threadEmails
         .map((email: any) => `${email.from}: ${email.bodyPlain}`)
         .join('\n\n---\n\n');
 
+      const relevantEmails = relevantMessageIds
+        .map((messageId) => threadEmails.find((email: any) => email.gmailMessageId === messageId))
+        .filter(Boolean);
+      const relevantMessagesContext = relevantEmails
+        .map((email: any) => `From: ${email.from}\nSubject: ${email.subject}\n\n${email.bodyPlain}`)
+        .join('\n\n---\n\n');
+
       // Build user prompt with optional custom context
       let userPrompt = `
-Please draft a reply to this email thread:
+Please draft one reply to this email thread.
+
+The following message${relevantMessageIds.length === 1 ? '' : 's'} require${relevantMessageIds.length === 1 ? 's' : ''} a response. Address every question and action item across them:
+
+${relevantMessagesContext}
+
+Full thread context, in chronological order:
 
 ${threadContext}
 
-The most recent email from ${originalEmail.from} is:
+Use this most recent relevant email as the reply target:
 Subject: ${originalEmail.subject}
 Body: ${originalEmail.bodyPlain}
 ${learningEmailsContext}
 
-Generate a thoughtful, appropriate reply to the most recent email.`;
+Generate one thoughtful, appropriate reply that addresses all relevant messages.`;
 
       if (customContext) {
         userPrompt += `\n\nAdditional context from the user:\n${customContext}`;
@@ -157,7 +177,7 @@ Generate a thoughtful, appropriate reply to the most recent email.`;
         response.choices[0]?.message?.content || 'Failed to generate draft';
 
       logger.info(
-        { userId, gmailMessageId, tone },
+        { userId, gmailMessageIds: relevantMessageIds, tone },
         'Draft generated successfully'
       );
 
