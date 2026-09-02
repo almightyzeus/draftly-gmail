@@ -33,6 +33,7 @@ vi.mock('../src/services/gmailService.js', () => ({
     createDraft: vi.fn(),
     updateDraft: vi.fn(),
     sendDraft: vi.fn(),
+    getReplyMetadata: vi.fn(),
   },
 }));
 
@@ -76,6 +77,10 @@ describe('DraftService', () => {
     vi.clearAllMocks();
     (OpenAIService.generateDraft as unknown as Mock).mockResolvedValue('Generated reply');
     (ActivityLogService.logActivity as unknown as Mock).mockResolvedValue({});
+    (GmailService.getReplyMetadata as unknown as Mock).mockResolvedValue({
+      inReplyTo: '<rfc-message@example.com>',
+      references: '<older@example.com> <rfc-message@example.com>',
+    });
   });
 
   it('generates a draft from a stored email', async () => {
@@ -145,6 +150,15 @@ describe('DraftService', () => {
     const result = await DraftService.approveDraft(userId, draftId);
     expect(result.status).toBe('APPROVED');
     expect(result.gmailDraftId).toBe('gmail-draft-1');
+    expect(GmailService.createDraft).toHaveBeenCalledWith(
+      userId,
+      email.from,
+      `Re: ${email.subject}`,
+      draft.draftBody,
+      draft.threadId,
+      '<rfc-message@example.com>',
+      '<older@example.com> <rfc-message@example.com>'
+    );
 
     (Draft.findOne as unknown as Mock).mockResolvedValue(null);
     await expect(DraftService.approveDraft(userId, draftId)).rejects.toThrow();

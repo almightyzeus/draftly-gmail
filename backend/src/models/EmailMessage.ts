@@ -5,6 +5,10 @@ export type DirectionType = 'INBOUND' | 'OUTBOUND';
 export interface IEmailMessage extends Document {
   userId: Types.ObjectId;
   gmailMessageId: string;
+  /** RFC 5322 Message-ID header; distinct from Gmail's internal message ID. */
+  rfcMessageId?: string;
+  /** Existing RFC References chain, retained for correct reply threading. */
+  references?: string;
   threadId: string;
   from: string;
   to: string;
@@ -30,6 +34,14 @@ const emailMessageSchema = new Schema<IEmailMessage>(
     gmailMessageId: {
       type: String,
       required: true,
+    },
+    rfcMessageId: {
+      type: String,
+      default: null,
+    },
+    references: {
+      type: String,
+      default: null,
     },
     threadId: {
       type: String,

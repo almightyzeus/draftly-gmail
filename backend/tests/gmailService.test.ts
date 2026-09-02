@@ -90,6 +90,8 @@ describe('GmailService', () => {
                   { name: 'From', value: 'sender@example.com' },
                   { name: 'To', value: 'user@gmail.com' },
                   { name: 'Date', value: new Date().toUTCString() },
+                  { name: 'Message-ID', value: '<sender-message@example.com>' },
+                  { name: 'References', value: '<earlier-message@example.com>' },
                 ],
                 body: { data: Buffer.from('Hello').toString('base64') },
               },
@@ -113,7 +115,14 @@ describe('GmailService', () => {
 
     const emails = await GmailService.fetchEmails(userId, { unread: true, limit: 1 });
     expect(emails).toHaveLength(1);
-    expect(EmailMessage.findOneAndUpdate).toHaveBeenCalled();
+    expect(EmailMessage.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({
+        rfcMessageId: '<sender-message@example.com>',
+        references: '<earlier-message@example.com>',
+      }),
+      expect.any(Object)
+    );
   });
 
   it('gets stored email and thread emails', async () => {
@@ -151,7 +160,22 @@ describe('GmailService', () => {
     };
     mocks.gmail.mockReturnValue({ users: { drafts: draftApi } });
 
-    await expect(GmailService.createDraft(userId, 'to@example.com', 'Subject', 'Body', 'thread-1')).resolves.toBe('draft-1');
+    await expect(
+      GmailService.createDraft(
+        userId,
+        'to@example.com',
+        'Subject',
+        'Body',
+        'thread-1',
+        '<rfc-message@example.com>',
+        '<older@example.com> <rfc-message@example.com>'
+      )
+    ).resolves.toBe('draft-1');
+
+    const rawMessage = Buffer.from(draftApi.create.mock.calls[0][0].requestBody.message.raw, 'base64').toString('utf8');
+    expect(rawMessage).toContain('In-Reply-To: <rfc-message@example.com>');
+    expect(rawMessage).toContain('References: <older@example.com> <rfc-message@example.com>');
+    expect(rawMessage).not.toContain('In-Reply-To: draft-1');
     await expect(GmailService.updateDraft(userId, 'draft-1', 'Body 2', 'to@example.com', 'Subject', 'thread-1')).resolves.toBeUndefined();
     await expect(GmailService.sendDraft(userId, 'draft-1', 'thread-1')).resolves.toBe('sent-1');
     await expect(GmailService.deleteDraft(userId, 'draft-1')).resolves.toBeUndefined();
@@ -159,6 +183,52 @@ describe('GmailService', () => {
 
   it('documents that direct sendReply is not implemented in the MVP', async () => {
     await expect(GmailService.sendReply(userId, 'thread-1', 'Body')).rejects.toThrow('Not implemented yet');
+  });
+
+  it('uses stored RFC headers instead of Gmail internal IDs for reply metadata', async () => {
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue({
+      gmailMessageId: 'gmail-internal-id',
+      rfcMessageId: '<rfc-message@example.com>',
+      references: '<older@example.com>',
+    });
+
+    const metadata = await GmailService.getReplyMetadata(userId, 'gmail-internal-id');
+
+    expect(metadata).toEqual({
+      inReplyTo: '<rfc-message@example.com>',
+      references: '<older@example.com> <rfc-message@example.com>',
+    });
+    expect(metadata.references).not.toContain('gmail-internal-id');
+  });
+
+  it('backfills RFC reply metadata for a legacy cached email', async () => {
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue({ gmailMessageId: 'gmail-internal-id' });
+    mocks.gmail.mockReturnValue({
+      users: {
+        messages: {
+          get: vi.fn().mockResolvedValue({
+            data: {
+              payload: {
+                headers: [
+                  { name: 'Message-ID', value: '<rfc-message@example.com>' },
+                  { name: 'References', value: '<older@example.com>' },
+                ],
+              },
+            },
+          }),
+        },
+      },
+    });
+
+    await expect(GmailService.getReplyMetadata(userId, 'gmail-internal-id')).resolves.toEqual({
+      inReplyTo: '<rfc-message@example.com>',
+      references: '<older@example.com> <rfc-message@example.com>',
+    });
+    expect(EmailMessage.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ gmailMessageId: 'gmail-internal-id' }),
+      { rfcMessageId: '<rfc-message@example.com>', references: '<older@example.com>' },
+      { new: true }
+    );
   });
 
   describe('Token Refresh Persistence', () => {

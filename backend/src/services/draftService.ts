@@ -264,6 +264,10 @@ export class DraftService {
           });
 
           if (originalEmail) {
+            const replyMetadata = await GmailService.getReplyMetadata(
+              userId,
+              originalEmail.gmailMessageId
+            );
             await GmailService.updateDraft(
               userId,
               draft.gmailDraftId,
@@ -271,8 +275,8 @@ export class DraftService {
               originalEmail.from,
               `Re: ${originalEmail.subject}`,
               draft.threadId,
-              originalEmail.gmailMessageId,
-              originalEmail.gmailMessageId
+              replyMetadata.inReplyTo,
+              replyMetadata.references
             );
           }
         } catch (gmailError) {
@@ -331,14 +335,19 @@ export class DraftService {
         throw new Error('Original email not found');
       }
 
+      const replyMetadata = await GmailService.getReplyMetadata(
+        userId,
+        originalEmail.gmailMessageId
+      );
+
       const gmailDraftId = await GmailService.createDraft(
         userId,
         originalEmail.from,
         `Re: ${originalEmail.subject}`,
         draft.draftBody,
         draft.threadId,
-        originalEmail.gmailMessageId,
-        originalEmail.gmailMessageId
+        replyMetadata.inReplyTo,
+        replyMetadata.references
       );
 
       draft.status = 'APPROVED';

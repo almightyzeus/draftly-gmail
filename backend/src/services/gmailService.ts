@@ -10,6 +10,28 @@ import { logger } from '../utils/logger.js';
  * GmailService - Handles Gmail email fetching and sending
  */
 export class GmailService {
+  private static getHeader(headers: any[], name: string): string | undefined {
+    return headers.find((header: any) => header.name?.toLowerCase() === name.toLowerCase())?.value;
+  }
+
+  private static buildReplyHeaders(
+    rfcMessageId: string,
+    existingReferences?: string | null
+  ): { inReplyTo: string; references: string } {
+    const inReplyTo = rfcMessageId.trim();
+    const referenceIds = (existingReferences?.match(/<[^>]+>/g) ?? [])
+      .map((reference) => reference.trim());
+
+    if (!referenceIds.some((reference) => reference.toLowerCase() === inReplyTo.toLowerCase())) {
+      referenceIds.push(inReplyTo);
+    }
+
+    return {
+      inReplyTo,
+      references: referenceIds.join(' '),
+    };
+  }
+
   /**
    * Persist refreshed tokens to the database
    * Called after Google OAuth2 client auto-refreshes an access token
@@ -244,10 +266,12 @@ export class GmailService {
           const message = messageResponse.data;
           const headers = message.payload?.headers || [];
 
-          const subjectHeader = headers.find((h: any) => h.name === 'Subject');
-          const fromHeader = headers.find((h: any) => h.name === 'From');
-          const toHeader = headers.find((h: any) => h.name === 'To');
-          const dateHeader = headers.find((h: any) => h.name === 'Date');
+          const subjectHeader = this.getHeader(headers, 'Subject');
+          const fromHeader = this.getHeader(headers, 'From');
+          const toHeader = this.getHeader(headers, 'To');
+          const dateHeader = this.getHeader(headers, 'Date');
+          const rfcMessageId = this.getHeader(headers, 'Message-ID');
+          const references = this.getHeader(headers, 'References');
 
           const { bodyPlain, bodyHtml } = this.parseEmailBody(message.payload);
           const direction = this.getEmailDirection(message, gmailEmail);
@@ -262,15 +286,17 @@ export class GmailService {
             {
               userId: userObjectId,
               gmailMessageId: message.id,
+              rfcMessageId,
+              references,
               threadId: message.threadId || '',
-              subject: subjectHeader?.value || '(No Subject)',
-              from: fromHeader?.value || '',
-              to: toHeader?.value || '',
+              subject: subjectHeader || '(No Subject)',
+              from: fromHeader || '',
+              to: toHeader || '',
               snippet: message.snippet || '',
               bodyPlain,
               bodyHtml,
-              internalDate: dateHeader?.value
-                ? new Date(dateHeader.value)
+              internalDate: dateHeader
+                ? new Date(dateHeader)
                 : new Date(),
               direction,
               labels: message.labelIds || [],
@@ -344,6 +370,46 @@ export class GmailService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Resolve RFC reply headers for a cached message. Older cached messages did
+   * not retain RFC headers, so retrieve only that message's metadata once and
+   * update the cache rather than ever falling back to Gmail's internal ID.
+   */
+  static async getReplyMetadata(
+    userId: string,
+    gmailMessageId: string
+  ): Promise<{ inReplyTo: string; references: string }> {
+    const userObjectId = new Types.ObjectId(userId);
+    const cachedEmail = await EmailMessage.findOne({ userId: userObjectId, gmailMessageId });
+
+    if (cachedEmail?.rfcMessageId) {
+      return this.buildReplyHeaders(cachedEmail.rfcMessageId, cachedEmail.references);
+    }
+
+    const gmail = await this.getGmailClient(userId);
+    const response = await gmail.users.messages.get({
+      userId: 'me',
+      id: gmailMessageId,
+      format: 'metadata',
+      metadataHeaders: ['Message-ID', 'References'],
+    });
+    const headers = response.data.payload?.headers || [];
+    const rfcMessageId = this.getHeader(headers, 'Message-ID');
+    const references = this.getHeader(headers, 'References');
+
+    if (!rfcMessageId) {
+      throw new Error('Original email does not include an RFC Message-ID header');
+    }
+
+    await EmailMessage.findOneAndUpdate(
+      { userId: userObjectId, gmailMessageId },
+      { rfcMessageId, references: references || null },
+      { new: true }
+    );
+
+    return this.buildReplyHeaders(rfcMessageId, references);
   }
 
   /**
