@@ -6,7 +6,6 @@ import { GmailAccount } from '../src/models/GmailAccount.js';
 import { User } from '../src/models/User.js';
 import { CryptoService } from '../src/services/cryptoService.js';
 import { env } from '../src/config/env.js';
-import { oauth2Client } from '../src/services/googleClient.js';
 
 const mocks = vi.hoisted(() => ({
   gmail: vi.fn(),
@@ -34,13 +33,6 @@ vi.mock('googleapis', () => ({
 
 vi.mock('../src/services/googleClient.js', () => ({
   createOAuth2Client: mocks.createOAuth2Client,
-  oauth2Client: {
-    generateAuthUrl: mocks.generateAuthUrl,
-    getToken: mocks.getToken,
-    setCredentials: mocks.setCredentials,
-    revokeToken: mocks.revokeToken,
-    credentials: {},
-  },
 }));
 
 vi.mock('../src/models/GmailAccount.js', () => ({
@@ -66,6 +58,8 @@ describe('GmailOAuthService', () => {
     
     // Default mock for createOAuth2Client - returns a mock client with credentials property and 'on' method
     const defaultMockClient = {
+      generateAuthUrl: mocks.generateAuthUrl,
+      getToken: mocks.getToken,
       setCredentials: vi.fn(),
       revokeToken: vi.fn(),
       on: vi.fn(),
@@ -119,9 +113,28 @@ describe('GmailOAuthService', () => {
       const wrongTypeToken = jwt.sign(
         { userId: '507f191e810c19729de860ea', type: 'wrong_type' },
         env.jwt.accessSecret,
-        { expiresIn: '10m', algorithm: 'HS256' }
+        { expiresIn: '10m', algorithm: 'HS256', audience: 'gmail-oauth-state' }
       );
       expect(() => GmailOAuthService.verifyOAuthStateToken(wrongTypeToken)).toThrow('Invalid state token type');
+    });
+
+    it('signs state with its own audience so it cannot pass as an access token', () => {
+      const token = GmailOAuthService.generateOAuthStateToken('507f191e810c19729de860ea');
+      const decoded = jwt.decode(token) as any;
+
+      expect(decoded.aud).toBe('gmail-oauth-state');
+      expect(decoded.type).toBe('gmail_oauth');
+    });
+
+    it('rejects an API access token presented as OAuth state (no audience)', () => {
+      const accessToken = jwt.sign(
+        { userId: '507f191e810c19729de860ea', email: 'user@example.com' },
+        env.jwt.accessSecret,
+        { expiresIn: '15m', algorithm: 'HS256' }
+      );
+      expect(() => GmailOAuthService.verifyOAuthStateToken(accessToken)).toThrow(
+        'Invalid or tampered OAuth state parameter'
+      );
     });
   });
 
@@ -134,7 +147,7 @@ describe('GmailOAuthService', () => {
       expect(url).toContain('accounts.google.com');
       
       // Verify that the state parameter is a signed JWT token, not raw userId
-      const callArgs = (oauth2Client.generateAuthUrl as any).mock.calls[0][0];
+      const callArgs = mocks.generateAuthUrl.mock.calls[0][0];
       expect(callArgs.state).not.toBe(userId);
       
       // Verify the state token is valid and contains the userId
@@ -188,6 +201,62 @@ describe('GmailOAuthService', () => {
         expect.any(Object),
         expect.objectContaining({ googleConnected: true, gmailEmail: 'user@gmail.com' }),
         { new: true }
+      );
+    });
+
+    it('isolates credentials between concurrent callbacks (one OAuth client per callback)', async () => {
+      const users = {
+        a: { userId: new Types.ObjectId().toString(), access: 'a-access', email: 'alice@gmail.com' },
+        b: { userId: new Types.ObjectId().toString(), access: 'b-access', email: 'bob@gmail.com' },
+      };
+      const tick = () => new Promise((resolve) => setTimeout(resolve, 5));
+
+      // Each callback gets its own client; getToken yields so both callbacks set
+      // credentials before either looks up its Gmail profile.
+      const clients: any[] = [];
+      mocks.createOAuth2Client.mockImplementation(() => {
+        const client: any = {
+          credentials: {},
+          on: vi.fn(),
+          setCredentials(tokens: any) { client.credentials = tokens; },
+          async getToken(code: string) {
+            await tick();
+            const user = code === 'code-a' ? users.a : users.b;
+            return { tokens: { access_token: user.access, refresh_token: `${user.access}-refresh`, expiry_date: Date.now() + 3600000 } };
+          },
+        };
+        clients.push(client);
+        return client;
+      });
+      mocks.gmail.mockImplementation(({ auth }: any) => ({
+        users: {
+          getProfile: async () => {
+            await tick();
+            const email = auth.credentials.access_token === users.a.access ? users.a.email : users.b.email;
+            return { data: { emailAddress: email } };
+          },
+        },
+      }));
+      vi.spyOn(CryptoService, 'encryptToken').mockImplementation((value: string) => `enc(${value})`);
+      (GmailAccount.findOneAndUpdate as unknown as Mock).mockResolvedValue({});
+      (User.findByIdAndUpdate as unknown as Mock).mockResolvedValue({});
+
+      await Promise.all([
+        GmailOAuthService.handleCallback('code-a', GmailOAuthService.generateOAuthStateToken(users.a.userId)),
+        GmailOAuthService.handleCallback('code-b', GmailOAuthService.generateOAuthStateToken(users.b.userId)),
+      ]);
+
+      expect(clients).toHaveLength(2);
+      const saved = (GmailAccount.findOneAndUpdate as unknown as Mock).mock.calls.map(([filter, update]) => ({
+        userId: filter.userId.toString(),
+        gmailEmail: filter.gmailEmail,
+        accessTokenEnc: update.accessTokenEnc,
+      }));
+      expect(saved).toEqual(
+        expect.arrayContaining([
+          { userId: users.a.userId, gmailEmail: users.a.email, accessTokenEnc: 'enc(a-access)' },
+          { userId: users.b.userId, gmailEmail: users.b.email, accessTokenEnc: 'enc(b-access)' },
+        ])
       );
     });
 

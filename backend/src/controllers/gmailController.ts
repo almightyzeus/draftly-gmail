@@ -6,14 +6,16 @@ import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
 /**
- * Redirect user to Google OAuth consent screen
+ * Return the Google OAuth consent URL.
+ * Called with the Bearer token over XHR; the frontend then navigates to the URL.
+ * (A redirect endpoint would need cookie auth, which outlives logout.)
  */
-export const connectOAuth = (req: any, res: Response) => {
+export const getOAuthUrl = (req: any, res: Response) => {
   try {
     const userId = req.userId;
     const userEmail = req.email;
     const url = GmailOAuthService.generateAuthUrl(userId, userEmail);
-    res.redirect(url);
+    res.json({ url });
   } catch (error) {
     handleError(error, res);
   }

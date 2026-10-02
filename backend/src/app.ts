@@ -3,10 +3,10 @@ import cors from 'cors';
 import helmet from 'helmet';
 import morgan from 'morgan';
 import rateLimit from 'express-rate-limit';
-import cookieParser from 'cookie-parser';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
 import { AppError } from './utils/errors.js';
+import { redactUrl } from './utils/redact.js';
 import authRoutes from './routes/authRoutes.js';
 import gmailRoutes from './routes/gmailRoutes.js';
 import draftRoutes from './routes/draftRoutes.js';
@@ -34,11 +34,12 @@ app.use(
 // Middleware: Body parsing
 app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
-app.use(cookieParser());
 
 // Middleware: Logging
+// Apache "combined" format, with OAuth codes/state and search queries redacted.
+morgan.token('redacted-url', (req: Request) => redactUrl(req.originalUrl || req.url));
 app.use(
-  morgan('combined', {
+  morgan(':remote-addr - :remote-user [:date[clf]] ":method :redacted-url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"', {
     stream: {
       write: (message) => logger.info(message.trim()),
     },

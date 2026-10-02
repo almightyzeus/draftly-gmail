@@ -349,16 +349,17 @@ describe('AuthController', () => {
       });
     });
 
-    it('uses the refresh-token cookie when no body token is supplied', async () => {
+    it('ignores a refresh-token cookie; only the body token is accepted', async () => {
+      mockReq.body = {};
       mockReq.cookies = { refreshToken: 'cookie-refresh-token' };
-      (AuthService.refreshTokens as unknown as Mock).mockResolvedValue({
-        accessToken: 'new-access-token',
-        refreshToken: 'new-refresh-token',
-      });
+      (AuthService.refreshTokens as unknown as Mock).mockRejectedValue(
+        new UnauthorizedError('Refresh token is required')
+      );
 
       await refresh(mockReq, mockRes as Response);
 
-      expect(AuthService.refreshTokens).toHaveBeenCalledWith('cookie-refresh-token');
+      expect(AuthService.refreshTokens).toHaveBeenCalledWith(undefined);
+      expect(mockRes.status).toHaveBeenCalledWith(401);
     });
   });
 });

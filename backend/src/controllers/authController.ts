@@ -45,11 +45,11 @@ export const login = async (req: any, res: Response) => {
 
 /**
  * Exchange a refresh token for a new access/refresh token pair.
- * The cookie fallback supports the full-page Gmail OAuth redirect flow.
+ * The token is accepted from the request body only (never from a cookie).
  */
 export const refresh = async (req: any, res: Response) => {
   try {
-    const refreshToken = req.body?.refreshToken || req.cookies?.refreshToken;
+    const refreshToken = req.body?.refreshToken;
     const tokens = await AuthService.refreshTokens(refreshToken);
     res.json(tokens);
   } catch (error) {

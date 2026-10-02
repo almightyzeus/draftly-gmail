@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable, BehaviorSubject, throwError, tap, finalize, shareReplay } from 'rxjs';
+import { Observable, BehaviorSubject, throwError, tap, finalize, shareReplay, map } from 'rxjs';
 
 export interface User {
   id: string;
@@ -35,6 +35,8 @@ export class AuthService {
   private refreshRequest$: Observable<TokenPair> | null = null;
 
   constructor(private http: HttpClient) {
+    // Earlier versions also wrote tokens to cookies; remove any that remain.
+    this.clearLegacyAuthCookies();
     this.loadTokenFromStorage();
   }
 
@@ -140,6 +142,7 @@ export class AuthService {
   logout(): void {
     localStorage.removeItem('accessToken');
     localStorage.removeItem('refreshToken');
+    this.clearLegacyAuthCookies();
     this.accessTokenSubject.next(null);
     this.currentUserSubject.next(null);
   }
@@ -159,36 +162,36 @@ export class AuthService {
   }
 
   /**
-   * Store tokens in localStorage AND cookies
+   * Store tokens in localStorage. They are deliberately not written to cookies:
+   * the API only accepts the Authorization header.
    */
   private storeTokens(accessToken: string, refreshToken: string): void {
     localStorage.setItem('accessToken', accessToken);
     localStorage.setItem('refreshToken', refreshToken);
-    // Also store in cookies for redirect requests
-    try {
-      this.setCookie('accessToken', accessToken, 15); // 15 minutes
-      this.setCookie('refreshToken', refreshToken, 7 * 24 * 60); // 7 days
-    } catch (error) {
-      console.error('Failed to set cookies:', error);
-      // Continue even if cookies fail - localStorage is sufficient for API calls
-    }
     this.accessTokenSubject.next(accessToken);
   }
 
   /**
-   * Set a cookie with expiration time (in minutes)
+   * Expire token cookies written by earlier versions of the app.
    */
-  private setCookie(name: string, value: string, minutesExpiry: number): void {
-    const date = new Date();
-    date.setTime(date.getTime() + minutesExpiry * 60 * 1000);
-    const expires = date.toUTCString();
-    document.cookie = `${name}=${encodeURIComponent(value)}; expires=${expires}; path=/; SameSite=Lax`;
+  private clearLegacyAuthCookies(): void {
+    for (const name of ['accessToken', 'refreshToken']) {
+      document.cookie = `${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT; path=/; SameSite=Lax`;
+    }
   }
 
   /**
-   * Initiate Gmail OAuth connection
-   * Redirects to backend OAuth endpoint - do NOT use HttpClient
+   * Start the Gmail OAuth flow: fetch the consent URL with the Bearer token
+   * (via the interceptor), then navigate the browser to Google.
    */
-  connectGmail(): void {
-    window.location.href = `${this.gmailApiUrl}/oauth/connect`;
-  }}
+  connectGmail(): Observable<void> {
+    return this.http.get<{ url: string }>(`${this.gmailApiUrl}/oauth/url`).pipe(
+      map(({ url }) => {
+        if (!url?.startsWith('https://accounts.google.com/')) {
+          throw new Error('Unexpected Gmail consent URL');
+        }
+        window.location.href = url;
+      })
+    );
+  }
+}

@@ -60,9 +60,8 @@ describe('Auth Middleware', () => {
       expect(mockNext).not.toHaveBeenCalled();
     });
 
-    it('should accept token from cookies if no header provided', () => {
-      const userId = 'user123';
-      const token = jwt.sign({ userId }, process.env.JWT_ACCESS_SECRET || 'test-secret', {
+    it('rejects a valid token supplied only as a cookie (cookies outlive logout)', () => {
+      const token = jwt.sign({ userId: 'user123' }, process.env.JWT_ACCESS_SECRET || 'test-secret', {
         expiresIn: '15m',
       });
 
@@ -71,8 +70,27 @@ describe('Auth Middleware', () => {
 
       authenticateJWT(mockRequest as AuthRequest, mockResponse as Response, mockNext);
 
-      expect(mockNext).toHaveBeenCalled();
-      expect((mockRequest as AuthRequest).userId).toBe(userId);
+      expect((mockResponse as any).status).toHaveBeenCalledWith(401);
+      expect(mockNext).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an OAuth state token (type + audience)', { type: 'gmail_oauth' }, { audience: 'gmail-oauth-state' }],
+      ['a legacy OAuth state token (type only)', { type: 'gmail_oauth' }, {}],
+      ['any token with an audience', {}, { audience: 'something-else' }],
+    ])('rejects %s used as a Bearer access token', (_label, extraClaims, signOptions) => {
+      const token = jwt.sign(
+        { userId: 'user123', ...extraClaims },
+        process.env.JWT_ACCESS_SECRET || 'test-secret',
+        { expiresIn: '10m', algorithm: 'HS256', ...signOptions }
+      );
+      mockRequest.headers = { authorization: `Bearer ${token}` };
+
+      authenticateJWT(mockRequest as AuthRequest, mockResponse as Response, mockNext);
+
+      expect((mockResponse as any).status).toHaveBeenCalledWith(401);
+      expect(mockNext).not.toHaveBeenCalled();
+      expect((mockRequest as AuthRequest).userId).toBeUndefined();
     });
 
     it('should handle expired tokens', () => {

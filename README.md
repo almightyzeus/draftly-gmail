@@ -283,7 +283,7 @@ Login body:
 ### Gmail
 
 ```http
-GET /api/gmail/oauth/connect
+GET /api/gmail/oauth/url            # Bearer auth; returns { url } for Google consent
 GET /api/gmail/oauth/callback?code=...&state=...
 POST /api/gmail/oauth/revoke
 GET /api/gmail/emails?label=INBOX&unread=true&limit=20

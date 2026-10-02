@@ -114,7 +114,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
   }
 
   connectGmail(): void {
-    this.authService.connectGmail();
+    this.emailsError = null;
+    this.authService.connectGmail().subscribe({
+      error: (error) => {
+        console.error('Failed to start Gmail connection:', error);
+        this.emailsError = 'Could not start the Gmail connection. Please try again.';
+      },
+    });
   }
 
   disconnectGmail(): void {

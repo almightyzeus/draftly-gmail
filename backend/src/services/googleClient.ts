@@ -13,9 +13,3 @@ export function createOAuth2Client() {
     env.google.redirectUri
   );
 }
-
-/**
- * Singleton OAuth2 client for backward compatibility.
- * Deprecated: Use createOAuth2Client() instead for new code.
- */
-export const oauth2Client = createOAuth2Client();

@@ -103,6 +103,23 @@ describe('frontend page classes', () => {
     expect(component.emailsError).toContain('Authentication failed');
   });
 
+  it('DashboardComponent starts the Gmail connection and reports a failure', () => {
+    const auth = {
+      currentUser$: of({ id: '1', name: 'User', email: 'user@example.com', googleConnected: false }),
+      isAuthenticated: vi.fn().mockReturnValue(false),
+      connectGmail: vi.fn().mockReturnValueOnce(of(undefined)).mockReturnValueOnce(throwError(() => new Error('network'))),
+    };
+    const component = new DashboardComponent(auth as any, {} as any, router as any);
+    component.ngOnInit();
+
+    component.connectGmail();
+    expect(auth.connectGmail).toHaveBeenCalledTimes(1);
+    expect(component.emailsError).toBeNull();
+
+    component.connectGmail();
+    expect(component.emailsError).toBe('Could not start the Gmail connection. Please try again.');
+  });
+
   it('DashboardComponent switches to Connect Gmail when the Gmail grant has expired (403)', () => {
     const auth = {
       currentUser$: of({ id: '1', name: 'User', email: 'user@example.com', googleConnected: false }),

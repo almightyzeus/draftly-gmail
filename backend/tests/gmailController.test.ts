@@ -21,18 +21,14 @@ const envMocks = vi.hoisted(() => ({
 
 vi.mock('../src/config/env.js', () => envMocks);
 vi.mock('../src/services/googleClient.js', () => ({
-  oauth2Client: {
-    generateAuthUrl: vi.fn(),
-    getToken: vi.fn(),
-    setCredentials: vi.fn(),
-  },
+  createOAuth2Client: vi.fn(),
 }));
 vi.mock('../src/services/gmailOAuthService');
 vi.mock('../src/services/gmailService');
 vi.mock('../src/utils/logger');
 
 import {
-  connectOAuth,
+  getOAuthUrl,
   handleOAuthCallback,
   revokeOAuth,
   fetchEmails,
@@ -67,15 +63,16 @@ describe('GmailController', () => {
     mockNext = vi.fn();
   });
 
-  describe('connectOAuth', () => {
-    it('should redirect to OAuth URL', () => {
-      const authUrl = 'https://accounts.google.com/oauth/authorize?...';
+  describe('getOAuthUrl', () => {
+    it('returns the consent URL as JSON instead of redirecting', () => {
+      const authUrl = 'https://accounts.google.com/o/oauth2/v2/auth?state=signed';
       (GmailOAuthService.generateAuthUrl as unknown as Mock).mockReturnValue(authUrl);
 
-      connectOAuth(mockReq, mockRes as Response);
+      getOAuthUrl(mockReq, mockRes as Response);
 
       expect(GmailOAuthService.generateAuthUrl).toHaveBeenCalledWith('user123', 'user@example.com');
-      expect(mockRes.redirect).toHaveBeenCalledWith(authUrl);
+      expect(mockRes.json).toHaveBeenCalledWith({ url: authUrl });
+      expect(mockRes.redirect).not.toHaveBeenCalled();
     });
 
     it('should handle errors during URL generation', () => {
@@ -84,7 +81,7 @@ describe('GmailController', () => {
         throw error;
       });
 
-      connectOAuth(mockReq, mockRes as Response);
+      getOAuthUrl(mockReq, mockRes as Response);
 
       expect(mockRes.status).toHaveBeenCalledWith(500);
       expect(mockRes.json).toHaveBeenCalledWith({ error: 'Failed to generate auth URL' });

@@ -1,4 +1,4 @@
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { of, throwError } from 'rxjs';
 import { HttpErrorResponse, HttpHeaders, HttpRequest } from '@angular/common/http';
 import { AuthService } from '../src/app/services/auth.service';
@@ -108,10 +108,70 @@ describe('frontend services', () => {
     expect(localStorage.getItem('refreshToken')).toBe('new-refresh');
   });
 
-  it('AuthService redirects to Gmail OAuth endpoint', () => {
-    const service = new AuthService({ post: vi.fn(), get: vi.fn() } as any);
-    service.connectGmail();
-    expect((globalThis.window as any).location.href).toBe('api/gmail/oauth/connect');
+  it('AuthService fetches the Gmail consent URL over XHR, then navigates to it', () => {
+    const consentUrl = 'https://accounts.google.com/o/oauth2/v2/auth?state=signed';
+    const http = { post: vi.fn(), get: vi.fn().mockReturnValue(of({ url: consentUrl })) };
+    const service = new AuthService(http as any);
+
+    let completed = false;
+    service.connectGmail().subscribe({ complete: () => (completed = true) });
+
+    expect(http.get).toHaveBeenCalledWith('api/gmail/oauth/url');
+    expect((globalThis.window as any).location.href).toBe(consentUrl);
+    expect(completed).toBe(true);
+  });
+
+  it('AuthService refuses to navigate to a consent URL that is not Google', () => {
+    const http = { post: vi.fn(), get: vi.fn().mockReturnValue(of({ url: 'https://evil.example.com/' })) };
+    const service = new AuthService(http as any);
+
+    let error: unknown;
+    service.connectGmail().subscribe({ error: (e) => (error = e) });
+
+    expect(error).toBeInstanceOf(Error);
+    expect((globalThis.window as any).location.href).toBe('');
+  });
+
+  describe('AuthService token cookies', () => {
+    let written: string[];
+    const doc = globalThis.document as any;
+
+    beforeEach(() => {
+      written = [];
+      Object.defineProperty(doc, 'cookie', {
+        configurable: true,
+        get: () => '',
+        set: (value: string) => written.push(value),
+      });
+    });
+
+    afterEach(() => {
+      Object.defineProperty(doc, 'cookie', { configurable: true, writable: true, value: '' });
+    });
+
+    const expired = (name: string) =>
+      expect.stringMatching(new RegExp(`^${name}=; expires=Thu, 01 Jan 1970 00:00:00 GMT`));
+
+    it('never writes tokens to cookies on login', () => {
+      const http = { post: vi.fn().mockReturnValue(of(authResponse)), get: vi.fn() };
+      const service = new AuthService(http as any);
+      written = [];
+
+      service.login('user@example.com', 'password').subscribe();
+
+      expect(localStorage.getItem('accessToken')).toBe('access-token');
+      expect(written).toEqual([]);
+      expect(written.join(';')).not.toContain('access-token');
+    });
+
+    it('expires legacy token cookies on startup and on logout', () => {
+      const service = new AuthService({ post: vi.fn(), get: vi.fn() } as any);
+      expect(written).toEqual([expired('accessToken'), expired('refreshToken')]);
+
+      written = [];
+      service.logout();
+      expect(written).toEqual([expired('accessToken'), expired('refreshToken')]);
+    });
   });
 
   it('GmailService calls current Gmail endpoints', () => {

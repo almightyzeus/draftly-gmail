@@ -1,6 +1,6 @@
 import { Router } from 'express';
 import {
-  connectOAuth,
+  getOAuthUrl,
   handleOAuthCallback,
   revokeOAuth,
   fetchEmails,
@@ -11,10 +11,11 @@ import { authenticateJWT } from '../middleware/auth.js';
 const router = Router();
 
 /**
- * GET /api/gmail/oauth/connect
- * Redirects user to Google OAuth consent screen
+ * GET /api/gmail/oauth/url
+ * Returns { url } for the Google OAuth consent screen (Bearer auth; the
+ * frontend navigates to it)
  */
-router.get('/oauth/connect', authenticateJWT, connectOAuth);
+router.get('/oauth/url', authenticateJWT, getOAuthUrl);
 
 /**
  * GET /api/gmail/oauth/callback

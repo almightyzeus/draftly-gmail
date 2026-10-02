@@ -11,16 +11,12 @@ export interface AuthRequest extends Request {
 
 export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunction) => {
   try {
-    // Check Authorization header first
+    // Bearer header only. Cookies are not accepted: they outlive logout and
+    // would make state-changing endpoints reachable by cross-site requests.
     let token = null;
     const authHeader = req.headers.authorization;
     if (authHeader?.startsWith('Bearer ')) {
       token = authHeader.slice(7);
-    }
-
-    // Fallback to cookie if no header
-    if (!token && req.cookies?.accessToken) {
-      token = req.cookies.accessToken;
     }
 
     if (!token) {
@@ -28,10 +24,20 @@ export const authenticateJWT = (req: AuthRequest, res: Response, next: NextFunct
       return res.status(401).json({ error: 'No token provided' });
     }
 
-    const decoded = jwt.verify(token, env.jwt.accessSecret) as {
+    const decoded = jwt.verify(token, env.jwt.accessSecret, { algorithms: ['HS256'] }) as {
       userId: string;
       email: string;
+      type?: string;
+      aud?: string | string[];
     };
+
+    // Other tokens signed with the access secret (e.g. the Gmail OAuth state,
+    // which travels through URLs and logs) carry a type/audience and must never
+    // authenticate API requests.
+    if (decoded.type !== undefined || decoded.aud !== undefined) {
+      logger.warn({ path: req.path }, 'Rejected non-access token');
+      return res.status(401).json({ error: 'Invalid or expired token' });
+    }
 
     req.userId = decoded.userId;
     req.email = decoded.email;

@@ -1,7 +1,7 @@
 import { google } from 'googleapis';
 import { Types } from 'mongoose';
 import jwt, { JwtPayload } from 'jsonwebtoken';
-import { createOAuth2Client, oauth2Client } from './googleClient.js';
+import { createOAuth2Client } from './googleClient.js';
 import {GmailAccount} from '../models/GmailAccount.js';
 import { User } from '../models/User.js';
 import { CryptoService } from './cryptoService.js';
@@ -12,6 +12,9 @@ interface OAuthStatePayload extends JwtPayload {
   userId: string;
   type: 'gmail_oauth';
 }
+
+/** Audience that separates OAuth state tokens from API access tokens. */
+const OAUTH_STATE_AUDIENCE = 'gmail-oauth-state';
 
 export class GmailOAuthService {
   /**
@@ -79,6 +82,7 @@ export class GmailOAuthService {
     return jwt.sign(payload, env.jwt.accessSecret, {
       expiresIn: '10m',
       algorithm: 'HS256',
+      audience: OAUTH_STATE_AUDIENCE,
     });
   }
 
@@ -94,6 +98,7 @@ export class GmailOAuthService {
     try {
       const decoded = jwt.verify(state, env.jwt.accessSecret, {
         algorithms: ['HS256'],
+        audience: OAUTH_STATE_AUDIENCE,
       }) as OAuthStatePayload;
 
       if (decoded.type !== 'gmail_oauth') {
@@ -117,7 +122,7 @@ export class GmailOAuthService {
    */
   static generateAuthUrl(userId: string, userEmail: string): string {
     const stateToken = this.generateOAuthStateToken(userId);
-    return oauth2Client.generateAuthUrl({
+    return createOAuth2Client().generateAuthUrl({
       access_type: 'offline',
       scope: [
         'https://www.googleapis.com/auth/gmail.readonly',
@@ -138,15 +143,18 @@ export class GmailOAuthService {
     // Verify state token and extract userId
     const userId = this.verifyOAuthStateToken(state);
     try {
-      const { tokens } = await oauth2Client.getToken(code);
+      // A client per callback: credentials set here must never be visible to
+      // another user's concurrent callback.
+      const client = createOAuth2Client();
+      const { tokens } = await client.getToken(code);
 
       if (!tokens.access_token || !tokens.refresh_token) {
         throw new Error('Missing access_token or refresh_token');
       }
 
       // Get Gmail email
-      oauth2Client.setCredentials(tokens);
-      const gmail = google.gmail({ version: 'v1', auth: oauth2Client });
+      client.setCredentials(tokens);
+      const gmail = google.gmail({ version: 'v1', auth: client });
       const profile = await gmail.users.getProfile({ userId: 'me' });
       const gmailEmail = profile.data.emailAddress;
 
