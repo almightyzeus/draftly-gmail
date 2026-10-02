@@ -42,7 +42,7 @@
             <mat-icon class="status-icon warning">info</mat-icon>
             <div class="status-text">
               <p class="status-label">Gmail Not Connected</p>
-              <p class="text-muted">Connect your Gmail account to get started</p>
+              <p class="text-muted">{{ emailsError || 'Connect your Gmail account to get started' }}</p>
             </div>
           </div>
           <button mat-raised-button color="primary" (click)="connectGmail()" class="margin-top">

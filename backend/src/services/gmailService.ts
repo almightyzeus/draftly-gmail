@@ -2,10 +2,11 @@ import { google } from 'googleapis';
 import { Types } from 'mongoose';
 import { createOAuth2Client } from './googleClient.js';
 import { GmailAccount } from '../models/GmailAccount.js';
+import { User } from '../models/User.js';
 import { EmailMessage } from '../models/EmailMessage.js';
 import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
-import { AppError, ValidationError } from '../utils/errors.js';
+import { AppError, ForbiddenError, ValidationError } from '../utils/errors.js';
 
 /**
  * GmailService - Handles Gmail email fetching and sending
@@ -238,7 +239,7 @@ export class GmailService {
           ...(options?.pageToken && { pageToken: options.pageToken }),
         });
       } catch (error) {
-        throw this.toListError(error);
+        throw await this.toListError(userId, error, !!(options?.q || options?.pageToken));
       }
 
       const messageIds = listResponse.data.messages || [];
@@ -365,16 +366,62 @@ export class GmailService {
 
   /**
    * Map Gmail list failures that the caller can act on to HTTP errors.
+   * The original Google error is always logged so the cause is not lost.
    */
-  private static toListError(error: any): unknown {
+  private static async toListError(userId: string, error: any, hadSearchInput: boolean): Promise<unknown> {
+    logger.warn(
+      {
+        userId,
+        status: error?.response?.status ?? error?.status,
+        url: String(error?.config?.url ?? '').split('?')[0],
+        googleError: error?.response?.data?.error,
+      },
+      'Gmail messages.list failed'
+    );
+
+    // The refresh token is dead (expired in a "Testing" OAuth app, or revoked
+    // by the user). This is a token-endpoint 400, not a bad search.
+    if (this.isInvalidGrant(error)) {
+      await this.markGmailDisconnected(userId);
+      return new ForbiddenError('Gmail access has expired or was revoked. Please reconnect Gmail.');
+    }
+
     const status = Number(error?.response?.status ?? error?.status ?? error?.code);
-    if (status === 400) {
+    if (status === 400 && hadSearchInput) {
       return new ValidationError('Invalid Gmail search query or page token');
     }
     if (status === 429) {
       return new AppError('Gmail rate limit exceeded. Please try again shortly.', 429);
     }
     return error;
+  }
+
+  private static isInvalidGrant(error: any): boolean {
+    return (
+      error?.response?.data?.error === 'invalid_grant' ||
+      String(error?.message ?? '').includes('invalid_grant')
+    );
+  }
+
+  /**
+   * Same cleanup GmailOAuthService.revoke applies to an already-revoked grant,
+   * so the UI shows "Connect Gmail" instead of failing on every load.
+   */
+  private static async markGmailDisconnected(userId: string): Promise<void> {
+    try {
+      const userObjectId = new Types.ObjectId(userId);
+      await GmailAccount.updateMany(
+        { userId: userObjectId, revokedAt: null },
+        { $set: { revokedAt: new Date() } }
+      );
+      await User.findByIdAndUpdate(userObjectId, { googleConnected: false, gmailEmail: null });
+      logger.info({ userId }, 'Gmail grant is no longer valid; marked account disconnected');
+    } catch (cleanupError) {
+      logger.error(
+        cleanupError instanceof Error ? cleanupError : new Error(String(cleanupError)),
+        'Failed to mark Gmail account disconnected after invalid_grant'
+      );
+    }
   }
 
   /**

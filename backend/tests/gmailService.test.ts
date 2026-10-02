@@ -2,6 +2,7 @@ import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { Types } from 'mongoose';
 import { GmailService } from '../src/services/gmailService.js';
 import { GmailAccount } from '../src/models/GmailAccount.js';
+import { User } from '../src/models/User.js';
 import { EmailMessage } from '../src/models/EmailMessage.js';
 import { CryptoService } from '../src/services/cryptoService.js';
 
@@ -25,7 +26,11 @@ vi.mock('../src/services/googleClient.js', () => ({
 }));
 
 vi.mock('../src/models/GmailAccount.js', () => ({
-  GmailAccount: { findOne: vi.fn(), findOneAndUpdate: vi.fn() },
+  GmailAccount: { findOne: vi.fn(), findOneAndUpdate: vi.fn(), updateMany: vi.fn() },
+}));
+
+vi.mock('../src/models/User.js', () => ({
+  User: { findByIdAndUpdate: vi.fn() },
 }));
 
 vi.mock('../src/models/EmailMessage.js', () => ({
@@ -336,6 +341,50 @@ describe('GmailService', () => {
         statusCode: 400,
         message: 'Invalid Gmail search query or page token',
       });
+    });
+
+    // Shape of the googleapis error when the refresh token is rejected (seen in Docker).
+    const invalidGrant = () =>
+      Object.assign(new Error('invalid_grant'), {
+        status: 400,
+        code: 400,
+        config: { url: 'https://oauth2.googleapis.com/token' },
+        response: { status: 400, data: { error: 'invalid_grant', error_description: 'Bad Request' } },
+      });
+
+    it.each([
+      ['a plain listing', {}],
+      ['a search', { q: 'from:alice' }],
+    ])('treats invalid_grant on %s as a disconnected Gmail account, not a bad search', async (_label, options) => {
+      list.mockRejectedValue(invalidGrant());
+
+      await expect(GmailService.fetchEmails(userId, options)).rejects.toMatchObject({
+        statusCode: 403,
+        message: 'Gmail access has expired or was revoked. Please reconnect Gmail.',
+      });
+      expect(GmailAccount.updateMany).toHaveBeenCalledWith(
+        { userId: new Types.ObjectId(userId), revokedAt: null },
+        { $set: { revokedAt: expect.any(Date) } }
+      );
+      expect(User.findByIdAndUpdate).toHaveBeenCalledWith(new Types.ObjectId(userId), {
+        googleConnected: false,
+        gmailEmail: null,
+      });
+    });
+
+    it('still returns the reconnect error if the disconnect cleanup fails', async () => {
+      list.mockRejectedValue(invalidGrant());
+      (GmailAccount.updateMany as unknown as Mock).mockRejectedValueOnce(new Error('db down'));
+
+      await expect(GmailService.fetchEmails(userId, {})).rejects.toMatchObject({ statusCode: 403 });
+    });
+
+    it('does not blame the search for a Gmail 400 on a plain listing', async () => {
+      const gmail400 = Object.assign(new Error('Precondition check failed.'), { code: 400 });
+      list.mockRejectedValue(gmail400);
+
+      await expect(GmailService.fetchEmails(userId, { label: 'INBOX', limit: 20 })).rejects.toBe(gmail400);
+      expect(GmailAccount.updateMany).not.toHaveBeenCalled();
     });
 
     it('maps a Gmail 429 to a 429 error and passes other failures through', async () => {

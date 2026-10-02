@@ -130,6 +130,12 @@ export class DashboardComponent implements OnInit {
         console.error('Failed to fetch emails:', error);
         if (error.status === 401) {
           this.emailsError = 'Authentication failed. Please log in again.';
+        } else if (error.status === 403 && this.currentUser) {
+          // The backend found the Gmail grant expired/revoked and disconnected it;
+          // show the Connect Gmail card instead of a dead inbox.
+          this.emailsError = error.error?.error || 'Gmail access has expired. Please reconnect Gmail.';
+          this.currentUser = { ...this.currentUser, googleConnected: false };
+          this.emails = [];
         } else if (error.error?.error === 'Gmail account not connected') {
           this.emailsError = 'Gmail account not properly connected. Try disconnecting and reconnecting.';
         } else {

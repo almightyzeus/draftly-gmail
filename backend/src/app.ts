@@ -15,6 +15,11 @@ import logRoutes from './routes/logRoutes.js';
 
 export const app: Express = express();
 
+// Behind nginx (Docker) the client IP arrives in X-Forwarded-For.
+if (env.trustProxyHops > 0) {
+  app.set('trust proxy', env.trustProxyHops);
+}
+
 // Middleware: Security
 app.use(helmet());
 
@@ -40,19 +45,20 @@ app.use(
   })
 );
 
-// Middleware: Rate limiting for auth endpoints
+// Middleware: Brute-force protection for credential endpoints only.
+// Successful logins/registrations don't count, and session endpoints
+// (/me, /refresh) already require a valid signed token.
 const authLimiter = rateLimit({
   windowMs: 15 * 60 * 1000, // 15 minutes
-  max: 5, // 5 requests per windowMs
-  message: 'Too many authentication attempts, please try again later',
+  max: 5, // 5 failed attempts per windowMs
+  skipSuccessfulRequests: true,
+  skip: () => env.nodeEnv === 'test',
+  message: { error: 'Too many authentication attempts, please try again later' },
 });
 
 // Routes
-if (env.nodeEnv === 'test') {
-  app.use('/api/auth', authRoutes);
-} else {
-  app.use('/api/auth', authLimiter, authRoutes);
-}
+app.use(['/api/auth/login', '/api/auth/register'], authLimiter);
+app.use('/api/auth', authRoutes);
 app.use('/api/gmail', gmailRoutes);
 app.use('/api/drafts', draftRoutes);
 app.use('/api/preferences', preferenceRoutes);

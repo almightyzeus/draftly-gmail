@@ -19,9 +19,15 @@ services:
     container_name: draftly-backend
     restart: unless-stopped
     ports:
-      - "3000:3000"
+      # Loopback only: the browser on this machine needs it for the Google OAuth
+      # callback (GOOGLE_REDIRECT_URI), but other hosts must go through nginx so
+      # they cannot spoof X-Forwarded-For (TRUST_PROXY below).
+      - "127.0.0.1:3000:3000"
     env_file:
       - ./backend/.env.docker
+    environment:
+      # nginx (frontend container) is the single proxy hop in front of the API.
+      TRUST_PROXY: "1"
     depends_on:
       mongodb:
         condition: service_healthy

@@ -39,18 +39,31 @@ export class AuthService {
   }
 
   /**
-   * Load token from localStorage and validate
+   * Load token from localStorage. Validation happens in restoreSession().
    */
   private loadTokenFromStorage(): void {
     const token = localStorage.getItem('accessToken');
     if (token) {
       this.accessTokenSubject.next(token);
-      // Optionally fetch user info to validate token
+    }
+  }
+
+  /**
+   * Validate a stored token and load the current user.
+   * Runs from an app initializer, not the constructor: an HTTP call during
+   * construction makes AuthInterceptor inject AuthService before it exists
+   * (Angular NG0200), which used to log the user out on every page load.
+   */
+  restoreSession(): void {
+    if (this.getAccessToken()) {
       this.getMe().subscribe(
         (response) => this.currentUserSubject.next(response.user),
-        () => {
-          // Token invalid, clear it
-          this.logout();
+        (error) => {
+          // Only a 401 (left over after the interceptor's refresh attempt) means
+          // the session is invalid. Network/server errors keep the stored tokens.
+          if (error?.status === 401) {
+            this.logout();
+          }
         }
       );
     }

@@ -58,7 +58,39 @@ describe('frontend services', () => {
     const service = new AuthService(http as any);
 
     expect(service.getAccessToken()).toBe('stored-token');
+    // No HTTP during construction: that would re-enter AuthInterceptor -> AuthService (NG0200).
+    expect(http.get).not.toHaveBeenCalled();
+
+    service.restoreSession();
     expect(http.get).toHaveBeenCalledWith('api/auth/me');
+    expect(localStorage.getItem('accessToken')).toBe('stored-token');
+  });
+
+  it('AuthService.restoreSession clears an invalid session and skips when logged out', () => {
+    const http = { post: vi.fn(), get: vi.fn().mockReturnValue(throwError(() => ({ status: 401 }))) };
+    const loggedOut = new AuthService(http as any);
+    loggedOut.restoreSession();
+    expect(http.get).not.toHaveBeenCalled();
+
+    localStorage.setItem('accessToken', 'stale-token');
+    localStorage.setItem('refreshToken', 'stale-refresh');
+    const service = new AuthService(http as any);
+    service.restoreSession();
+    expect(localStorage.getItem('accessToken')).toBeNull();
+    expect(localStorage.getItem('refreshToken')).toBeNull();
+  });
+
+  it.each([0, 429, 500, 503])('AuthService.restoreSession keeps the session on a transient %s error', (status) => {
+    localStorage.setItem('accessToken', 'stored-token');
+    localStorage.setItem('refreshToken', 'stored-refresh');
+    const http = { post: vi.fn(), get: vi.fn().mockReturnValue(throwError(() => ({ status }))) };
+    const service = new AuthService(http as any);
+
+    service.restoreSession();
+
+    expect(localStorage.getItem('accessToken')).toBe('stored-token');
+    expect(localStorage.getItem('refreshToken')).toBe('stored-refresh');
+    expect(service.isAuthenticated()).toBe(true);
   });
 
   it('AuthService refreshes and rotates stored tokens', () => {

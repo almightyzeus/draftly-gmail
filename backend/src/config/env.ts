@@ -26,6 +26,8 @@ export interface EnvConfig {
     redirectUri: string;
   };
   frontendUrl: string;
+  /** Number of reverse-proxy hops to trust for client IPs (0 = trust none). */
+  trustProxyHops: number;
 }
 
 /**
@@ -76,6 +78,21 @@ function parseEncryptionKey(base64Key: string): Buffer {
       }`
     );
   }
+}
+
+/**
+ * Parse TRUST_PROXY as a hop count. Only set it when the app runs behind a
+ * known proxy (e.g. nginx in Docker); otherwise X-Forwarded-For can be spoofed.
+ */
+function parseTrustProxyHops(value: string | undefined): number {
+  if (value === undefined || value.trim() === '') {
+    return 0;
+  }
+  const hops = Number(value);
+  if (!Number.isInteger(hops) || hops < 0) {
+    throw new Error(`Invalid TRUST_PROXY: must be a non-negative integer hop count, got: ${value}`);
+  }
+  return hops;
 }
 
 /**
@@ -134,6 +151,8 @@ function loadEnv(): EnvConfig {
       process.env.FRONTEND_URL ?? 'http://localhost:4200',
       'FRONTEND_URL'
     ),
+
+    trustProxyHops: parseTrustProxyHops(process.env.TRUST_PROXY),
   };
 }
 

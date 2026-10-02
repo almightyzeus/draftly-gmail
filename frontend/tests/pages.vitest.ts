@@ -103,6 +103,25 @@ describe('frontend page classes', () => {
     expect(component.emailsError).toContain('Authentication failed');
   });
 
+  it('DashboardComponent switches to Connect Gmail when the Gmail grant has expired (403)', () => {
+    const auth = {
+      currentUser$: of({ id: '1', name: 'User', email: 'user@example.com', googleConnected: false }),
+      isAuthenticated: vi.fn().mockReturnValue(false),
+    };
+    const message = 'Gmail access has expired or was revoked. Please reconnect Gmail.';
+    const gmail = { fetchEmails: vi.fn().mockReturnValue(throwError(() => ({ status: 403, error: { error: message } }))) };
+    const component = new DashboardComponent(auth as any, gmail as any, router as any);
+    component.currentUser = { id: '1', name: 'User', email: 'user@example.com', googleConnected: true };
+    component.emails = [{ gmailMessageId: 'stale' } as any];
+
+    component.fetchEmails();
+
+    expect(component.emailsError).toBe(message);
+    expect(component.currentUser?.googleConnected).toBe(false);
+    expect(component.emails).toEqual([]);
+    expect(component.isLoadingEmails).toBe(false);
+  });
+
   it('EmailDetailComponent loads email, generates drafts, sanitizes, and navigates back', () => {
     const route = { params: of({ gmailMessageId: 'msg-1' }) };
     const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 'thread-1', bodyPlain: 'Hi' })) };
