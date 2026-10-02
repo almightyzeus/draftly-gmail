@@ -54,6 +54,8 @@ export class DraftDetailComponent implements OnInit {
   error: string | null = null;
   hasChanges = false;
   successMessage: string | null = null;
+  /** Key for the current user send attempt; reused on retry until the send succeeds. */
+  private sendIdempotencyKey: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -183,12 +185,13 @@ export class DraftDetailComponent implements OnInit {
       this.error = null;
       this.successMessage = null;
 
-      // Generate idempotency key
-      const idempotencyKey = `${this.draft._id}-${Date.now()}`;
+      // Reuse the key from a failed attempt so a retry can never double-send.
+      this.sendIdempotencyKey ??= this.createIdempotencyKey(this.draft._id);
 
-      this.draftService.sendDraft(this.draft._id, idempotencyKey).subscribe(
+      this.draftService.sendDraft(this.draft._id, this.sendIdempotencyKey).subscribe(
         (updated) => {
           this.draft = updated;
+          this.sendIdempotencyKey = null;
           this.isSending = false;
           this.successMessage = 'Draft sent successfully. Message ID: ' + updated.sentGmailMessageId;
           setTimeout(() => this.router.navigate(['/dashboard']), 2000);
@@ -200,6 +203,14 @@ export class DraftDetailComponent implements OnInit {
         }
       );
     }
+  }
+
+  private createIdempotencyKey(draftId: string): string {
+    // randomUUID is unavailable outside secure contexts (e.g. plain http on a LAN IP).
+    if (typeof crypto !== 'undefined' && typeof crypto.randomUUID === 'function') {
+      return crypto.randomUUID();
+    }
+    return `${draftId}-${Date.now()}-${Math.random().toString(36).slice(2)}`;
   }
 
   goBack(): void {

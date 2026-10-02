@@ -127,17 +127,31 @@ export const rejectDraft = async (req: any, res: Response) => {
   }
 };
 
+const MAX_IDEMPOTENCY_KEY_LENGTH = 255;
+
 /**
  * Send an approved draft
+ * The idempotency key comes from the `Idempotency-Key` header, falling back to
+ * the legacy `idempotencyKey` body field.
  */
 export const sendDraft = async (req: any, res: Response) => {
   try {
     const userId = req.userId;
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { idempotencyKey } = req.body;
+    const idempotencyKey = req.headers?.['idempotency-key'] ?? req.body?.idempotencyKey;
 
     if (!idempotencyKey) {
       return res.status(400).json({ error: 'idempotencyKey is required' });
+    }
+
+    if (
+      typeof idempotencyKey !== 'string' ||
+      !idempotencyKey.trim() ||
+      idempotencyKey.length > MAX_IDEMPOTENCY_KEY_LENGTH
+    ) {
+      return res.status(400).json({
+        error: `idempotencyKey must be a non-empty string of at most ${MAX_IDEMPOTENCY_KEY_LENGTH} characters`,
+      });
     }
 
     const draft = await DraftService.sendDraft(userId, id, idempotencyKey);

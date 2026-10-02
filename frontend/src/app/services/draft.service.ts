@@ -82,11 +82,14 @@ export class DraftService {
   }
 
   /**
-   * Send an approved draft
+   * Send an approved draft.
+   * The caller owns the idempotency key and must reuse it when retrying the same send.
    */
   sendDraft(draftId: string, idempotencyKey: string): Observable<any> {
-    return this.http.post<any>(`${this.draftsApiUrl}/${draftId}/send`, {
-      idempotencyKey,
-    });
+    return this.http.post<any>(
+      `${this.draftsApiUrl}/${draftId}/send`,
+      {},
+      { headers: { 'Idempotency-Key': idempotencyKey } }
+    );
   }
 }

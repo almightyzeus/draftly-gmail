@@ -31,8 +31,9 @@ router.post('/oauth/revoke', authenticateJWT, revokeOAuth);
 
 /**
  * GET /api/gmail/emails
- * Fetch emails from Gmail
- * Query params: label, unread, limit
+ * Fetch one page of emails from Gmail
+ * Query params: q (Gmail search syntax), pageToken, limit, label, unread
+ * Response: { emails, nextPageToken }
  */
 router.get('/emails', authenticateJWT, fetchEmails);
 

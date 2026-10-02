@@ -25,6 +25,10 @@ export interface IDraft extends Document {
   sentAt?: Date;
   sentGmailMessageId?: string;
   gmailDraftId?: string;
+  /** Idempotency key of the send that claimed (or completed) this draft. */
+  sendIdempotencyKey?: string | null;
+  /** When the current send claim was taken; used to expire stranded claims. */
+  sendClaimedAt?: Date | null;
   isConsolidated?: boolean;
   auditTrail: IAuditTrailEntry[];
   createdAt: Date;
@@ -109,6 +113,14 @@ const draftSchema = new Schema<IDraft>(
     },
     gmailDraftId: {
       type: String,
+      default: null,
+    },
+    sendIdempotencyKey: {
+      type: String,
+      default: null,
+    },
+    sendClaimedAt: {
+      type: Date,
       default: null,
     },
     isConsolidated: {

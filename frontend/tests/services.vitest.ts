@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { of, throwError } from 'rxjs';
-import { HttpErrorResponse, HttpRequest } from '@angular/common/http';
+import { HttpErrorResponse, HttpHeaders, HttpRequest } from '@angular/common/http';
 import { AuthService } from '../src/app/services/auth.service';
 import { GmailService } from '../src/app/services/gmail.service';
 import { DraftService } from '../src/app/services/draft.service';
@@ -89,8 +89,11 @@ describe('frontend services', () => {
     };
     const service = new GmailService(http as any);
 
-    service.fetchEmails({ label: 'INBOX', unread: true, limit: 20 }).subscribe();
+    http.get.mockReturnValueOnce(of({ emails: [{ gmailMessageId: 'msg-1' }], nextPageToken: 'page-2' }));
+    let emails: any[] = [];
+    service.fetchEmails({ label: 'INBOX', unread: true, limit: 20 }).subscribe((result) => (emails = result));
     expect(http.get).toHaveBeenCalledWith('api/gmail/emails?label=INBOX&unread=true&limit=20');
+    expect(emails).toEqual([{ gmailMessageId: 'msg-1' }]);
 
     service.getEmailDetail('msg-1').subscribe();
     expect(http.get).toHaveBeenCalledWith('api/gmail/emails/msg-1');
@@ -137,7 +140,38 @@ describe('frontend services', () => {
     expect(http.post).toHaveBeenCalledWith('api/drafts/draft-1/reject', {});
 
     service.sendDraft('draft-1', 'key').subscribe();
-    expect(http.post).toHaveBeenCalledWith('api/drafts/draft-1/send', { idempotencyKey: 'key' });
+    expect(http.post).toHaveBeenCalledWith('api/drafts/draft-1/send', {}, {
+      headers: { 'Idempotency-Key': 'key' },
+    });
+  });
+
+  it('AuthInterceptor keeps the Idempotency-Key header when retrying a send after refresh', () => {
+    const auth = {
+      getAccessToken: vi.fn().mockReturnValueOnce('expired-token').mockReturnValue('refreshed-token'),
+      refreshAccessToken: vi.fn().mockReturnValue(of({ accessToken: 'refreshed-token', refreshToken: 'refresh-token' })),
+      logout: vi.fn(),
+    };
+    const interceptor = new AuthInterceptor(auth as any, { navigate: vi.fn() } as any);
+    const request = new HttpRequest('POST', '/api/drafts/draft-1/send', {}, {
+      headers: new HttpHeaders({ 'Idempotency-Key': 'send-key-1' }),
+    });
+    const seenKeys: (string | null)[] = [];
+    const next = {
+      handle: vi.fn()
+        .mockImplementationOnce((req: HttpRequest<any>) => {
+          seenKeys.push(req.headers.get('Idempotency-Key'));
+          return throwError(() => new HttpErrorResponse({ status: 401 }));
+        })
+        .mockImplementationOnce((req: HttpRequest<any>) => {
+          seenKeys.push(req.headers.get('Idempotency-Key'));
+          return of({ type: 4 });
+        }),
+    };
+
+    interceptor.intercept(request, next as any).subscribe();
+
+    expect(next.handle).toHaveBeenCalledTimes(2);
+    expect(seenKeys).toEqual(['send-key-1', 'send-key-1']);
   });
 
   it('AuthInterceptor adds a bearer token, refreshes once, and retries a 401 request', () => {

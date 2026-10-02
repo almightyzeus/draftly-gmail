@@ -179,6 +179,30 @@ describe('Integration workflows', () => {
     expect(crossUser.status).toBe(500);
   });
 
+  it('decodes Gmail search syntax from the URL and returns nextPageToken', async () => {
+    const { GmailService } = await import('../src/services/gmailService.js');
+    const fetchEmails = GmailService.fetchEmails as unknown as ReturnType<typeof vi.fn>;
+    fetchEmails.mockResolvedValueOnce({ emails: [], nextPageToken: 'page-2' });
+    const { user, token } = await registerUser();
+
+    const q = 'from:alice+news@example.com subject:"Q&A report" 100%';
+    const res = await request(app)
+      .get(`/api/gmail/emails?q=${encodeURIComponent(q)}&pageToken=page-1&limit=10&unread=true`)
+      .set('Authorization', `Bearer ${token}`);
+
+    expect(res.status).toBe(200);
+    expect(res.body).toEqual({ emails: [], nextPageToken: 'page-2' });
+    expect(fetchEmails).toHaveBeenCalledWith(user.id, {
+      q,
+      pageToken: 'page-1',
+      limit: 10,
+      label: 'INBOX',
+      unread: true,
+    });
+
+    expect((await request(app).get('/api/gmail/emails?q=test')).status).toBe(401);
+  });
+
   it('gets and updates preferences', async () => {
     const { token } = await registerUser();
 

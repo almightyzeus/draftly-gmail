@@ -271,6 +271,88 @@ describe('GmailController', () => {
     });
   });
 
+  describe('fetchEmails search and pagination', () => {
+    beforeEach(() => {
+      (GmailService.fetchEmails as unknown as Mock).mockResolvedValue({
+        emails: [{ id: 'email1' }],
+        nextPageToken: 'next-token',
+      });
+    });
+
+    it('forwards q, pageToken, limit, label and unread and returns nextPageToken', async () => {
+      mockReq.query = {
+        q: '  from:alice@example.com subject:"quarterly report"  ',
+        pageToken: '09876543210',
+        limit: '25',
+        label: 'Work/Projects',
+        unread: 'true',
+      };
+
+      await fetchEmails(mockReq, mockRes as Response);
+
+      expect(GmailService.fetchEmails).toHaveBeenCalledWith('user123', {
+        q: 'from:alice@example.com subject:"quarterly report"',
+        pageToken: '09876543210',
+        limit: 25,
+        label: 'Work/Projects',
+        unread: true,
+      });
+      expect(mockRes.json).toHaveBeenCalledWith({ emails: [{ id: 'email1' }], nextPageToken: 'next-token' });
+    });
+
+    it('omits a blank search and an absent pageToken', async () => {
+      mockReq.query = { q: '   ' };
+
+      await fetchEmails(mockReq, mockRes as Response);
+
+      const options = (GmailService.fetchEmails as unknown as Mock).mock.calls[0][1];
+      expect(options).toEqual({ label: 'INBOX', unread: false, limit: 20 });
+    });
+
+    it.each([
+      ['non-numeric limit', { limit: 'abc' }],
+      ['zero limit', { limit: '0' }],
+      ['oversized limit', { limit: '101' }],
+      ['fractional limit', { limit: '2.5' }],
+      ['invalid unread flag', { unread: 'yes' }],
+      ['repeated q', { q: ['a', 'b'] }],
+      ['over-long q', { q: 'x'.repeat(501) }],
+      ['malformed pageToken', { pageToken: 'bad token!' }],
+      ['over-long pageToken', { pageToken: 'a'.repeat(513) }],
+      ['label with a space', { label: 'INBOX is:unread' }],
+      ['label with a quote', { label: 'a"b' }],
+    ])('returns 400 for a %s without calling Gmail', async (_name, query) => {
+      mockReq.query = query;
+
+      await fetchEmails(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(GmailService.fetchEmails).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a service 400 (e.g. stale page token) as 400', async () => {
+      mockReq.query = { pageToken: 'stale' };
+      (GmailService.fetchEmails as unknown as Mock).mockRejectedValue(
+        new AppError('Invalid Gmail search query or page token', 400)
+      );
+
+      await fetchEmails(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Invalid Gmail search query or page token' });
+    });
+
+    it('hides unexpected errors behind a generic 500', async () => {
+      mockReq.query = {};
+      (GmailService.fetchEmails as unknown as Mock).mockRejectedValue(new Error('socket hang up'));
+
+      await fetchEmails(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(500);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Failed to process Gmail request' });
+    });
+  });
+
   describe('getEmail', () => {
     it('should get a single email successfully', async () => {
       mockReq.params = { gmailMessageId: 'msg123' };

@@ -1,6 +1,6 @@
 import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { Observable } from 'rxjs';
+import { Observable, map } from 'rxjs';
 
 @Injectable({
   providedIn: 'root',
@@ -35,7 +35,10 @@ export class GmailService {
       url += '?' + params.toString();
     }
 
-    return this.http.get<any[]>(url);
+    // The API returns one Gmail page: { emails, nextPageToken }.
+    return this.http
+      .get<{ emails: any[]; nextPageToken: string | null }>(url)
+      .pipe(map((page) => page.emails));
   }
 
   /**

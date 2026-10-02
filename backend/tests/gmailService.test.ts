@@ -113,8 +113,9 @@ describe('GmailService', () => {
       labels: ['INBOX'],
     });
 
-    const emails = await GmailService.fetchEmails(userId, { unread: true, limit: 1 });
+    const { emails, nextPageToken } = await GmailService.fetchEmails(userId, { unread: true, limit: 1 });
     expect(emails).toHaveLength(1);
+    expect(nextPageToken).toBeNull();
     expect(EmailMessage.findOneAndUpdate).toHaveBeenCalledWith(
       expect.any(Object),
       expect.objectContaining({
@@ -229,6 +230,122 @@ describe('GmailService', () => {
       { rfcMessageId: '<rfc-message@example.com>', references: '<older@example.com>' },
       { new: true }
     );
+  });
+
+  describe('search and pagination', () => {
+    const gmailMessage = (id: string) => ({
+      data: {
+        id,
+        threadId: `thread-${id}`,
+        snippet: 'hello',
+        labelIds: ['INBOX'],
+        payload: {
+          headers: [
+            { name: 'Subject', value: 'Quarterly report' },
+            { name: 'From', value: 'alice@example.com' },
+            { name: 'Message-ID', value: `<${id}@example.com>` },
+          ],
+          body: { data: Buffer.from('Body').toString('base64') },
+        },
+      },
+    });
+
+    let list: Mock;
+    let get: Mock;
+
+    beforeEach(() => {
+      list = vi.fn().mockResolvedValue({ data: { messages: [{ id: 'm1' }, { id: 'm2' }], nextPageToken: 'token-2' } });
+      get = vi.fn().mockImplementation(({ id }: { id: string }) => Promise.resolve(gmailMessage(id)));
+      mocks.gmail.mockReturnValue({ users: { messages: { list, get } } });
+      (EmailMessage.findOneAndUpdate as unknown as Mock).mockImplementation((_filter: any, update: any) =>
+        Promise.resolve({ _id: new Types.ObjectId(), ...update })
+      );
+    });
+
+    const listArgs = () => list.mock.calls[0][0];
+
+    it('default listing applies the inbox noise filters and no page token', async () => {
+      await GmailService.fetchEmails(userId, { label: 'INBOX', limit: 20 });
+
+      expect(listArgs()).toEqual({ userId: 'me', q: expect.stringMatching(/^label:INBOX /), maxResults: 20 });
+      expect(listArgs().q).toContain('-category:promotions');
+      expect(listArgs()).not.toHaveProperty('pageToken');
+    });
+
+    it.each([
+      ['sender', 'from:alice@example.com'],
+      ['subject', 'subject:"quarterly report"'],
+      ['plain text', 'budget approval'],
+      ['combined Gmail syntax', 'from:alice has:attachment after:2024/01/01 OR bob'],
+    ])('forwards a %s search verbatim after the structural filters', async (_label, q) => {
+      await GmailService.fetchEmails(userId, { label: 'INBOX', q });
+
+      expect(listArgs().q).toBe(`label:INBOX ${q}`);
+    });
+
+    it('keeps label and unread filters ahead of an unbalanced user quote', async () => {
+      await GmailService.fetchEmails(userId, { label: 'SENT', unread: true, q: '"unterminated' });
+
+      expect(listArgs().q).toBe('label:SENT is:unread "unterminated');
+    });
+
+    it('forwards pageToken and limit and returns nextPageToken', async () => {
+      const result = await GmailService.fetchEmails(userId, { label: 'INBOX', pageToken: 'token-1', limit: 2 });
+
+      expect(listArgs()).toMatchObject({ pageToken: 'token-1', maxResults: 2 });
+      expect(result.nextPageToken).toBe('token-2');
+      expect(result.emails.map((e) => e.gmailMessageId)).toEqual(['m1', 'm2']);
+    });
+
+    it('caches each listed message in MongoDB keyed by user and Gmail id', async () => {
+      await GmailService.fetchEmails(userId, { label: 'INBOX', q: 'from:alice' });
+
+      expect(EmailMessage.findOneAndUpdate).toHaveBeenCalledTimes(2);
+      expect(EmailMessage.findOneAndUpdate).toHaveBeenCalledWith(
+        { userId: new Types.ObjectId(userId), gmailMessageId: 'm1' },
+        expect.objectContaining({ rfcMessageId: '<m1@example.com>', subject: 'Quarterly report' }),
+        { upsert: true, new: true }
+      );
+    });
+
+    it('returns an empty page with the token Gmail provides', async () => {
+      list.mockResolvedValue({ data: { resultSizeEstimate: 0 } });
+
+      await expect(GmailService.fetchEmails(userId, { q: 'nothing-matches' })).resolves.toEqual({
+        emails: [],
+        nextPageToken: null,
+      });
+      expect(get).not.toHaveBeenCalled();
+    });
+
+    it('skips a message that fails to load without failing the page', async () => {
+      get.mockImplementation(({ id }: { id: string }) =>
+        id === 'm1' ? Promise.reject(new Error('gone')) : Promise.resolve(gmailMessage(id))
+      );
+
+      const result = await GmailService.fetchEmails(userId, {});
+
+      expect(result.emails.map((e) => e.gmailMessageId)).toEqual(['m2']);
+      expect(result.nextPageToken).toBe('token-2');
+    });
+
+    it('maps a Gmail 400 (bad query or page token) to a 400 error', async () => {
+      list.mockRejectedValue(Object.assign(new Error('Invalid pageToken'), { code: 400 }));
+
+      await expect(GmailService.fetchEmails(userId, { pageToken: 'stale' })).rejects.toMatchObject({
+        statusCode: 400,
+        message: 'Invalid Gmail search query or page token',
+      });
+    });
+
+    it('maps a Gmail 429 to a 429 error and passes other failures through', async () => {
+      list.mockRejectedValueOnce(Object.assign(new Error('Rate limited'), { response: { status: 429 } }));
+      await expect(GmailService.fetchEmails(userId, {})).rejects.toMatchObject({ statusCode: 429 });
+
+      const boom = Object.assign(new Error('Backend error'), { code: 500 });
+      list.mockRejectedValueOnce(boom);
+      await expect(GmailService.fetchEmails(userId, {})).rejects.toBe(boom);
+    });
   });
 
   describe('Token Refresh Persistence', () => {

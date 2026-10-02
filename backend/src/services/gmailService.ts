@@ -5,6 +5,7 @@ import { GmailAccount } from '../models/GmailAccount.js';
 import { EmailMessage } from '../models/EmailMessage.js';
 import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
+import { AppError, ValidationError } from '../utils/errors.js';
 
 /**
  * GmailService - Handles Gmail email fetching and sending
@@ -201,7 +202,9 @@ export class GmailService {
   }
 
   /**
-   * Fetch emails from Gmail and store in database
+   * Fetch one page of emails from Gmail and cache them in the database.
+   * Gmail stays the source of truth: search uses Gmail query syntax and
+   * pagination uses Gmail's opaque nextPageToken.
    */
   static async fetchEmails(
     userId: string,
@@ -209,8 +212,10 @@ export class GmailService {
       label?: string;
       unread?: boolean;
       limit?: number;
+      q?: string;
+      pageToken?: string;
     }
-  ): Promise<any[]> {
+  ): Promise<{ emails: any[]; nextPageToken: string | null }> {
     try {
       const gmail = await this.getGmailClient(userId);
       const userObjectId = new Types.ObjectId(userId);
@@ -222,35 +227,25 @@ export class GmailService {
 
       const gmailEmail = account.gmailEmail;
 
-            // Build Gmail API query
-      const queryParts = [
-        '-category:promotions',
-        '-category:social',
-        '-category:purchases',
-        '-from:(noreply OR "no-reply" OR "do-not-reply" OR donotreply OR "no_reply" OR "no.reply" OR "no response" OR "do not reply")',
-        '-subject:("do not reply" OR "no reply" OR "no-response")',
-      ];
+      const query = this.buildListQuery(options);
 
-      if (options?.label) {
-        queryParts.push(`label:${options.label}`);
+      let listResponse;
+      try {
+        listResponse = await gmail.users.messages.list({
+          userId: 'me',
+          q: query,
+          maxResults: options?.limit || 20,
+          ...(options?.pageToken && { pageToken: options.pageToken }),
+        });
+      } catch (error) {
+        throw this.toListError(error);
       }
-      if (options?.unread) {
-        queryParts.push('is:unread');
-      }
-
-      const query = queryParts.join(' ').trim();
-
-      const listResponse = await gmail.users.messages.list({
-        userId: 'me',
-        q: query,
-        maxResults: options?.limit || 20,
-      });
-
 
       const messageIds = listResponse.data.messages || [];
+      const nextPageToken = listResponse.data.nextPageToken || null;
 
       if (messageIds.length === 0) {
-        return [];
+        return { emails: [], nextPageToken };
       }
 
       // Fetch full message details and store in DB
@@ -327,7 +322,7 @@ export class GmailService {
       logger.info(
         `Fetched ${emails.length} emails for user ${userId}`
       );
-      return emails;
+      return { emails, nextPageToken };
     } catch (error) {
       logger.error(
         error instanceof Error ? error : new Error(String(error)),
@@ -335,6 +330,51 @@ export class GmailService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Build the Gmail `q` string for a listing.
+   * Structural filters come first so an unbalanced quote in the user's search
+   * cannot swallow them. The default noise filters only apply to the plain
+   * inbox view; an explicit search behaves like Gmail search.
+   */
+  private static buildListQuery(options?: { label?: string; unread?: boolean; q?: string }): string {
+    const queryParts: string[] = [];
+
+    if (options?.label) {
+      queryParts.push(`label:${options.label}`);
+    }
+    if (options?.unread) {
+      queryParts.push('is:unread');
+    }
+
+    if (options?.q) {
+      queryParts.push(options.q);
+    } else {
+      queryParts.push(
+        '-category:promotions',
+        '-category:social',
+        '-category:purchases',
+        '-from:(noreply OR "no-reply" OR "do-not-reply" OR donotreply OR "no_reply" OR "no.reply" OR "no response" OR "do not reply")',
+        '-subject:("do not reply" OR "no reply" OR "no-response")'
+      );
+    }
+
+    return queryParts.join(' ').trim();
+  }
+
+  /**
+   * Map Gmail list failures that the caller can act on to HTTP errors.
+   */
+  private static toListError(error: any): unknown {
+    const status = Number(error?.response?.status ?? error?.status ?? error?.code);
+    if (status === 400) {
+      return new ValidationError('Invalid Gmail search query or page token');
+    }
+    if (status === 429) {
+      return new AppError('Gmail rate limit exceeded. Please try again shortly.', 429);
+    }
+    return error;
   }
 
   /**

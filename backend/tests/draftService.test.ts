@@ -12,6 +12,8 @@ vi.mock('../src/models/Draft.js', () => {
   Object.assign(DraftMock, {
     findOne: vi.fn(),
     find: vi.fn(),
+    findOneAndUpdate: vi.fn(),
+    updateOne: vi.fn(),
   });
   return { Draft: DraftMock };
 });
@@ -181,6 +183,9 @@ describe('DraftService', () => {
   it('sends approved Gmail drafts and stores outbound email', async () => {
     const draft = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' });
     (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (Draft.findOneAndUpdate as unknown as Mock)
+      .mockResolvedValueOnce({ ...draft, sendIdempotencyKey: 'key-1' })
+      .mockResolvedValueOnce({ ...draft, status: 'SENT', sentGmailMessageId: 'sent-1' });
     (GmailService.sendDraft as unknown as Mock).mockResolvedValue('sent-1');
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
     (EmailMessage.create as unknown as Mock).mockResolvedValue({});
@@ -188,14 +193,56 @@ describe('DraftService', () => {
     const result = await DraftService.sendDraft(userId, draftId, 'key-1');
     expect(result.status).toBe('SENT');
     expect(result.sentGmailMessageId).toBe('sent-1');
+    expect(GmailService.sendDraft).toHaveBeenCalledWith(userId, 'gmail-draft-1', 'thread-1');
+    expect((Draft.findOneAndUpdate as unknown as Mock).mock.calls[0][0]).toMatchObject({
+      userId: new Types.ObjectId(userId),
+      status: 'APPROVED',
+    });
     expect(EmailMessage.create).toHaveBeenCalledWith(expect.objectContaining({ direction: 'OUTBOUND' }));
   });
 
   it('blocks send for non-approved or missing Gmail draft id', async () => {
-    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'PENDING' }));
+    const pending = buildDraft({ status: 'PENDING' });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(pending);
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue(null);
     await expect(DraftService.sendDraft(userId, draftId, 'key')).rejects.toThrow('Must be APPROVED');
 
     (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'APPROVED', gmailDraftId: null }));
     await expect(DraftService.sendDraft(userId, draftId, 'key')).rejects.toThrow('Gmail draft ID not found');
+    expect(GmailService.sendDraft).not.toHaveBeenCalled();
+  });
+
+  it('returns 404 for a malformed or foreign draft id without calling Gmail', async () => {
+    await expect(DraftService.sendDraft(userId, 'not-an-id', 'key')).rejects.toMatchObject({ statusCode: 404 });
+
+    (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+    await expect(DraftService.sendDraft(userId, draftId, 'key')).rejects.toMatchObject({ statusCode: 404 });
+    expect(GmailService.sendDraft).not.toHaveBeenCalled();
+  });
+
+  it('releases the send claim when Gmail rejects the send', async () => {
+    const draft = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce({ ...draft, sendIdempotencyKey: 'key-1' });
+    (GmailService.sendDraft as unknown as Mock).mockRejectedValue(new Error('Gmail down'));
+
+    await expect(DraftService.sendDraft(userId, draftId, 'key-1')).rejects.toThrow('Gmail down');
+    expect(Draft.updateOne).toHaveBeenCalledWith(
+      expect.objectContaining({ sendIdempotencyKey: 'key-1', status: 'APPROVED' }),
+      { $set: { sendIdempotencyKey: null, sendClaimedAt: null } }
+    );
+  });
+
+  it('still reports success when caching the outbound message fails', async () => {
+    const draft = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (Draft.findOneAndUpdate as unknown as Mock)
+      .mockResolvedValueOnce({ ...draft, sendIdempotencyKey: 'key-1' })
+      .mockResolvedValueOnce({ ...draft, status: 'SENT', sentGmailMessageId: 'sent-1' });
+    (GmailService.sendDraft as unknown as Mock).mockResolvedValue('sent-1');
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (EmailMessage.create as unknown as Mock).mockRejectedValue(new Error('duplicate key'));
+
+    await expect(DraftService.sendDraft(userId, draftId, 'key-1')).resolves.toMatchObject({ status: 'SENT' });
   });
 });

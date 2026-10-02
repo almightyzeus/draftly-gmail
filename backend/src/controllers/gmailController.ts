@@ -65,23 +65,93 @@ export const revokeOAuth = async (req: any, res: Response) => {
   }
 };
 
+const MAX_SEARCH_QUERY_LENGTH = 500;
+const MAX_PAGE_TOKEN_LENGTH = 512;
+const MAX_LIST_LIMIT = 100;
+const DEFAULT_LIST_LIMIT = 20;
+// Gmail page tokens are opaque; only reject values that cannot be a token.
+const PAGE_TOKEN_PATTERN = /^[A-Za-z0-9_\-.~+/=]+$/;
+// Whitespace, quotes and brackets would change the meaning of `label:<value>`.
+const LABEL_PATTERN = /^[^\s"'(){}]{1,100}$/;
+
+type ParsedListOptions =
+  | { error: string }
+  | {
+      options: {
+        label: string;
+        unread: boolean;
+        limit: number;
+        q?: string;
+        pageToken?: string;
+      };
+    };
+
 /**
- * Fetch emails from Gmail
- * Query params: label, unread, limit
+ * Validate the listing query string. Repeated params (arrays) are rejected.
+ */
+function parseListOptions(query: Record<string, unknown>): ParsedListOptions {
+  const { label = 'INBOX', unread, limit, q, pageToken } = query;
+
+  if (typeof label !== 'string' || !LABEL_PATTERN.test(label)) {
+    return { error: 'label must be a single Gmail label name without spaces, quotes or brackets' };
+  }
+
+  if (unread !== undefined && unread !== 'true' && unread !== 'false') {
+    return { error: 'unread must be "true" or "false"' };
+  }
+
+  let limitNum = DEFAULT_LIST_LIMIT;
+  if (limit !== undefined) {
+    limitNum = typeof limit === 'string' && /^\d+$/.test(limit) ? Number(limit) : NaN;
+    if (!Number.isInteger(limitNum) || limitNum < 1 || limitNum > MAX_LIST_LIMIT) {
+      return { error: `limit must be an integer between 1 and ${MAX_LIST_LIMIT}` };
+    }
+  }
+
+  let search: string | undefined;
+  if (q !== undefined) {
+    if (typeof q !== 'string' || q.length > MAX_SEARCH_QUERY_LENGTH) {
+      return { error: `q must be a single search string of at most ${MAX_SEARCH_QUERY_LENGTH} characters` };
+    }
+    search = q.trim() || undefined;
+  }
+
+  if (
+    pageToken !== undefined &&
+    (typeof pageToken !== 'string' ||
+      pageToken.length > MAX_PAGE_TOKEN_LENGTH ||
+      !PAGE_TOKEN_PATTERN.test(pageToken))
+  ) {
+    return { error: 'pageToken is invalid' };
+  }
+
+  return {
+    options: {
+      label,
+      unread: unread === 'true',
+      limit: limitNum,
+      ...(search && { q: search }),
+      ...(pageToken && { pageToken: pageToken as string }),
+    },
+  };
+}
+
+/**
+ * Fetch one page of emails from Gmail
+ * Query params: q (Gmail search syntax), pageToken, limit, label, unread
+ * Response: { emails, nextPageToken }
  */
 export const fetchEmails = async (req: any, res: Response) => {
   try {
     const userId = req.userId;
-    const { label = 'INBOX', unread, limit = 20 } = req.query;
+    const parsed = parseListOptions(req.query || {});
 
-    const options = {
-      label: label as string,
-      unread: unread === 'true',
-      limit: parseInt(limit as string) || 20,
-    };
+    if ('error' in parsed) {
+      return res.status(400).json({ error: parsed.error });
+    }
 
-    const emails = await GmailService.fetchEmails(userId, options);
-    res.json(emails);
+    const result = await GmailService.fetchEmails(userId, parsed.options);
+    res.json(result);
   } catch (error) {
     handleError(error, res);
   }

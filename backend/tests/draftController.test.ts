@@ -233,5 +233,43 @@ describe('DraftController', () => {
         error: 'idempotencyKey is required',
       });
     });
+
+    it('accepts the Idempotency-Key header and prefers it over the body key', async () => {
+      mockReq.params = { id: 'draft123' };
+      mockReq.headers = { 'idempotency-key': 'header-key' };
+      mockReq.body = { idempotencyKey: 'body-key' };
+      (DraftService.sendDraft as unknown as Mock).mockResolvedValue({ id: 'draft123' });
+
+      await sendDraft(mockReq, mockRes as Response);
+
+      expect(DraftService.sendDraft).toHaveBeenCalledWith('user123', 'draft123', 'header-key');
+    });
+
+    it.each([
+      ['an empty string', '   '],
+      ['a non-string value', 123],
+      ['an over-long value', 'k'.repeat(256)],
+    ])('returns 400 when the idempotency key is %s', async (_label, key) => {
+      mockReq.params = { id: 'draft123' };
+      mockReq.body = { idempotencyKey: key };
+
+      await sendDraft(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(DraftService.sendDraft).not.toHaveBeenCalled();
+    });
+
+    it('maps service AppErrors (e.g. 409 already sent) to their status code', async () => {
+      mockReq.params = { id: 'draft123' };
+      mockReq.body = { idempotencyKey: 'key123' };
+      (DraftService.sendDraft as unknown as Mock).mockRejectedValue(
+        new AppError('Draft has already been sent', 409)
+      );
+
+      await sendDraft(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(409);
+      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Draft has already been sent' });
+    });
   });
 });

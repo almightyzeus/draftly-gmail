@@ -153,10 +153,55 @@ describe('frontend page classes', () => {
 
     component.draft = { ...(component.draft as any), status: 'APPROVED' };
     component.sendDraft();
-    expect(draft.sendDraft).toHaveBeenCalledWith('draft-1', expect.stringContaining('draft-1-'));
+    expect(draft.sendDraft).toHaveBeenCalledWith('draft-1', expect.any(String));
 
     component.draft = { ...(component.draft as any), status: 'PENDING' };
     component.rejectDraft();
     expect(draft.rejectDraft).toHaveBeenCalledWith('draft-1');
+    // Restore before the test ends so fake timers do not stall the next test's hooks.
+    vi.useRealTimers();
+  });
+
+  it('DraftDetailComponent reuses one idempotency key across send retries until success', () => {
+    const draft = {
+      getDraftDetail: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Body', status: 'APPROVED' })),
+      sendDraft: vi.fn()
+        .mockReturnValueOnce(throwError(() => ({ error: { error: 'Gmail unavailable' } })))
+        .mockReturnValueOnce(throwError(() => ({ error: { error: 'A send for this draft is already in progress' } })))
+        .mockReturnValue(of({ _id: 'draft-1', status: 'SENT', sentGmailMessageId: 'sent-1' })),
+    };
+    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, {} as any);
+    component.ngOnInit();
+
+    component.sendDraft();
+    expect(component.error).toContain('Gmail unavailable');
+    expect(component.isSending).toBe(false);
+    component.sendDraft();
+    component.sendDraft();
+    expect(component.draft?.status).toBe('SENT');
+
+    const keys = draft.sendDraft.mock.calls.map((call: any[]) => call[1]);
+    expect(keys).toHaveLength(3);
+    expect(new Set(keys).size).toBe(1);
+    expect(keys[0]).toEqual(expect.any(String));
+
+    // A brand-new send attempt after success gets a fresh key.
+    component.draft = { ...(component.draft as any), status: 'APPROVED' };
+    component.sendDraft();
+    expect(draft.sendDraft.mock.calls[3][1]).not.toBe(keys[0]);
+  });
+
+  it('DraftDetailComponent does not send when the user cancels confirmation', () => {
+    (globalThis as any).confirm = vi.fn().mockReturnValue(false);
+    const draft = {
+      getDraftDetail: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Body', status: 'APPROVED' })),
+      sendDraft: vi.fn(),
+    };
+    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, {} as any);
+    component.ngOnInit();
+
+    component.sendDraft();
+
+    expect(draft.sendDraft).not.toHaveBeenCalled();
   });
 });
