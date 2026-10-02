@@ -58,18 +58,3 @@ export function decrypt(encryptedData: EncryptedData): string {
     throw new Error('Failed to decrypt data');
   }
 }
-
-/**
- * Encrypt a string and return as JSON string
- */
-export function encryptToJson(plaintext: string): string {
-  return JSON.stringify(encrypt(plaintext));
-}
-
-/**
- * Decrypt from JSON string
- */
-export function decryptFromJson(encryptedJson: string): string {
-  const data: EncryptedData = JSON.parse(encryptedJson);
-  return decrypt(data);
-}

@@ -25,6 +25,7 @@ vi.mock('../src/services/gmailService.js', async () => {
       createDraft: vi.fn().mockResolvedValue('gmail-draft-1'),
       updateDraft: vi.fn().mockResolvedValue(undefined),
       sendDraft: vi.fn().mockResolvedValue('sent-message-1'),
+      deleteDraft: vi.fn().mockResolvedValue(undefined),
       getReplyMetadata: vi.fn().mockResolvedValue({
         inReplyTo: '<message-1@example.com>',
         references: '<message-1@example.com>',
@@ -176,7 +177,8 @@ describe('Integration workflows', () => {
     const crossUser = await request(app)
       .get(`/api/drafts/${generate.body._id}`)
       .set('Authorization', `Bearer ${user2.token}`);
-    expect(crossUser.status).toBe(500);
+    expect(crossUser.status).toBe(404);
+    expect(crossUser.body).toEqual({ error: 'Draft not found' });
   });
 
   it('decodes Gmail search syntax from the URL and returns nextPageToken', async () => {
@@ -201,6 +203,56 @@ describe('Integration workflows', () => {
     });
 
     expect((await request(app).get('/api/gmail/emails?q=test')).status).toBe(401);
+  });
+
+  it('returns consistent 4xx statuses for missing drafts, invalid transitions and bad input', async () => {
+    const owner = await registerUser('owner@example.com');
+    const other = await registerUser('other@example.com');
+    await seedEmail(owner.user.id);
+    const auth = (token: string) => ({ Authorization: `Bearer ${token}` });
+
+    const generated = await request(app)
+      .post('/api/drafts/generate')
+      .set(auth(owner.token))
+      .send({ gmailMessageId: 'msg-1' });
+    const draftId = generated.body._id;
+
+    // Missing, malformed or another user's draft: 404 on every route.
+    for (const [method, path] of [
+      ['get', `/api/drafts/${draftId}`],
+      ['post', `/api/drafts/${draftId}/approve`],
+      ['post', `/api/drafts/${draftId}/reject`],
+      ['put', `/api/drafts/${draftId}`],
+    ] as const) {
+      const res = await (request(app) as any)[method](path).set(auth(other.token)).send({ draftBody: 'x' });
+      expect(res.status, `${method} ${path} as another user`).toBe(404);
+    }
+    expect((await request(app).get('/api/drafts/not-an-id').set(auth(owner.token))).status).toBe(404);
+
+    // Invalid transitions: 409.
+    expect((await request(app).post(`/api/drafts/${draftId}/approve`).set(auth(owner.token))).status).toBe(200);
+    const approveAgain = await request(app).post(`/api/drafts/${draftId}/approve`).set(auth(owner.token));
+    expect(approveAgain.status).toBe(409);
+    expect(approveAgain.body.error).toBe('Cannot approve draft with status: APPROVED');
+
+    // Rejecting an APPROVED draft withdraws it (the UI offers this button).
+    const withdraw = await request(app).post(`/api/drafts/${draftId}/reject`).set(auth(owner.token));
+    expect(withdraw.status).toBe(200);
+    expect(withdraw.body.status).toBe('REJECTED');
+    expect((await request(app).post(`/api/drafts/${draftId}/reject`).set(auth(owner.token))).status).toBe(409);
+
+    // Query operators in JSON bodies are rejected, not executed.
+    const operatorId = await request(app)
+      .post('/api/drafts/generate')
+      .set(auth(owner.token))
+      .send({ gmailMessageId: { $ne: null } });
+    expect(operatorId.status).toBe(400);
+    const operatorLogin = await request(app)
+      .post('/api/auth/login')
+      .send({ email: { $ne: null }, password: { $ne: null } });
+    expect(operatorLogin.status).toBe(400);
+    expect((await request(app).put(`/api/drafts/${draftId}`).set(auth(owner.token)).send({ draftBody: { a: 1 } })).status).toBe(400);
+    expect((await request(app).get('/api/drafts?status=bogus').set(auth(owner.token))).status).toBe(400);
   });
 
   it('gets and updates preferences', async () => {

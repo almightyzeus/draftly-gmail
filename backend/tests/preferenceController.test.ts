@@ -151,24 +151,34 @@ describe('PreferenceController', () => {
 
     it('should update learningEmailCount when provided', async () => {
       mockReq.body = {
-        learningEmailCount: 25,
+        learningEmailCount: 10,
       };
 
-      const mockUpdatedPreferences = {
-        _id: 'pref123',
-        userId: 'user123',
+      (PreferenceService.updateUserPreferences as unknown as Mock).mockResolvedValue({
         defaultTone: 'formal',
         signature: 'Regards',
-        learningEmailCount: 25,
-      };
-
-      (PreferenceService.updateUserPreferences as unknown as Mock).mockResolvedValue(mockUpdatedPreferences);
+        learningEmailCount: 10,
+      });
 
       await updateUserPreferences(mockReq, mockRes as Response);
 
       expect(PreferenceService.updateUserPreferences).toHaveBeenCalledWith('user123', {
-        learningEmailCount: 25,
+        learningEmailCount: 10,
       });
+    });
+
+    it.each([
+      ['an out-of-range learningEmailCount', { learningEmailCount: 25 }],
+      ['a non-integer learningEmailCount', { learningEmailCount: '5' }],
+      ['a non-string signature', { signature: 42 }],
+      ['an over-long signature', { signature: 'x'.repeat(1001) }],
+    ])('returns 400 for %s without saving', async (_label, body) => {
+      mockReq.body = body;
+
+      await updateUserPreferences(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(PreferenceService.updateUserPreferences).not.toHaveBeenCalled();
     });
 
     it('should not include signature if not a string', async () => {

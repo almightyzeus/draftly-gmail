@@ -209,6 +209,10 @@ export class AuthService {
     email: string,
     password: string
   ): void {
+    if ([name, email, password].some((value) => value != null && typeof value !== 'string')) {
+      throw new ValidationError('Name, email and password must be strings');
+    }
+
     if (!name?.trim()) {
       throw new ValidationError('Name is required');
     }
@@ -230,6 +234,10 @@ export class AuthService {
    * Validate login input
    */
   private static validateLoginInputs(email: string, password: string): void {
+    if ([email, password].some((value) => value != null && typeof value !== 'string')) {
+      throw new ValidationError('Email and password must be strings');
+    }
+
     if (!email?.trim()) {
       throw new ValidationError('Email is required');
     }

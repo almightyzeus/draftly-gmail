@@ -113,6 +113,24 @@ describe('Session and OAuth hardening (HTTP)', () => {
   });
 });
 
+describe('Request body errors', () => {
+  it('reports malformed JSON as 400 and oversized bodies as 413, without parser details', async () => {
+    const malformed = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .send('{broken');
+    expect(malformed.status).toBe(400);
+    expect(malformed.body).toEqual({ error: 'Malformed JSON body' });
+
+    const oversized = await request(app)
+      .post('/api/auth/login')
+      .set('Content-Type', 'application/json')
+      .send(JSON.stringify({ email: 'a@b.c', password: 'x'.repeat(200_000) }));
+    expect(oversized.status).toBe(413);
+    expect(oversized.body).toEqual({ error: 'Request body too large' });
+  });
+});
+
 describe('redactUrl', () => {
   it.each([
     ['/api/gmail/oauth/callback?code=abc&state=def', '/api/gmail/oauth/callback?code=%5Bredacted%5D&state=%5Bredacted%5D'],

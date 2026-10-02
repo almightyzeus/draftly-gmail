@@ -1,4 +1,5 @@
 import { Router } from 'express';
+import rateLimit from 'express-rate-limit';
 import {
   generateDraft,
   getAllDrafts,
@@ -8,9 +9,22 @@ import {
   rejectDraft,
   sendDraft,
 } from '../controllers/draftController.js';
-import { authenticateJWT } from '../middleware/auth.js';
+import { authenticateJWT, AuthRequest } from '../middleware/auth.js';
+import { env } from '../config/env.js';
 
 const router = Router();
+
+/**
+ * Each generation is a paid OpenAI call: cap it per user (not per IP), so one
+ * account cannot run up cost or exhaust the API quota.
+ */
+const generateLimiter = rateLimit({
+  windowMs: 60 * 1000,
+  max: 10,
+  keyGenerator: (req) => (req as AuthRequest).userId ?? 'anonymous',
+  skip: () => env.nodeEnv === 'test',
+  message: { error: 'Too many draft generations. Please wait a minute and try again.' },
+});
 
 /**
  * POST /api/drafts/generate
@@ -18,7 +32,7 @@ const router = Router();
  * Either gmailMessageId or threadId can be provided
  * If threadId is provided, will consolidate multiple unread emails
  */
-router.post('/generate', authenticateJWT, generateDraft);
+router.post('/generate', authenticateJWT, generateLimiter, generateDraft);
 
 /**
  * GET /api/drafts

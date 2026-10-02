@@ -1,7 +1,9 @@
 import { Response } from 'express';
 import { PreferenceService } from '../services/preferenceService.js';
-import { AppError } from '../utils/errors.js';
+import { sendError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+
+const MAX_SIGNATURE_LENGTH = 1_000;
 
 /**
  * Get user preferences
@@ -32,6 +34,15 @@ export const updateUserPreferences = async (req: any, res: Response) => {
     if (defaultTone && !['formal', 'concise', 'friendly'].includes(defaultTone)) {
       return res.status(400).json({ error: 'defaultTone must be formal, concise, or friendly' });
     }
+    if (signature != null && (typeof signature !== 'string' || signature.length > MAX_SIGNATURE_LENGTH)) {
+      return res.status(400).json({ error: `signature must be a string of at most ${MAX_SIGNATURE_LENGTH} characters` });
+    }
+    if (
+      learningEmailCount !== undefined &&
+      (!Number.isInteger(learningEmailCount) || learningEmailCount < 1 || learningEmailCount > 20)
+    ) {
+      return res.status(400).json({ error: 'learningEmailCount must be an integer between 1 and 20' });
+    }
 
     const preferences = await PreferenceService.updateUserPreferences(userId, {
       ...(defaultTone && { defaultTone }),
@@ -49,14 +60,6 @@ export const updateUserPreferences = async (req: any, res: Response) => {
   }
 };
 
-/**
- * Generic error handler for preference controller
- */
-function handleError(error: any, res: Response): void {
-  if (error instanceof AppError) {
-    res.status(error.statusCode).json({ error: error.message });
-  } else {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'Preference controller error');
-    res.status(500).json({ error: 'Failed to process preferences' });
-  }
+function handleError(error: unknown, res: Response): void {
+  sendError(res, error, 'Failed to process preferences', (err, message) => logger.error(err, message));
 }

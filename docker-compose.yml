@@ -26,6 +26,8 @@ services:
     env_file:
       - ./backend/.env.docker
     environment:
+      # Production mode: no stack traces in error responses, JSON logs.
+      NODE_ENV: production
       # nginx (frontend container) is the single proxy hop in front of the API.
       TRUST_PROXY: "1"
     depends_on:

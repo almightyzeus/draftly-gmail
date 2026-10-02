@@ -89,6 +89,18 @@ app.use((err: any, req: Request, res: Response, next: NextFunction) => {
     return res.status(err.statusCode).json({ error: err.message });
   }
 
+  // Client errors raised by Express middleware (malformed JSON -> 400,
+  // body too large -> 413) are reported as such, with a fixed message.
+  const clientStatus = Number(err?.status ?? err?.statusCode);
+  if (err?.expose && clientStatus >= 400 && clientStatus < 500) {
+    logger.warn({ path: req.path, status: clientStatus, type: err?.type }, 'Rejected client request');
+    const message =
+      clientStatus === 413 ? 'Request body too large' :
+      err?.type === 'entity.parse.failed' ? 'Malformed JSON body' :
+      'Bad request';
+    return res.status(clientStatus).json({ error: message });
+  }
+
   logger.error({ error: err, path: req.path }, 'Unhandled error');
 
   const status = 500;

@@ -35,6 +35,7 @@ vi.mock('../src/services/gmailService.js', () => ({
     createDraft: vi.fn(),
     updateDraft: vi.fn(),
     sendDraft: vi.fn(),
+    deleteDraft: vi.fn(),
     getReplyMetadata: vi.fn(),
   },
 }));
@@ -224,11 +225,79 @@ describe('DraftService', () => {
     await expect(DraftService.approveDraft(userId, draftId)).rejects.toThrow();
   });
 
-  it('rejects pending drafts', async () => {
+  it('rejects pending drafts with a conditional write', async () => {
     const draft = buildDraft();
     (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce({ ...draft, status: 'REJECTED' });
+
     const result = await DraftService.rejectDraft(userId, draftId);
+
     expect(result.status).toBe('REJECTED');
+    expect(Draft.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'PENDING', sendIdempotencyKey: null }),
+      expect.objectContaining({ $set: expect.objectContaining({ status: 'REJECTED' }) }),
+      { returnDocument: 'after' }
+    );
+    expect(GmailService.deleteDraft).not.toHaveBeenCalled();
+  });
+
+  it('withdraws an APPROVED draft and removes its Gmail draft (best effort)', async () => {
+    const draft = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue({ ...draft, status: 'REJECTED' });
+
+    await expect(DraftService.rejectDraft(userId, draftId)).resolves.toMatchObject({ status: 'REJECTED' });
+    expect(GmailService.deleteDraft).toHaveBeenCalledWith(userId, 'gmail-draft-1');
+
+    (GmailService.deleteDraft as unknown as Mock).mockRejectedValueOnce(new Error('Gmail 500'));
+    await expect(DraftService.rejectDraft(userId, draftId)).resolves.toMatchObject({ status: 'REJECTED' });
+  });
+
+  it.each([
+    ['SENT', {}],
+    ['REJECTED', {}],
+  ])('refuses to reject a %s draft (409)', async (status, extra) => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status, ...extra }));
+
+    await expect(DraftService.rejectDraft(userId, draftId)).rejects.toMatchObject({ statusCode: 409 });
+    expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('refuses to reject a draft whose send is in progress (409)', async () => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'APPROVED', sendIdempotencyKey: 'key-1' }));
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce(null);
+
+    await expect(DraftService.rejectDraft(userId, draftId)).rejects.toMatchObject({ statusCode: 409 });
+    expect(GmailService.deleteDraft).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['getDraftById', () => DraftService.getDraftById(userId, draftId)],
+    ['updateDraft', () => DraftService.updateDraft(userId, draftId, 'x')],
+    ['approveDraft', () => DraftService.approveDraft(userId, draftId)],
+    ['rejectDraft', () => DraftService.rejectDraft(userId, draftId)],
+  ])('%s returns 404 for a missing or other user\'s draft', async (_name, call) => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+    await expect(call()).rejects.toMatchObject({ statusCode: 404, message: 'Draft not found' });
+  });
+
+  it.each([
+    ['getDraftById', () => DraftService.getDraftById(userId, 'not-an-id')],
+    ['updateDraft', () => DraftService.updateDraft(userId, 'not-an-id', 'x')],
+    ['approveDraft', () => DraftService.approveDraft(userId, 'not-an-id')],
+    ['rejectDraft', () => DraftService.rejectDraft(userId, 'not-an-id')],
+  ])('%s returns 404 (not 500) for a malformed draft id', async (_name, call) => {
+    await expect(call()).rejects.toMatchObject({ statusCode: 404 });
+    expect(Draft.findOne).not.toHaveBeenCalled();
+  });
+
+  it('refuses to approve a non-PENDING draft with 409', async () => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'APPROVED' }));
+    await expect(DraftService.approveDraft(userId, draftId)).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Cannot approve draft with status: APPROVED',
+    });
+    expect(GmailService.createDraft).not.toHaveBeenCalled();
   });
 
   it('sends approved Gmail drafts and stores outbound email', async () => {

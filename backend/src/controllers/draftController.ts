@@ -1,8 +1,13 @@
 import { Response } from 'express';
 import { DraftService } from '../services/draftService.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { AppError } from '../utils/errors.js';
+import { sendError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
+
+const MAX_ID_LENGTH = 256;
+const MAX_CUSTOM_CONTEXT_LENGTH = 2_000;
+const MAX_DRAFT_BODY_LENGTH = 50_000;
+const DRAFT_STATUSES = ['PENDING', 'APPROVED', 'REJECTED', 'SENT'];
 
 /**
  * Generate a draft reply for a given email or thread
@@ -12,10 +17,27 @@ import { logger } from '../utils/logger.js';
 export const generateDraft = async (req: any, res: Response) => {
   try {
     const userId = req.userId;
-    const { gmailMessageId, threadId, tone, customContext } = req.body;
+    const { gmailMessageId, threadId, tone, customContext } = req.body ?? {};
+
+    // Ids are used in Mongo filters: only plain strings are accepted, so an
+    // object such as {"$ne": null} can never act as a query operator.
+    const isOptionalId = (value: unknown) =>
+      value === undefined || (typeof value === 'string' && value.length > 0 && value.length <= MAX_ID_LENGTH);
+    if (!isOptionalId(gmailMessageId) || !isOptionalId(threadId)) {
+      return res.status(400).json({ error: 'gmailMessageId and threadId must be non-empty strings' });
+    }
 
     if (!gmailMessageId && !threadId) {
       return res.status(400).json({ error: 'Either gmailMessageId or threadId is required' });
+    }
+
+    if (
+      customContext !== undefined &&
+      (typeof customContext !== 'string' || customContext.length > MAX_CUSTOM_CONTEXT_LENGTH)
+    ) {
+      return res.status(400).json({
+        error: `customContext must be a string of at most ${MAX_CUSTOM_CONTEXT_LENGTH} characters`,
+      });
     }
 
     const validTones = ['formal', 'concise', 'friendly'];
@@ -47,8 +69,14 @@ export const getAllDrafts = async (req: any, res: Response) => {
     const userId = req.userId;
     const { status, limit } = req.query;
 
-    const limitNum = limit ? parseInt(limit as string) : 20;
-    const statusStr = typeof status === 'string' ? status : undefined;
+    // Stored statuses are upper-case; accept any case from the query string.
+    const statusStr = typeof status === 'string' && status !== '' ? status.toUpperCase() : undefined;
+    if (statusStr !== undefined && !DRAFT_STATUSES.includes(statusStr)) {
+      return res.status(400).json({ error: `status must be one of: ${DRAFT_STATUSES.join(', ')}` });
+    }
+
+    const parsedLimit = typeof limit === 'string' ? parseInt(limit, 10) : NaN;
+    const limitNum = Number.isInteger(parsedLimit) ? Math.min(Math.max(parsedLimit, 1), 100) : 20;
 
     const drafts = await DraftService.getUserDrafts(userId, statusStr, limitNum);
 
@@ -81,10 +109,15 @@ export const updateDraft = async (req: any, res: Response) => {
   try {
     const userId = req.userId;
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { draftBody } = req.body;
+    const { draftBody } = req.body ?? {};
 
     if (!draftBody) {
       return res.status(400).json({ error: 'draftBody is required' });
+    }
+    if (typeof draftBody !== 'string' || draftBody.length > MAX_DRAFT_BODY_LENGTH) {
+      return res.status(400).json({
+        error: `draftBody must be a string of at most ${MAX_DRAFT_BODY_LENGTH} characters`,
+      });
     }
 
     const draft = await DraftService.updateDraft(userId, id, draftBody);
@@ -162,14 +195,6 @@ export const sendDraft = async (req: any, res: Response) => {
   }
 };
 
-/**
- * Generic error handler for draft controller
- */
-function handleError(error: any, res: Response): void {
-  if (error instanceof AppError) {
-    res.status(error.statusCode).json({ error: error.message });
-  } else {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'Draft controller error');
-    res.status(500).json({ error: 'Failed to process draft request' });
-  }
+function handleError(error: unknown, res: Response): void {
+  sendError(res, error, 'Failed to process draft request', (err, message) => logger.error(err, message));
 }

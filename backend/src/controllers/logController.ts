@@ -1,6 +1,6 @@
 import { Response } from 'express';
 import { ActivityLogService } from '../services/activityLogService.js';
-import { AppError } from '../utils/errors.js';
+import { sendError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
 /**
@@ -9,8 +9,8 @@ import { logger } from '../utils/logger.js';
 export const getUserLogs = async (req: any, res: Response) => {
   try {
     const userId = req.userId;
-    const limit = Math.min(parseInt(req.query.limit as string) || 100, 200);
-    const skip = parseInt(req.query.skip as string) || 0;
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 200);
+    const skip = Math.max(parseInt(req.query.skip as string) || 0, 0);
 
     const logs = await ActivityLogService.getUserActivityLogs(userId, limit, skip);
 
@@ -32,7 +32,7 @@ export const getEntityLogs = async (req: any, res: Response) => {
     const entityId = Array.isArray(req.params.entityId)
       ? req.params.entityId[0]
       : req.params.entityId;
-    const limit = Math.min(parseInt(req.query.limit as string) || 50, 100);
+    const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
 
     const logs = await ActivityLogService.getEntityLogs(userId, entityType, entityId, limit);
 
@@ -42,14 +42,6 @@ export const getEntityLogs = async (req: any, res: Response) => {
   }
 };
 
-/**
- * Generic error handler for log controller
- */
-function handleError(error: any, res: Response): void {
-  if (error instanceof AppError) {
-    res.status(error.statusCode).json({ error: error.message });
-  } else {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'Log controller error');
-    res.status(500).json({ error: 'Failed to fetch logs' });
-  }
+function handleError(error: unknown, res: Response): void {
+  sendError(res, error, 'Failed to fetch logs', (err, message) => logger.error(err, message));
 }

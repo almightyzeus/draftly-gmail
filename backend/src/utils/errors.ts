@@ -70,3 +70,21 @@ export class InternalServerError extends AppError {
     this.name = 'InternalServerError';
   }
 }
+
+/**
+ * Send an error response: AppErrors keep their status and message; anything
+ * else is logged and reported as a generic 500 so internals don't leak.
+ */
+export function sendError(
+  res: { status(code: number): { json(body: unknown): unknown } },
+  error: unknown,
+  fallbackMessage: string,
+  log: (error: Error, message: string) => void
+): void {
+  if (error instanceof AppError) {
+    res.status(error.statusCode).json({ error: error.message });
+    return;
+  }
+  log(error instanceof Error ? error : new Error(String(error)), fallbackMessage);
+  res.status(500).json({ error: fallbackMessage });
+}

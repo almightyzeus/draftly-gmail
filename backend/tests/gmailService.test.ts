@@ -75,7 +75,10 @@ describe('GmailService', () => {
 
   it('throws when Gmail is not connected', async () => {
     (GmailAccount.findOne as unknown as Mock).mockResolvedValue(null);
-    await expect(GmailService.fetchEmails(userId, { unread: true })).rejects.toThrow('Gmail account not connected');
+    await expect(GmailService.fetchEmails(userId, { unread: true })).rejects.toMatchObject({
+      statusCode: 409,
+      message: 'Gmail account not connected',
+    });
   });
 
   it('fetches and stores Gmail messages', async () => {
@@ -189,10 +192,6 @@ describe('GmailService', () => {
     expect(updatedRaw).toContain(Buffer.from('Body 2').toString('base64'));
     await expect(GmailService.sendDraft(userId, 'draft-1', 'thread-1')).resolves.toBe('sent-1');
     await expect(GmailService.deleteDraft(userId, 'draft-1')).resolves.toBeUndefined();
-  });
-
-  it('documents that direct sendReply is not implemented in the MVP', async () => {
-    await expect(GmailService.sendReply(userId, 'thread-1', 'Body')).rejects.toThrow('Not implemented yet');
   });
 
   it('uses stored RFC headers instead of Gmail internal IDs for reply metadata', async () => {

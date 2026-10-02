@@ -1,7 +1,7 @@
 import { Response, NextFunction } from 'express';
 import { GmailOAuthService } from '../services/gmailOAuthService.js';
 import { GmailService } from '../services/gmailService.js';
-import { AppError } from '../utils/errors.js';
+import { sendError } from '../utils/errors.js';
 import { env } from '../config/env.js';
 import { logger } from '../utils/logger.js';
 
@@ -174,14 +174,6 @@ export const getEmail = async (req: any, res: Response) => {
   }
 };
 
-/**
- * Generic error handler for gmail controller
- */
-function handleError(error: any, res: Response): void {
-  if (error instanceof AppError) {
-    res.status(error.statusCode).json({ error: error.message });
-  } else {
-    logger.error(error instanceof Error ? error : new Error(String(error)), 'Gmail controller error');
-    res.status(500).json({ error: 'Failed to process Gmail request' });
-  }
+function handleError(error: unknown, res: Response): void {
+  sendError(res, error, 'Failed to process Gmail request', (err, message) => logger.error(err, message));
 }

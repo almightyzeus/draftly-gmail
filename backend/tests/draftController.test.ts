@@ -84,6 +84,47 @@ describe('DraftController', () => {
     });
   });
 
+  describe('input types (no operator injection)', () => {
+    it.each([
+      ['an object gmailMessageId', { gmailMessageId: { $ne: null } }],
+      ['an object threadId', { threadId: { $gt: '' } }],
+      ['an empty-string id', { gmailMessageId: '' , threadId: 't1' }],
+      ['a non-string customContext', { threadId: 't1', customContext: { a: 1 } }],
+      ['an over-long customContext', { threadId: 't1', customContext: 'x'.repeat(2001) }],
+    ])('generateDraft returns 400 for %s', async (_label, body) => {
+      mockReq.body = body;
+
+      await generateDraft(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(DraftService.generateDraft).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an object', { a: 1 }],
+      ['an over-long string', 'x'.repeat(50_001)],
+    ])('updateDraft returns 400 for %s draftBody', async (_label, draftBody) => {
+      mockReq.params = { id: 'draft123' };
+      mockReq.body = { draftBody };
+
+      await updateDraft(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(DraftService.updateDraft).not.toHaveBeenCalled();
+    });
+
+    it('getAllDrafts rejects an unknown status and clamps the limit', async () => {
+      mockReq.query = { status: 'bogus' };
+      await getAllDrafts(mockReq, mockRes as Response);
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+
+      (DraftService.getUserDrafts as unknown as Mock).mockResolvedValue([]);
+      mockReq.query = { limit: '100000' };
+      await getAllDrafts(mockReq, mockRes as Response);
+      expect(DraftService.getUserDrafts).toHaveBeenCalledWith('user123', undefined, 100);
+    });
+  });
+
   describe('getAllDrafts', () => {
     it('should get all drafts successfully', async () => {
       mockReq.query = { status: 'pending' };
@@ -97,7 +138,7 @@ describe('DraftController', () => {
 
       await getAllDrafts(mockReq, mockRes as Response);
 
-      expect(DraftService.getUserDrafts).toHaveBeenCalledWith('user123', 'pending', 20);
+      expect(DraftService.getUserDrafts).toHaveBeenCalledWith('user123', 'PENDING', 20);
       expect(mockRes.json).toHaveBeenCalledWith(mockDrafts);
     });
 

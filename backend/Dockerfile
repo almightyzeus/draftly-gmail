@@ -1,15 +1,31 @@
-FROM node:20-alpine
+# Build stage: full dependency tree (TypeScript etc.), exact versions from the lockfile.
+FROM node:20-alpine AS build
 
 WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install
+RUN npm ci
 
 COPY . .
 
 RUN npm run build
 
+# Runtime stage: production dependencies only, running as the unprivileged "node" user.
+FROM node:20-alpine
+
+WORKDIR /app
+
+ENV NODE_ENV=production
+
+COPY package*.json ./
+
+RUN npm ci --omit=dev && npm cache clean --force
+
+COPY --from=build /app/dist ./dist
+
+USER node
+
 EXPOSE 3000
 
-CMD ["npm", "run", "start"]
+CMD ["node", "dist/server.js"]

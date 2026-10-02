@@ -18,58 +18,6 @@ const OAUTH_STATE_AUDIENCE = 'gmail-oauth-state';
 
 export class GmailOAuthService {
   /**
-   * Persist refreshed tokens to the database
-   * Called after Google OAuth2 client auto-refreshes an access token
-   */
-  private static async persistRefreshedTokens(
-    userId: string,
-    gmailEmail: string,
-    accessToken: string,
-    refreshToken: string | undefined,
-    expiryDate: number | null | undefined
-  ): Promise<void> {
-    try {
-      const userObjectId = new Types.ObjectId(userId);
-      const account = await GmailAccount.findOne({ userId: userObjectId, gmailEmail });
-
-      if (!account) {
-        logger.warn(`Cannot persist refreshed tokens: GmailAccount not found for user ${userId}, email ${gmailEmail}`);
-        return;
-      }
-
-      // Only update if values have changed
-      const accessTokenEnc = CryptoService.encryptToken(accessToken);
-      const updates: any = {
-        accessTokenEnc,
-      };
-
-      // Only update refresh token if Google provided a new one
-      if (refreshToken) {
-        updates.refreshTokenEnc = CryptoService.encryptToken(refreshToken);
-      }
-
-      // Only update expiry if it's provided
-      if (expiryDate) {
-        updates.tokenExpiry = new Date(expiryDate);
-      }
-
-      await GmailAccount.findOneAndUpdate(
-        { userId: userObjectId, gmailEmail },
-        updates,
-        { new: true }
-      );
-
-      logger.info(`Refreshed tokens persisted for user ${userId}, email ${gmailEmail}`);
-    } catch (error) {
-      // Log error but don't throw - token refresh succeeded, only persistence failed
-      logger.error(
-        error instanceof Error ? error : new Error(String(error)),
-        `Failed to persist refreshed tokens for user ${userId}`
-      );
-    }
-  }
-
-  /**
    * Generate a signed, short-lived OAuth state token
    * The state token contains the user ID and expires in 10 minutes
    */
@@ -192,60 +140,6 @@ export class GmailOAuthService {
       logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth callback error');
       throw error;
     }
-  }
-
-  /**
-   * Get and refresh tokens for user
-   * Sets up a token refresh listener that persists refreshed credentials after Google's API call.
-   * Note: If the returned tokens are used by the caller to create a different OAuth2 client,
-   * the persistence will not be triggered. For Gmail operations, use gmailService.getGmailClient()
-   * which properly sets up the listener before making API calls.
-   */
-  static async getValidTokens(userId: string): Promise<{ access_token: string; refresh_token: string }> {
-    const userObjectId = new Types.ObjectId(userId);
-    const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
-
-    if (!account) {
-      throw new Error('Gmail account not connected');
-    }
-
-    const accessToken = CryptoService.decryptToken(account.accessTokenEnc);
-    const refreshToken = CryptoService.decryptToken(account.refreshTokenEnc);
-
-    // Create a fresh OAuth2 client for this user to avoid credential mixing
-    const userClient = createOAuth2Client();
-    
-    // Set up listener for token refresh events (fired AFTER Google's API call)
-    // This listener will only fire if the caller makes API calls using this same OAuth2 client
-    userClient.on('tokens', async (tokens: any) => {
-      try {
-        await this.persistRefreshedTokens(
-          userId,
-          account.gmailEmail,
-          tokens.access_token,
-          tokens.refresh_token,
-          tokens.expiry_date
-        );
-      } catch (error) {
-        // Log but don't throw - we don't want to break the caller's operation
-        logger.error(
-          error instanceof Error ? error : new Error(String(error)),
-          `Failed to persist refreshed tokens in token event listener for user ${userId}`
-        );
-      }
-    });
-    
-    userClient.setCredentials({
-      access_token: accessToken,
-      refresh_token: refreshToken,
-      expiry_date: account.tokenExpiry.getTime(),
-    });
-
-    // Return the tokens from the client (these may have been refreshed by the listener)
-    return { 
-      access_token: userClient.credentials.access_token || accessToken, 
-      refresh_token: userClient.credentials.refresh_token || refreshToken 
-    };
   }
 
   /**

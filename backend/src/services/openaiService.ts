@@ -4,18 +4,32 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { UserPreference } from '../models/UserPreference.js';
 import { GmailService } from './gmailService.js';
 import { logger } from '../utils/logger.js';
-import { AppError } from '../utils/errors.js';
+import { env } from '../config/env.js';
+import { AppError, NotFoundError } from '../utils/errors.js';
 
 const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY,
+  apiKey: env.openai.apiKey,
+  timeout: 60_000,
+  maxRetries: 2,
 });
+
+/** Prompt size bounds: email content is untrusted and can be arbitrarily long. */
+const MAX_MESSAGE_CHARS = 4_000;
+const MAX_THREAD_MESSAGES = 20;
+const MAX_STYLE_EXAMPLE_CHARS = 1_500;
+const MAX_CUSTOM_CONTEXT_CHARS = 2_000;
+
+function truncate(text: string | undefined | null, max: number): string {
+  const value = text ?? '';
+  return value.length > max ? `${value.slice(0, max)}\n[...truncated]` : value;
+}
 
 /**
  * OpenAI Service - Handles draft generation using GPT-4
  */
 export class OpenAIService {
   private static readonly DEFAULT_LEARNING_COUNT = 5;
-  private static readonly GPT_MODEL = process.env.OPENAI_MODEL || 'gpt-4-turbo';
+  private static readonly GPT_MODEL = env.openai.model;
 
   /**
    * Fetch learning emails (outbound emails for style reference)
@@ -39,7 +53,7 @@ export class OpenAIService {
       }
 
       const styleExamples = outboundEmails
-        .map((email: any) => `Subject: ${email.subject}\n\n${email.bodyPlain}`)
+        .map((email: any) => `Subject: ${email.subject}\n\n${truncate(email.bodyPlain, MAX_STYLE_EXAMPLE_CHARS)}`)
         .join('\n---\n');
 
       return `\n\nHere are examples of my writing style:\n${styleExamples}`;
@@ -100,7 +114,7 @@ export class OpenAIService {
       });
 
       if (!originalEmail) {
-        throw new Error('Email not found');
+        throw new NotFoundError('Email not found');
       }
 
       // Fetch user preferences
@@ -122,14 +136,15 @@ export class OpenAIService {
       // messages the reply must address. This prevents a consolidated draft
       // from silently being generated from only its first message.
       const threadContext = threadEmails
-        .map((email: any) => `${email.from}: ${email.bodyPlain}`)
+        .slice(-MAX_THREAD_MESSAGES)
+        .map((email: any) => `${email.from}: ${truncate(email.bodyPlain, MAX_MESSAGE_CHARS)}`)
         .join('\n\n---\n\n');
 
       const relevantEmails = relevantMessageIds
         .map((messageId) => threadEmails.find((email: any) => email.gmailMessageId === messageId))
         .filter(Boolean);
       const relevantMessagesContext = relevantEmails
-        .map((email: any) => `From: ${email.from}\nSubject: ${email.subject}\n\n${email.bodyPlain}`)
+        .map((email: any) => `From: ${email.from}\nSubject: ${email.subject}\n\n${truncate(email.bodyPlain, MAX_MESSAGE_CHARS)}`)
         .join('\n\n---\n\n');
 
       // Build user prompt with optional custom context
@@ -146,13 +161,13 @@ ${threadContext}
 
 Use this most recent relevant email as the reply target:
 Subject: ${originalEmail.subject}
-Body: ${originalEmail.bodyPlain}
+Body: ${truncate(originalEmail.bodyPlain, MAX_MESSAGE_CHARS)}
 ${learningEmailsContext}
 
 Generate one thoughtful, appropriate reply that addresses all relevant messages.`;
 
       if (customContext) {
-        userPrompt += `\n\nAdditional context from the user:\n${customContext}`;
+        userPrompt += `\n\nAdditional context from the user:\n${truncate(customContext, MAX_CUSTOM_CONTEXT_CHARS)}`;
       }
 
       const systemPrompt = this.buildSystemPrompt(tone, signature);
@@ -190,157 +205,6 @@ Generate one thoughtful, appropriate reply that addresses all relevant messages.
       logger.error(
         error instanceof Error ? error : new Error(String(error)),
         'Draft generation failed'
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Generate a reply to a single email
-   */
-  static async generateReply(
-    emailBody: string,
-    tone: string = 'formal',
-    signature: string = ''
-  ): Promise<string> {
-    try {
-      const systemPrompt = this.buildSystemPrompt(tone, signature);
-
-      const userPrompt = `
-Please draft a reply to this email:
-
-${emailBody}
-
-Generate a thoughtful, appropriate reply.`;
-
-      const response = await openai.chat.completions.create({
-        model: this.GPT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 500,
-      });
-
-      const reply = response.choices[0]?.message?.content || 'Failed to generate reply';
-
-      logger.info('Reply generated successfully');
-      return reply;
-    } catch (error) {
-      logger.error(
-        error instanceof Error ? error : new Error(String(error)),
-        'Reply generation failed'
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Generate a consolidated reply addressing multiple emails
-   */
-  static async generateConsolidatedReply(
-    emails: Array<{ from: string; subject: string; body: string }>,
-    tone: string = 'formal',
-    signature: string = ''
-  ): Promise<string> {
-    try {
-      const systemPrompt = this.buildSystemPrompt(tone, signature);
-
-      const emailsContext = emails
-        .map((email) => `From: ${email.from}\nSubject: ${email.subject}\n\n${email.body}`)
-        .join('\n\n---\n\n');
-
-      const userPrompt = `
-Please draft a consolidated reply addressing all of these emails:
-
-${emailsContext}
-
-Generate a single reply that thoughtfully addresses all the questions and points raised across all emails.`;
-
-      const response = await openai.chat.completions.create({
-        model: this.GPT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
-        temperature: 0.7,
-        max_tokens: 1000,
-      });
-
-      const reply = response.choices[0]?.message?.content || 'Failed to generate consolidated reply';
-
-      logger.info({ emailCount: emails.length }, 'Consolidated reply generated successfully');
-      return reply;
-    } catch (error) {
-      logger.error(
-        error instanceof Error ? error : new Error(String(error)),
-        'Consolidated reply generation failed'
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Extract key points from an email body
-   */
-  static async extractKeyPoints(emailBody: string): Promise<string[]> {
-    try {
-      const systemPrompt = `You are an email analysis assistant. Extract the key points, questions, and action items from emails. Return ONLY a JSON array of strings with the key points. Example: ["Point 1", "Point 2"]`;
-
-      const userPrompt = `
-Extract all key points, questions, and action items from this email:
-
-${emailBody}
-
-Return only a valid JSON array of strings.`;
-
-      const response = await openai.chat.completions.create({
-        model: this.GPT_MODEL,
-        messages: [
-          {
-            role: 'system',
-            content: systemPrompt,
-          },
-          {
-            role: 'user',
-            content: userPrompt,
-          },
-        ],
-        temperature: 0.5,
-        max_tokens: 500,
-      });
-
-      const content = response.choices[0]?.message?.content || '[]';
-
-      // Parse the JSON response
-      try {
-        const keyPoints = JSON.parse(content);
-        if (!Array.isArray(keyPoints)) {
-          return [];
-        }
-        return keyPoints;
-      } catch {
-        // If JSON parsing fails, return empty array
-        logger.warn('Failed to parse key points response as JSON');
-        return [];
-      }
-    } catch (error) {
-      logger.error(
-        error instanceof Error ? error : new Error(String(error)),
-        'Key points extraction failed'
       );
       throw error;
     }

@@ -6,7 +6,7 @@ import { User } from '../models/User.js';
 import { EmailMessage } from '../models/EmailMessage.js';
 import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
-import { AppError, ForbiddenError, ValidationError } from '../utils/errors.js';
+import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { buildRawReply } from '../utils/mimeMessage.js';
 
 /**
@@ -97,7 +97,7 @@ export class GmailService {
     const userObjectId = new Types.ObjectId(userId);
     const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
     if (!account) {
-      throw new Error('Gmail account not connected');
+      throw new ConflictError('Gmail account not connected');
     }
 
     const accessToken = CryptoService.decryptToken(account.accessTokenEnc);
@@ -242,7 +242,7 @@ export class GmailService {
       const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
 
       if (!account) {
-        throw new Error('Gmail account not connected');
+        throw new ConflictError('Gmail account not connected');
       }
 
       const gmailEmail = account.gmailEmail;
@@ -450,7 +450,7 @@ export class GmailService {
       const email = await EmailMessage.findOne({ userId: userObjectId, gmailMessageId });
 
       if (!email) {
-        throw new Error('Email not found');
+        throw new NotFoundError('Email not found');
       }
 
       return {
@@ -504,7 +504,7 @@ export class GmailService {
     const references = this.getHeader(headers, 'References');
 
     if (!rfcMessageId) {
-      throw new Error('Original email does not include an RFC Message-ID header');
+      throw new AppError('Original email does not include an RFC Message-ID header', 422);
     }
 
     await EmailMessage.findOneAndUpdate(
@@ -514,17 +514,6 @@ export class GmailService {
     );
 
     return this.buildReplyHeaders(rfcMessageId, references);
-  }
-
-  /**
-   * Send a reply through Gmail
-   */
-  static async sendReply(
-    userId: string,
-    threadId: string,
-    message: string
-  ): Promise<string> {
-    throw new Error('Not implemented yet');
   }
 
   /**
@@ -668,9 +657,7 @@ export class GmailService {
   static async sendDraft(
     userId: string,
     gmailDraftId: string,
-    threadId: string,
-    inReplyTo?: string,
-    references?: string
+    threadId: string
   ): Promise<string> {
     try {
       const gmail = await this.getGmailClient(userId);
@@ -697,7 +684,7 @@ export class GmailService {
   }
 
   /**
-   * Delete a draft in Gmail (optional cleanup)
+   * Delete a draft in Gmail (used when an approved draft is rejected)
    */
   static async deleteDraft(userId: string, gmailDraftId: string): Promise<void> {
     try {

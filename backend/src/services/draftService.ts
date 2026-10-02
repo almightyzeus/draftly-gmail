@@ -5,7 +5,7 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { OpenAIService } from './openaiService.js';
 import { GmailService } from './gmailService.js';
 import { ActivityLogService } from './activityLogService.js';
-import { AppError, ConflictError, NotFoundError } from '../utils/errors.js';
+import { AppError, ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 
 /**
  * DraftService - Handles draft generation, approval, rejection, and sending
@@ -14,6 +14,14 @@ export class DraftService {
   private static readonly PROMPT_VERSION = '1.0';
   /** How long a send claim blocks other requests before it is considered stranded. */
   static readonly SEND_CLAIM_LEASE_MS = 5 * 60 * 1000;
+
+  /** Parse a draft id from the URL; a malformed id is simply "not found". */
+  private static toDraftObjectId(draftId: string): Types.ObjectId {
+    if (!Types.ObjectId.isValid(draftId)) {
+      throw new NotFoundError('Draft not found');
+    }
+    return new Types.ObjectId(draftId);
+  }
 
   private static async logActivity(
     userId: string,
@@ -53,7 +61,7 @@ export class DraftService {
       if (threadId) {
         const threadEmails = await GmailService.fetchThreadEmails(userId, threadId);
         if (threadEmails.length === 0) {
-          throw new Error('No emails found in thread');
+          throw new NotFoundError('No emails found in thread');
         }
 
         // Get all unread inbound emails in thread
@@ -87,13 +95,13 @@ export class DraftService {
         });
 
         if (!email) {
-          throw new Error('Email not found');
+          throw new NotFoundError('Email not found');
         }
 
         gmailMessageIds = [gmailMessageId];
         targetThreadId = email.threadId;
       } else {
-        throw new Error('Either gmailMessageId or threadId must be provided');
+        throw new ValidationError('Either gmailMessageId or threadId must be provided');
       }
 
       // Check if draft already exists for this thread/message (idempotency)
@@ -210,7 +218,7 @@ export class DraftService {
   static async getDraftById(userId: string, draftId: string): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
-      const draftObjectId = new Types.ObjectId(draftId);
+      const draftObjectId = this.toDraftObjectId(draftId);
 
       const draft = await Draft.findOne({
         _id: draftObjectId,
@@ -218,7 +226,7 @@ export class DraftService {
       });
 
       if (!draft) {
-        throw new Error('Draft not found');
+        throw new NotFoundError('Draft not found');
       }
 
       return draft;
@@ -243,7 +251,7 @@ export class DraftService {
   static async updateDraft(userId: string, draftId: string, draftBody: string): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
-      const draftObjectId = new Types.ObjectId(draftId);
+      const draftObjectId = this.toDraftObjectId(draftId);
 
       const draft = await Draft.findOne({
         _id: draftObjectId,
@@ -251,7 +259,7 @@ export class DraftService {
       });
 
       if (!draft) {
-        throw new Error('Draft not found');
+        throw new NotFoundError('Draft not found');
       }
 
       // Only allow editing PENDING or APPROVED drafts
@@ -326,7 +334,7 @@ export class DraftService {
 
     try {
       if (!originalEmail) {
-        throw new Error('Original email not found');
+        throw new NotFoundError('Original email not found');
       }
 
       const replyMetadata = await GmailService.getReplyMetadata(
@@ -361,16 +369,18 @@ export class DraftService {
   static async approveDraft(userId: string, draftId: string): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
-      const draftObjectId = new Types.ObjectId(draftId);
+      const draftObjectId = this.toDraftObjectId(draftId);
 
       const draft = await Draft.findOne({
         _id: draftObjectId,
         userId: userObjectId,
-        status: 'PENDING',
       });
 
       if (!draft) {
-        throw new Error('Draft not found or not in PENDING status');
+        throw new NotFoundError('Draft not found');
+      }
+      if (draft.status !== 'PENDING') {
+        throw new ConflictError(`Cannot approve draft with status: ${draft.status}`);
       }
 
       // Get original email to extract info for Gmail draft
@@ -382,7 +392,7 @@ export class DraftService {
       });
 
       if (!originalEmail) {
-        throw new Error('Original email not found');
+        throw new NotFoundError('Original email not found');
       }
 
       const replyMetadata = await GmailService.getReplyMetadata(
@@ -431,37 +441,60 @@ export class DraftService {
   }
 
   /**
-   * Reject a draft
+   * Reject a PENDING draft, or withdraw an APPROVED one that no send has
+   * claimed. Withdrawing also removes its Gmail draft (best effort) so it
+   * cannot be sent from Gmail by mistake.
    */
   static async rejectDraft(userId: string, draftId: string): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
-      const draftObjectId = new Types.ObjectId(draftId);
+      const draftObjectId = this.toDraftObjectId(draftId);
 
-      const draft = await Draft.findOne({
-        _id: draftObjectId,
-        userId: userObjectId,
-        status: 'PENDING',
-      });
-
+      const draft = await Draft.findOne({ _id: draftObjectId, userId: userObjectId });
       if (!draft) {
-        throw new Error('Draft not found or not in PENDING status');
+        throw new NotFoundError('Draft not found');
+      }
+      if (!['PENDING', 'APPROVED'].includes(draft.status)) {
+        throw new ConflictError(`Cannot reject draft with status: ${draft.status}`);
       }
 
-      draft.status = 'REJECTED';
-      draft.rejectedAt = new Date();
-      draft.auditTrail.push({
-        at: new Date(),
-        action: 'REJECTED',
-        by: 'user',
-      });
+      const rejectedAt = new Date();
+      const rejected = await Draft.findOneAndUpdate(
+        {
+          _id: draftObjectId,
+          userId: userObjectId,
+          status: draft.status,
+          sendIdempotencyKey: null,
+        },
+        {
+          $set: { status: 'REJECTED', rejectedAt },
+          $push: { auditTrail: { at: rejectedAt, action: 'REJECTED', by: 'user', meta: { previousStatus: draft.status } } },
+        },
+        { returnDocument: 'after' }
+      );
 
-      await draft.save();
-      await this.logActivity(userId, 'DRAFT_REJECTED', draft._id.toString());
+      if (!rejected) {
+        throw new ConflictError('The draft changed (it may be being sent). Reload and try again.');
+      }
+
+      if (draft.status === 'APPROVED' && draft.gmailDraftId) {
+        try {
+          await GmailService.deleteDraft(userId, draft.gmailDraftId);
+        } catch (gmailError) {
+          logger.warn(
+            gmailError instanceof Error ? gmailError : new Error(String(gmailError)),
+            'Rejected draft but could not delete its Gmail draft'
+          );
+        }
+      }
+
+      await this.logActivity(userId, 'DRAFT_REJECTED', rejected._id.toString(), {
+        previousStatus: draft.status,
+      });
 
       logger.info({ userId, draftId }, 'Draft rejected');
 
-      return draft;
+      return rejected;
     } catch (error) {
       logger.error(
         error instanceof Error ? error : new Error(String(error)),
@@ -486,11 +519,8 @@ export class DraftService {
    */
   static async sendDraft(userId: string, draftId: string, idempotencyKey: string): Promise<any> {
     try {
-      if (!Types.ObjectId.isValid(draftId)) {
-        throw new NotFoundError('Draft not found');
-      }
       const userObjectId = new Types.ObjectId(userId);
-      const draftObjectId = new Types.ObjectId(draftId);
+      const draftObjectId = this.toDraftObjectId(draftId);
 
       const draft = await Draft.findOne({
         _id: draftObjectId,

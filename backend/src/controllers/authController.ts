@@ -1,7 +1,8 @@
 import { Response } from 'express';
 import { AuthService } from '../services/authService.js';
 import { AuthRequest } from '../middleware/auth.js';
-import { AppError } from '../utils/errors.js';
+import { sendError } from '../utils/errors.js';
+import { logger } from '../utils/logger.js';
 
 /**
  * Handle user registration
@@ -81,14 +82,7 @@ export const me = async (req: AuthRequest, res: Response) => {
   }
 };
 
-/**
- * Generic error handler for auth controller
- */
-function handleError(error: any, res: Response): void {
-  if (error instanceof AppError) {
-    res.status(error.statusCode).json({ error: error.message });
-  } else {
-    res.status(500).json({ error: 'Internal server error' });
-  }
+function handleError(error: unknown, res: Response): void {
+  sendError(res, error, 'Internal server error', (err, message) => logger.error(err, message));
 }
 
