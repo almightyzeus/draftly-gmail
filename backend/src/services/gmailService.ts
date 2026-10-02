@@ -7,6 +7,7 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
 import { AppError, ForbiddenError, ValidationError } from '../utils/errors.js';
+import { buildRawReply } from '../utils/mimeMessage.js';
 
 /**
  * GmailService - Handles Gmail email fetching and sending
@@ -86,18 +87,7 @@ export class GmailService {
     }
   }
 
-  /**
-   * Convert plain text to HTML by escaping special chars and converting newlines to <br>
-   */
-  private static plainTextToHtml(plainText: string): string {
-    return plainText
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;')
-      .replace(/'/g, '&#39;')
-      .replace(/\n/g, '<br>\r\n');
-  }
+
 
   /**
    * Get Gmail client with user's credentials
@@ -195,12 +185,41 @@ export class GmailService {
     message: any,
     userEmail: string
   ): 'INBOUND' | 'OUTBOUND' {
-    const headers = message.payload?.headers || [];
-    const fromHeader = headers.find((h: any) => h.name === 'From');
-    const from = fromHeader?.value || '';
+    if ((message.labelIds || []).includes('SENT')) {
+      return 'OUTBOUND';
+    }
 
-    return from.includes(userEmail) ? 'OUTBOUND' : 'INBOUND';
+    // Compare the actual address, not a substring: "evil-user@gmail.com"
+    // must not count as "user@gmail.com".
+    const headers = message.payload?.headers || [];
+    const from = this.getHeader(headers, 'From') || '';
+    const address = (from.match(/<([^>]+)>/)?.[1] ?? from).trim().toLowerCase();
+
+    return address !== '' && address === userEmail.trim().toLowerCase() ? 'OUTBOUND' : 'INBOUND';
   }
+
+  /**
+   * Gmail's internalDate (ms since epoch) is set by Gmail; the Date header is
+   * sender-controlled and may be missing or unparseable.
+   */
+  private static getMessageDate(message: any, dateHeader?: string): Date {
+    const internal = new Date(Number(message.internalDate));
+    if (message.internalDate && !Number.isNaN(internal.getTime())) {
+      return internal;
+    }
+    const fromHeader = dateHeader ? new Date(dateHeader) : null;
+    if (fromHeader && !Number.isNaN(fromHeader.getTime())) {
+      return fromHeader;
+    }
+    return new Date();
+  }
+
+  /** The From address for outgoing mail: the user's active Gmail account. */
+  private static async getSenderAddress(userId: string): Promise<string | undefined> {
+    const account = await GmailAccount.findOne({ userId: new Types.ObjectId(userId), revokedAt: null });
+    return account?.gmailEmail;
+  }
+
 
   /**
    * Fetch one page of emails from Gmail and cache them in the database.
@@ -291,9 +310,7 @@ export class GmailService {
               snippet: message.snippet || '',
               bodyPlain,
               bodyHtml,
-              internalDate: dateHeader
-                ? new Date(dateHeader)
-                : new Date(),
+              internalDate: this.getMessageDate(message, dateHeader),
               direction,
               labels: message.labelIds || [],
             },
@@ -562,31 +579,14 @@ export class GmailService {
     try {
       const gmail = await this.getGmailClient(userId);
 
-      // Build RFC822 message with multipart/alternative (plain text + HTML)
-      const boundary = '===============' + Date.now() + '===============';
-      const htmlBody = this.plainTextToHtml(bodyHtml);
-
-      const headers = [
-        `From: ${(await GmailAccount.findOne({ userId: new Types.ObjectId(userId) }))?.gmailEmail}`,
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        'MIME-Version: 1.0',
-        `Content-Type: multipart/alternative; boundary="${boundary}"`,
-      ];
-
-      if (inReplyTo) {
-        headers.push(`In-Reply-To: ${inReplyTo}`);
-      }
-      if (references) {
-        headers.push(`References: ${references}`);
-      }
-
-      // Create both plain text and HTML parts
-      const plainTextPart = `--${boundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n`;
-      const htmlPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${htmlBody}\r\n--${boundary}--`;
-      const bodyPart = plainTextPart + htmlPart;
-
-      const rawMessage = headers.join('\r\n') + '\r\n\r\n' + bodyPart;
+      const rawMessage = buildRawReply({
+        from: await this.getSenderAddress(userId),
+        to,
+        subject,
+        body: bodyHtml,
+        inReplyTo,
+        references,
+      });
       const encodedMessage = Buffer.from(rawMessage).toString('base64');
 
       // Create draft in Gmail
@@ -629,31 +629,14 @@ export class GmailService {
     try {
       const gmail = await this.getGmailClient(userId);
 
-      // Build RFC822 message with multipart/alternative (plain text + HTML)
-      const boundary = '===============' + Date.now() + '===============';
-      const htmlBody = this.plainTextToHtml(bodyHtml);
-
-      const headers = [
-        `From: ${(await GmailAccount.findOne({ userId: new Types.ObjectId(userId) }))?.gmailEmail}`,
-        `To: ${to}`,
-        `Subject: ${subject}`,
-        'MIME-Version: 1.0',
-        `Content-Type: multipart/alternative; boundary="${boundary}"`,
-      ];
-
-      if (inReplyTo) {
-        headers.push(`In-Reply-To: ${inReplyTo}`);
-      }
-      if (references) {
-        headers.push(`References: ${references}`);
-      }
-
-      // Create both plain text and HTML parts
-      const plainTextPart = `--${boundary}\r\nContent-Type: text/plain; charset="UTF-8"\r\n\r\n${bodyHtml}\r\n`;
-      const htmlPart = `--${boundary}\r\nContent-Type: text/html; charset="UTF-8"\r\n\r\n${htmlBody}\r\n--${boundary}--`;
-      const bodyPart = plainTextPart + htmlPart;
-
-      const rawMessage = headers.join('\r\n') + '\r\n\r\n' + bodyPart;
+      const rawMessage = buildRawReply({
+        from: await this.getSenderAddress(userId),
+        to,
+        subject,
+        body: bodyHtml,
+        inReplyTo,
+        references,
+      });
       const encodedMessage = Buffer.from(rawMessage).toString('base64');
 
       // Update draft

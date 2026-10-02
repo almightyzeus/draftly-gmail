@@ -4,6 +4,7 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { UserPreference } from '../models/UserPreference.js';
 import { GmailService } from './gmailService.js';
 import { logger } from '../utils/logger.js';
+import { AppError } from '../utils/errors.js';
 
 const openai = new OpenAI({
   apiKey: process.env.OPENAI_API_KEY,
@@ -173,8 +174,11 @@ Generate one thoughtful, appropriate reply that addresses all relevant messages.
         max_tokens: 1000,
       });
 
-      const draftText =
-        response.choices[0]?.message?.content || 'Failed to generate draft';
+      // Never store placeholder text as a draft: it could be approved and sent.
+      const draftText = response.choices[0]?.message?.content?.trim();
+      if (!draftText) {
+        throw new AppError('The AI returned an empty draft. Please try again.', 502);
+      }
 
       logger.info(
         { userId, gmailMessageIds: relevantMessageIds, tone },

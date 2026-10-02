@@ -182,7 +182,11 @@ describe('GmailService', () => {
     expect(rawMessage).toContain('In-Reply-To: <rfc-message@example.com>');
     expect(rawMessage).toContain('References: <older@example.com> <rfc-message@example.com>');
     expect(rawMessage).not.toContain('In-Reply-To: draft-1');
+    expect(rawMessage).toContain(`From: ${account.gmailEmail}`);
+    expect(GmailAccount.findOne).toHaveBeenLastCalledWith({ userId: new Types.ObjectId(userId), revokedAt: null });
     await expect(GmailService.updateDraft(userId, 'draft-1', 'Body 2', 'to@example.com', 'Subject', 'thread-1')).resolves.toBeUndefined();
+    const updatedRaw = Buffer.from(draftApi.update.mock.calls[0][0].requestBody.message.raw, 'base64').toString('utf8');
+    expect(updatedRaw).toContain(Buffer.from('Body 2').toString('base64'));
     await expect(GmailService.sendDraft(userId, 'draft-1', 'thread-1')).resolves.toBe('sent-1');
     await expect(GmailService.deleteDraft(userId, 'draft-1')).resolves.toBeUndefined();
   });
@@ -235,6 +239,68 @@ describe('GmailService', () => {
       { rfcMessageId: '<rfc-message@example.com>', references: '<older@example.com>' },
       { new: true }
     );
+  });
+
+  describe('message direction and date', () => {
+    const listOne = (message: any) => {
+      mocks.gmail.mockReturnValue({
+        users: {
+          messages: {
+            list: vi.fn().mockResolvedValue({ data: { messages: [{ id: message.id }] } }),
+            get: vi.fn().mockResolvedValue({ data: message }),
+          },
+        },
+      });
+      (EmailMessage.findOneAndUpdate as unknown as Mock).mockImplementation((_f: any, update: any) =>
+        Promise.resolve({ _id: new Types.ObjectId(), ...update })
+      );
+    };
+    const message = (from: string, extra: Record<string, any> = {}) => ({
+      id: 'm1',
+      threadId: 't1',
+      labelIds: ['INBOX'],
+      payload: { headers: [{ name: 'From', value: from }, { name: 'Date', value: 'not a real date' }], body: { data: '' } },
+      ...extra,
+    });
+    const savedUpdate = () => (EmailMessage.findOneAndUpdate as unknown as Mock).mock.calls[0][1];
+
+    it.each([
+      ['a look-alike address containing the user address', 'evil-user@gmail.com', 'INBOUND'],
+      ['a display name containing the user address', '"user@gmail.com" <attacker@example.com>', 'INBOUND'],
+      ['the exact user address', 'User <USER@gmail.com>', 'OUTBOUND'],
+      ['the bare user address', 'user@gmail.com', 'OUTBOUND'],
+    ])('classifies %s correctly', async (_label, from, direction) => {
+      listOne(message(from));
+
+      await GmailService.fetchEmails(userId, {});
+
+      expect(savedUpdate().direction).toBe(direction);
+    });
+
+    it('treats anything Gmail labels SENT as OUTBOUND', async () => {
+      listOne(message('someone-else@example.com', { labelIds: ['SENT'] }));
+
+      await GmailService.fetchEmails(userId, {});
+
+      expect(savedUpdate().direction).toBe('OUTBOUND');
+    });
+
+    it('uses Gmail internalDate, so an unparseable Date header does not drop the message', async () => {
+      listOne(message('a@example.com', { internalDate: '1700000000000' }));
+
+      const { emails } = await GmailService.fetchEmails(userId, {});
+
+      expect(emails).toHaveLength(1);
+      expect(savedUpdate().internalDate).toEqual(new Date(1700000000000));
+    });
+
+    it('falls back to a valid date when neither internalDate nor the Date header is usable', async () => {
+      listOne(message('a@example.com'));
+
+      await GmailService.fetchEmails(userId, {});
+
+      expect(Number.isNaN(savedUpdate().internalDate.getTime())).toBe(false);
+    });
   });
 
   describe('search and pagination', () => {

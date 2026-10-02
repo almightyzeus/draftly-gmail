@@ -241,6 +241,28 @@ describe('OpenAIService', () => {
       expect(callArgs.messages[1].content).toContain('Thanks for reaching out.');
       expect(callArgs.messages[1].content).toContain('Please mention Friday.');
     });
+
+    it.each([null, '', '   \n '])('throws instead of saving placeholder text when the AI returns %j', async (content) => {
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue({
+        gmailMessageId: 'msg-1',
+        threadId: 'thread-1',
+        from: 'a@example.com',
+        subject: 'Hi',
+        bodyPlain: 'Hello',
+      });
+      (EmailMessage.find as unknown as Mock).mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        lean: vi.fn().mockResolvedValue([]),
+      });
+      (UserPreference.findOne as unknown as Mock).mockResolvedValue(null);
+      getMockCreate().mockResolvedValueOnce({ choices: [{ message: { content } }] });
+
+      await expect(OpenAIService.generateDraft('507f191e810c19729de860ea', ['msg-1'])).rejects.toMatchObject({
+        statusCode: 502,
+        message: 'The AI returned an empty draft. Please try again.',
+      });
+    });
   });
 
   describe('extractKeyPoints', () => {

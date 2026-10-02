@@ -137,17 +137,68 @@ describe('DraftService', () => {
     await expect(DraftService.getDraftById(userId, draftId)).resolves.toBe(draft);
   });
 
-  it('updates pending and approved drafts', async () => {
+  it('updates pending and approved drafts with a conditional write', async () => {
     const pending = buildDraft();
     (Draft.findOne as unknown as Mock).mockResolvedValue(pending);
-    await DraftService.updateDraft(userId, draftId, 'Updated');
-    expect(pending.draftBody).toBe('Updated');
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce({ ...pending, draftBody: 'Updated' });
+    const result = await DraftService.updateDraft(userId, draftId, 'Updated');
+    expect(result.draftBody).toBe('Updated');
+    expect(Draft.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.objectContaining({ status: 'PENDING', sendIdempotencyKey: null }),
+      expect.objectContaining({ $set: { draftBody: 'Updated' } }),
+      { returnDocument: 'after' }
+    );
+    expect(GmailService.updateDraft).not.toHaveBeenCalled();
 
     const approved = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' });
     (Draft.findOne as unknown as Mock).mockResolvedValueOnce(approved);
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce({ ...approved, draftBody: 'Updated approved' });
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
     await DraftService.updateDraft(userId, draftId, 'Updated approved');
-    expect(GmailService.updateDraft).toHaveBeenCalled();
+    expect(GmailService.updateDraft).toHaveBeenCalledWith(
+      userId,
+      'gmail-draft-1',
+      'Updated approved',
+      email.from,
+      `Re: ${email.subject}`,
+      'thread-1',
+      '<rfc-message@example.com>',
+      '<older@example.com> <rfc-message@example.com>'
+    );
+  });
+
+  it.each([
+    ['the Gmail draft update fails', () => (GmailService.updateDraft as unknown as Mock).mockRejectedValueOnce(new Error('Gmail 500'))],
+    ['the original email is missing', () => (EmailMessage.findOne as unknown as Mock).mockResolvedValueOnce(null)],
+  ])('does not save an APPROVED draft edit when %s', async (_label, arrange) => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' }));
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    arrange();
+
+    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toMatchObject({
+      statusCode: 502,
+      message: 'Could not update the Gmail draft, so your edit was not saved. Please try again.',
+    });
+    expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['SENT', {}, 'Cannot edit draft with status: SENT'],
+    ['REJECTED', {}, 'Cannot edit draft with status: REJECTED'],
+    ['APPROVED', { sendIdempotencyKey: 'key-1', gmailDraftId: 'gmail-draft-1' }, 'This draft is being sent and can no longer be edited'],
+  ])('refuses to edit a %s draft (409)', async (status, extra, message) => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status, ...extra }));
+
+    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toMatchObject({ statusCode: 409, message });
+    expect(GmailService.updateDraft).not.toHaveBeenCalled();
+    expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it('returns 409 when the draft changed between read and write (e.g. a send claimed it)', async () => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft());
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce(null);
+
+    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('approves only pending drafts and requires Gmail draft creation', async () => {

@@ -11,6 +11,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatDialogModule, MatDialog } from '@angular/material/dialog';
+import { Observable, of, switchMap, tap } from 'rxjs';
 import { DraftService } from '../services/draft.service';
 
 interface Draft {
@@ -51,7 +52,10 @@ export class DraftDetailComponent implements OnInit {
   isApproving = false;
   isRejecting = false;
   isSending = false;
+  /** Failure to load the draft (replaces the page content). */
   error: string | null = null;
+  /** Failure of an action (save/approve/reject/send); the editor stays visible. */
+  actionError: string | null = null;
   hasChanges = false;
   successMessage: string | null = null;
   /** Key for the current user send attempt; reused on retry until the send succeeds. */
@@ -101,22 +105,36 @@ export class DraftDetailComponent implements OnInit {
     }
 
     this.isSaving = true;
-    this.error = null;
+    this.actionError = null;
     this.successMessage = null;
 
-    this.draftService.updateDraft(this.draft._id, this.editedContent).subscribe(
-      (updated) => {
-        this.draft = updated;
-        this.hasChanges = false;
+    this.saveIfChanged().subscribe({
+      next: () => {
         this.isSaving = false;
         this.successMessage = 'Draft saved successfully!';
         setTimeout(() => (this.successMessage = null), 3000);
       },
-      (error) => {
+      error: (error) => {
         console.error('Failed to save draft:', error);
-        this.error = 'Failed to save draft';
+        this.actionError = error?.error?.error || 'Failed to save draft';
         this.isSaving = false;
-      }
+      },
+    });
+  }
+
+  /**
+   * Persist unsaved edits before an action that uses the stored/Gmail copy,
+   * so what the user approves or sends is exactly what is on screen.
+   */
+  private saveIfChanged(): Observable<unknown> {
+    if (!this.draft || !this.hasChanges) {
+      return of(null);
+    }
+    return this.draftService.updateDraft(this.draft._id, this.editedContent).pipe(
+      tap((updated: Draft) => {
+        this.draft = updated;
+        this.hasChanges = false;
+      })
     );
   }
 
@@ -125,28 +143,26 @@ export class DraftDetailComponent implements OnInit {
       return;
     }
 
-    // Save any unsaved changes first
-    if (this.hasChanges) {
-      this.saveDraft();
-    }
-
+    const draftId = this.draft._id;
     this.isApproving = true;
-    this.error = null;
+    this.actionError = null;
     this.successMessage = null;
 
-    this.draftService.approveDraft(this.draft._id).subscribe(
-      (updated) => {
-        this.draft = updated;
-        this.isApproving = false;
-        this.successMessage = 'Draft approved and saved to Gmail drafts. You can now send or edit further.';
-        this.hasChanges = false;
-      },
-      (error) => {
-        console.error('Failed to approve draft:', error);
-        this.error = 'Failed to approve draft. Please confirm Gmail is connected and try again.';
-        this.isApproving = false;
-      }
-    );
+    this.saveIfChanged()
+      .pipe(switchMap(() => this.draftService.approveDraft(draftId)))
+      .subscribe({
+        next: (updated) => {
+          this.draft = updated;
+          this.isApproving = false;
+          this.successMessage = 'Draft approved and saved to Gmail drafts. You can now send or edit further.';
+        },
+        error: (error) => {
+          console.error('Failed to approve draft:', error);
+          this.actionError =
+            error?.error?.error || 'Failed to approve draft. Please confirm Gmail is connected and try again.';
+          this.isApproving = false;
+        },
+      });
   }
 
   rejectDraft(): void {
@@ -156,7 +172,7 @@ export class DraftDetailComponent implements OnInit {
 
     if (confirm('Are you sure you want to reject this draft?')) {
       this.isRejecting = true;
-      this.error = null;
+      this.actionError = null;
       this.successMessage = null;
 
       this.draftService.rejectDraft(this.draft._id).subscribe(
@@ -168,7 +184,7 @@ export class DraftDetailComponent implements OnInit {
         },
         (error) => {
           console.error('Failed to reject draft:', error);
-          this.error = 'Failed to reject draft';
+          this.actionError = error?.error?.error || 'Failed to reject draft';
           this.isRejecting = false;
         }
       );
@@ -181,27 +197,32 @@ export class DraftDetailComponent implements OnInit {
     }
 
     if (confirm('Are you sure you want to send this draft?')) {
+      const draftId = this.draft._id;
       this.isSending = true;
-      this.error = null;
+      this.actionError = null;
       this.successMessage = null;
 
       // Reuse the key from a failed attempt so a retry can never double-send.
-      this.sendIdempotencyKey ??= this.createIdempotencyKey(this.draft._id);
+      const idempotencyKey = (this.sendIdempotencyKey ??= this.createIdempotencyKey(draftId));
 
-      this.draftService.sendDraft(this.draft._id, this.sendIdempotencyKey).subscribe(
-        (updated) => {
-          this.draft = updated;
-          this.sendIdempotencyKey = null;
-          this.isSending = false;
-          this.successMessage = 'Draft sent successfully. Message ID: ' + updated.sentGmailMessageId;
-          setTimeout(() => this.router.navigate(['/dashboard']), 2000);
-        },
-        (error) => {
-          console.error('Failed to send draft:', error);
-          this.error = 'Failed to send draft: ' + (error?.error?.error || error.message);
-          this.isSending = false;
-        }
-      );
+      // Unsaved edits are saved (and synced to the Gmail draft) first, so the
+      // message sent is the one on screen.
+      this.saveIfChanged()
+        .pipe(switchMap(() => this.draftService.sendDraft(draftId, idempotencyKey)))
+        .subscribe({
+          next: (updated) => {
+            this.draft = updated;
+            this.sendIdempotencyKey = null;
+            this.isSending = false;
+            this.successMessage = 'Draft sent successfully. Message ID: ' + updated.sentGmailMessageId;
+            setTimeout(() => this.router.navigate(['/dashboard']), 2000);
+          },
+          error: (error) => {
+            console.error('Failed to send draft:', error);
+            this.actionError = 'Failed to send draft: ' + (error?.error?.error || error.message);
+            this.isSending = false;
+          },
+        });
     }
   }
 

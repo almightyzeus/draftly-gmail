@@ -5,7 +5,7 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { OpenAIService } from './openaiService.js';
 import { GmailService } from './gmailService.js';
 import { ActivityLogService } from './activityLogService.js';
-import { ConflictError, NotFoundError } from '../utils/errors.js';
+import { AppError, ConflictError, NotFoundError } from '../utils/errors.js';
 
 /**
  * DraftService - Handles draft generation, approval, rejection, and sending
@@ -232,7 +232,13 @@ export class DraftService {
   }
 
   /**
-   * Update draft content (both MongoDB + Gmail if approved)
+   * Update draft content (both MongoDB + Gmail if approved).
+   *
+   * For an APPROVED draft the Gmail draft is what gets sent, so it must be
+   * updated first: if that fails, nothing is saved and the user sees an error
+   * (otherwise the app would show text that Gmail would not send). The Mongo
+   * write is conditional, so an edit cannot land on a draft whose status
+   * changed meanwhile or that is being (or has been) sent.
    */
   static async updateDraft(userId: string, draftId: string, draftBody: string): Promise<any> {
     try {
@@ -250,66 +256,102 @@ export class DraftService {
 
       // Only allow editing PENDING or APPROVED drafts
       if (!['PENDING', 'APPROVED'].includes(draft.status)) {
-        throw new Error(`Cannot edit draft with status: ${draft.status}`);
+        throw new ConflictError(`Cannot edit draft with status: ${draft.status}`);
+      }
+      if (draft.sendIdempotencyKey) {
+        throw new ConflictError('This draft is being sent and can no longer be edited');
       }
 
-      draft.draftBody = draftBody;
-      draft.auditTrail.push({
-        at: new Date(),
-        action: 'EDITED',
-        by: 'user',
-        meta: { bodyLength: draftBody.length },
-      });
-
-      // If draft is already approved and has gmailDraftId, update in Gmail
       if (draft.status === 'APPROVED' && draft.gmailDraftId) {
-        try {
-          const originalEmail = await EmailMessage.findOne({
-            userId: userObjectId,
-            gmailMessageId: draft.replyToGmailMessageId || (Array.isArray(draft.gmailMessageId)
-              ? draft.gmailMessageId[0]
-              : draft.gmailMessageId),
-          });
-
-          if (originalEmail) {
-            const replyMetadata = await GmailService.getReplyMetadata(
-              userId,
-              originalEmail.gmailMessageId
-            );
-            await GmailService.updateDraft(
-              userId,
-              draft.gmailDraftId,
-              draftBody,
-              originalEmail.from,
-              `Re: ${originalEmail.subject}`,
-              draft.threadId,
-              replyMetadata.inReplyTo,
-              replyMetadata.references
-            );
-          }
-        } catch (gmailError) {
-          logger.warn(
-            gmailError instanceof Error ? gmailError : new Error(String(gmailError)),
-            'Failed to update Gmail draft during edit, continuing with MongoDB update'
-          );
-        }
+        await this.syncApprovedGmailDraft(userId, userObjectId, draft, draftBody);
       }
 
-      await draft.save();
-      await this.logActivity(userId, 'DRAFT_EDITED', draft._id.toString(), {
-        status: draft.status,
+      const updated = await Draft.findOneAndUpdate(
+        {
+          _id: draftObjectId,
+          userId: userObjectId,
+          status: draft.status,
+          sendIdempotencyKey: null,
+        },
+        {
+          $set: { draftBody },
+          $push: {
+            auditTrail: {
+              at: new Date(),
+              action: 'EDITED',
+              by: 'user',
+              meta: { bodyLength: draftBody.length },
+            },
+          },
+        },
+        { returnDocument: 'after' }
+      );
+
+      if (!updated) {
+        throw new ConflictError('The draft changed while saving (it may have been approved or sent). Reload and try again.');
+      }
+
+      await this.logActivity(userId, 'DRAFT_EDITED', updated._id.toString(), {
+        status: updated.status,
         bodyLength: draftBody.length,
       });
 
       logger.info({ userId, draftId }, 'Draft updated');
 
-      return draft;
+      return updated;
     } catch (error) {
       logger.error(
         error instanceof Error ? error : new Error(String(error)),
         'Failed to update draft'
       );
       throw error;
+    }
+  }
+
+  /**
+   * Push an edited body to the Gmail draft of an APPROVED draft, or fail.
+   */
+  private static async syncApprovedGmailDraft(
+    userId: string,
+    userObjectId: Types.ObjectId,
+    draft: any,
+    draftBody: string
+  ): Promise<void> {
+    const originalEmail = await EmailMessage.findOne({
+      userId: userObjectId,
+      gmailMessageId: draft.replyToGmailMessageId || (Array.isArray(draft.gmailMessageId)
+        ? draft.gmailMessageId[0]
+        : draft.gmailMessageId),
+    });
+
+    try {
+      if (!originalEmail) {
+        throw new Error('Original email not found');
+      }
+
+      const replyMetadata = await GmailService.getReplyMetadata(
+        userId,
+        originalEmail.gmailMessageId
+      );
+      await GmailService.updateDraft(
+        userId,
+        draft.gmailDraftId,
+        draftBody,
+        originalEmail.from,
+        `Re: ${originalEmail.subject}`,
+        draft.threadId,
+        replyMetadata.inReplyTo,
+        replyMetadata.references
+      );
+    } catch (gmailError) {
+      logger.warn(
+        gmailError instanceof Error ? gmailError : new Error(String(gmailError)),
+        'Failed to update Gmail draft; edit not saved'
+      );
+      throw new AppError(
+        'Could not update the Gmail draft, so your edit was not saved. Please try again.',
+        502
+      );
     }
   }
 

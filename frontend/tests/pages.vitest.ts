@@ -410,7 +410,8 @@ describe('frontend page classes', () => {
     component.ngOnInit();
 
     component.sendDraft();
-    expect(component.error).toContain('Gmail unavailable');
+    expect(component.actionError).toContain('Gmail unavailable');
+    expect(component.error).toBeNull();
     expect(component.isSending).toBe(false);
     component.sendDraft();
     component.sendDraft();
@@ -425,6 +426,89 @@ describe('frontend page classes', () => {
     component.draft = { ...(component.draft as any), status: 'APPROVED' };
     component.sendDraft();
     expect(draft.sendDraft.mock.calls[3][1]).not.toBe(keys[0]);
+  });
+
+  describe('DraftDetailComponent saves unsaved edits before approve/send', () => {
+    const setup = (status: string, overrides: Record<string, any> = {}) => {
+      const draft: any = {
+        getDraftDetail: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Original', status })),
+        updateDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Edited', status })),
+        approveDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Edited', status: 'APPROVED' })),
+        sendDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1', status: 'SENT', sentGmailMessageId: 'sent-1' })),
+        ...overrides,
+      };
+      const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft, {} as any);
+      component.ngOnInit();
+      component.editedContent = 'Edited';
+      component.onContentChange();
+      return { component, draft };
+    };
+
+    it('approves only after the edit has been saved', () => {
+      const pendingSave = new Subject<any>();
+      const { component, draft } = setup('PENDING', { updateDraft: vi.fn().mockReturnValue(pendingSave) });
+
+      component.approveDraft();
+      expect(draft.updateDraft).toHaveBeenCalledWith('draft-1', 'Edited');
+      expect(draft.approveDraft).not.toHaveBeenCalled();
+
+      pendingSave.next({ _id: 'draft-1', draftBody: 'Edited', status: 'PENDING' });
+      pendingSave.complete();
+      expect(draft.approveDraft).toHaveBeenCalledWith('draft-1');
+      expect(component.draft?.status).toBe('APPROVED');
+      expect(component.hasChanges).toBe(false);
+    });
+
+    it('does not approve when saving the edit fails, and keeps the editor and text', () => {
+      const { component, draft } = setup('PENDING', {
+        updateDraft: vi.fn().mockReturnValue(throwError(() => ({ status: 409, error: { error: 'The draft changed while saving' } }))),
+      });
+
+      component.approveDraft();
+
+      expect(draft.approveDraft).not.toHaveBeenCalled();
+      expect(component.actionError).toBe('The draft changed while saving');
+      expect(component.error).toBeNull();
+      expect(component.editedContent).toBe('Edited');
+      expect(component.hasChanges).toBe(true);
+      expect(component.isApproving).toBe(false);
+    });
+
+    it('approves directly when there are no unsaved edits', () => {
+      const { component, draft } = setup('PENDING');
+      component.editedContent = 'Original';
+      component.onContentChange();
+
+      component.approveDraft();
+
+      expect(draft.updateDraft).not.toHaveBeenCalled();
+      expect(draft.approveDraft).toHaveBeenCalledWith('draft-1');
+    });
+
+    it('sends only after the edit has been saved to the Gmail draft', () => {
+      const { component, draft } = setup('APPROVED');
+
+      component.sendDraft();
+
+      expect(draft.updateDraft).toHaveBeenCalledWith('draft-1', 'Edited');
+      expect(draft.sendDraft).toHaveBeenCalledWith('draft-1', expect.any(String));
+      expect(draft.updateDraft.mock.invocationCallOrder[0]).toBeLessThan(draft.sendDraft.mock.invocationCallOrder[0]);
+      expect(component.draft?.status).toBe('SENT');
+    });
+
+    it('does not send when the Gmail draft could not be updated (502)', () => {
+      const message = 'Could not update the Gmail draft, so your edit was not saved. Please try again.';
+      const { component, draft } = setup('APPROVED', {
+        updateDraft: vi.fn().mockReturnValue(throwError(() => ({ status: 502, error: { error: message } }))),
+      });
+
+      component.sendDraft();
+
+      expect(draft.sendDraft).not.toHaveBeenCalled();
+      expect(component.actionError).toContain(message);
+      expect(component.error).toBeNull();
+      expect(component.hasChanges).toBe(true);
+    });
   });
 
   it('DraftDetailComponent does not send when the user cancels confirmation', () => {
