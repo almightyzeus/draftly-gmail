@@ -306,6 +306,24 @@ button {
   height: 20px;
 }
 
+.search-row,
+.pagination {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+
+.search-field {
+  flex: 1 1 260px;
+}
+
+.pagination {
+  justify-content: flex-end;
+  margin: 16px 0 0;
+}
+
 /* Responsive Design */
 @media (max-width: 768px) {
   .container {

@@ -127,6 +127,24 @@ describe('frontend services', () => {
     expect(http.get).toHaveBeenCalledWith('api/gmail/emails?label=INBOX&unread=true&limit=20');
     expect(emails).toEqual([{ gmailMessageId: 'msg-1' }]);
 
+    // Search + pagination: Gmail syntax must survive URL encoding ('+' must not become a space).
+    http.get.mockReturnValueOnce(of({ emails: [], nextPageToken: 'page-3' }));
+    let pageResult: any;
+    service
+      .fetchEmailPage({ label: 'INBOX', limit: 20, q: '  from:alice+news@example.com subject:"Q&A report"  ', pageToken: 'page-2' })
+      .subscribe((result) => (pageResult = result));
+    const url: string = http.get.mock.calls.at(-1)[0];
+    expect(url).toBe(
+      'api/gmail/emails?label=INBOX&limit=20&q=from%3Aalice%2Bnews%40example.com+subject%3A%22Q%26A+report%22&pageToken=page-2'
+    );
+    const params = new URL(url, 'http://x').searchParams;
+    expect(params.get('q')).toBe('from:alice+news@example.com subject:"Q&A report"');
+    expect(pageResult).toEqual({ emails: [], nextPageToken: 'page-3' });
+
+    // Blank search and first-page (null) token are omitted.
+    service.fetchEmailPage({ label: 'INBOX', q: '   ', pageToken: null }).subscribe();
+    expect(http.get).toHaveBeenLastCalledWith('api/gmail/emails?label=INBOX');
+
     service.getEmailDetail('msg-1').subscribe();
     expect(http.get).toHaveBeenCalledWith('api/gmail/emails/msg-1');
 

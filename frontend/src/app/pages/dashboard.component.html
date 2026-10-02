@@ -67,6 +67,24 @@
           </mat-card-title>
         </mat-card-header>
         <mat-card-content>
+          <!-- Gmail search: free text or Gmail syntax (from:, subject:, has:attachment, ...) -->
+          <form class="search-row" (ngSubmit)="search()">
+            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search-field">
+              <mat-label>Search mail</mat-label>
+              <input matInput name="q" [(ngModel)]="searchQuery" placeholder="e.g. from:alice subject:&quot;report&quot;" />
+            </mat-form-field>
+            <button mat-raised-button color="primary" type="submit">
+              <mat-icon>search</mat-icon>
+              Search
+            </button>
+            @if (searchQuery || activeQuery) {
+              <button mat-button type="button" (click)="clearSearch()">Clear</button>
+            }
+            <button mat-stroked-button type="button" [attr.aria-pressed]="unreadOnly" (click)="toggleUnreadOnly()">
+              <mat-icon>{{ unreadOnly ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+              Unread only
+            </button>
+          </form>
           <!-- Error Message -->
           @if (emailsError) {
             <div class="error-message">
@@ -126,10 +144,24 @@
             </div>
           }
           <!-- No Emails Message -->
-          @if (!isLoadingEmails && emails.length === 0) {
+          @if (showEmptyState) {
             <div class="no-emails">
               <mat-icon>mail_outline</mat-icon>
-              <p>No emails found</p>
+              <p>{{ emptyStateMessage }}</p>
+            </div>
+          }
+          <!-- Pagination (Gmail page tokens) -->
+          @if (hasPreviousPage || hasNextPage) {
+            <div class="pagination">
+              <button mat-button (click)="previousPage()" [disabled]="!hasPreviousPage || isLoadingEmails">
+                <mat-icon>chevron_left</mat-icon>
+                Previous
+              </button>
+              <span>Page {{ pageIndex + 1 }}</span>
+              <button mat-button (click)="nextPage()" [disabled]="!hasNextPage || isLoadingEmails">
+                Next
+                <mat-icon iconPositionEnd>chevron_right</mat-icon>
+              </button>
             </div>
           }
         </mat-card-content>

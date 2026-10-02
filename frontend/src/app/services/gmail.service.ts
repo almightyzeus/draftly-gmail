@@ -2,6 +2,19 @@ import { Injectable } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
 import { Observable, map } from 'rxjs';
 
+export interface EmailListOptions {
+  label?: string;
+  unread?: boolean;
+  limit?: number;
+  q?: string;
+  pageToken?: string | null;
+}
+
+export interface EmailPage {
+  emails: any[];
+  nextPageToken: string | null;
+}
+
 @Injectable({
   providedIn: 'root',
 })
@@ -11,14 +24,13 @@ export class GmailService {
   constructor(private http: HttpClient) {}
 
   /**
-   * Fetch emails from Gmail
+   * Fetch one page of emails from Gmail.
+   * `q` is Gmail search syntax; `pageToken` is Gmail's opaque token from a previous page.
    */
-  fetchEmails(options?: {
-    label?: string;
-    unread?: boolean;
-    limit?: number;
-  }): Observable<any[]> {
+  fetchEmailPage(options?: EmailListOptions): Observable<EmailPage> {
     let url = `${this.gmailApiUrl}/emails`;
+    // URLSearchParams (not HttpParams) so a literal '+' in a search is sent as %2B
+    // instead of being decoded as a space by the server.
     const params = new URLSearchParams();
 
     if (options?.label) {
@@ -30,15 +42,25 @@ export class GmailService {
     if (options?.limit) {
       params.append('limit', options.limit.toString());
     }
+    if (options?.q?.trim()) {
+      params.append('q', options.q.trim());
+    }
+    if (options?.pageToken) {
+      params.append('pageToken', options.pageToken);
+    }
 
     if (params.toString()) {
       url += '?' + params.toString();
     }
 
-    // The API returns one Gmail page: { emails, nextPageToken }.
-    return this.http
-      .get<{ emails: any[]; nextPageToken: string | null }>(url)
-      .pipe(map((page) => page.emails));
+    return this.http.get<EmailPage>(url);
+  }
+
+  /**
+   * Fetch the emails of one page, without the pagination token.
+   */
+  fetchEmails(options?: EmailListOptions): Observable<any[]> {
+    return this.fetchEmailPage(options).pipe(map((page) => page.emails));
   }
 
   /**
