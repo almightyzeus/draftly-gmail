@@ -37,6 +37,7 @@ vi.mock('../src/services/gmailService.js', () => ({
     sendDraft: vi.fn(),
     deleteDraft: vi.fn(),
     getReplyMetadata: vi.fn(),
+    getSenderAddress: vi.fn(),
   },
 }));
 
@@ -80,6 +81,7 @@ describe('DraftService', () => {
     vi.clearAllMocks();
     (OpenAIService.generateDraft as unknown as Mock).mockResolvedValue('Generated reply');
     (ActivityLogService.logActivity as unknown as Mock).mockResolvedValue({});
+    (GmailService.getSenderAddress as unknown as Mock).mockResolvedValue('user@gmail.com');
     (GmailService.getReplyMetadata as unknown as Mock).mockResolvedValue({
       inReplyTo: '<rfc-message@example.com>',
       references: '<older@example.com> <rfc-message@example.com>',
@@ -105,6 +107,98 @@ describe('DraftService', () => {
     (Draft.findOne as unknown as Mock).mockResolvedValue(existing);
 
     await expect(DraftService.generateDraft(userId, 'msg-1', 'formal')).resolves.toBe(existing);
+  });
+
+  describe('reply target never resolves to the user (regression: replies sent to self)', () => {
+    const msg = (id: string, direction: 'INBOUND' | 'OUTBOUND', from: string, unread = false) => ({
+      ...email,
+      gmailMessageId: id,
+      direction,
+      from,
+      labels: unread ? ['INBOX', 'UNREAD'] : ['INBOX'],
+    });
+    const arrangeNewDraft = () => {
+      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+      (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
+    };
+
+    it('replies to the read inbound message when the newest messages are the user\'s own (exact thread shape seen in production)', async () => {
+      // Newest first: three self-addressed replies (unread in the user's inbox),
+      // two earlier sent replies, then the only message from the other person (read).
+      (GmailService.fetchThreadEmails as unknown as Mock).mockResolvedValue([
+        msg('self-3', 'OUTBOUND', 'User <user@gmail.com>', true),
+        msg('self-2', 'OUTBOUND', 'User <user@gmail.com>', true),
+        msg('self-1', 'OUTBOUND', 'User <user@gmail.com>', true),
+        msg('sent-2', 'OUTBOUND', 'User <user@gmail.com>'),
+        msg('sent-1', 'OUTBOUND', 'User <user@gmail.com>'),
+        msg('from-them', 'INBOUND', 'Sender <sender@example.com>'),
+      ]);
+      arrangeNewDraft();
+
+      const result = await DraftService.generateDraft(userId, undefined, 'formal', 'thread-1');
+
+      expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['from-them'], 'formal', undefined);
+      expect(result.replyToGmailMessageId).toBe('from-them');
+      expect(result.isConsolidated).toBe(false);
+    });
+
+    it('picks the latest inbound message when none is unread', async () => {
+      (GmailService.fetchThreadEmails as unknown as Mock).mockResolvedValue([
+        msg('mine', 'OUTBOUND', 'user@gmail.com'),
+        msg('their-newer', 'INBOUND', 'sender@example.com'),
+        msg('their-older', 'INBOUND', 'sender@example.com'),
+      ]);
+      arrangeNewDraft();
+
+      const result = await DraftService.generateDraft(userId, undefined, 'formal', 'thread-1');
+
+      expect(result.replyToGmailMessageId).toBe('their-newer');
+    });
+
+    it('returns 422 for a thread with no message from someone else', async () => {
+      (GmailService.fetchThreadEmails as unknown as Mock).mockResolvedValue([
+        msg('mine-2', 'OUTBOUND', 'user@gmail.com', true),
+        msg('mine-1', 'OUTBOUND', 'user@gmail.com'),
+      ]);
+
+      await expect(DraftService.generateDraft(userId, undefined, 'formal', 'thread-1')).rejects.toMatchObject({
+        statusCode: 422,
+        message: 'This thread has no message from someone else to reply to.',
+      });
+      expect(OpenAIService.generateDraft).not.toHaveBeenCalled();
+    });
+
+    it('returns 422 when asked to reply directly to the user\'s own message', async () => {
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(msg('mine', 'OUTBOUND', 'user@gmail.com'));
+
+      await expect(DraftService.generateDraft(userId, 'mine', 'formal')).rejects.toMatchObject({ statusCode: 422 });
+      expect(OpenAIService.generateDraft).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['an OUTBOUND target', msg('mine', 'OUTBOUND', 'Someone <someone@example.com>')],
+      ['a target from the user\'s address (legacy misclassified as INBOUND)', msg('mine', 'INBOUND', 'User <USER@gmail.com>')],
+    ])('approve refuses %s and creates no Gmail draft', async (_label, target) => {
+      (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ replyToGmailMessageId: 'mine' }));
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(target);
+
+      await expect(DraftService.approveDraft(userId, draftId)).rejects.toMatchObject({
+        statusCode: 409,
+        message: expect.stringContaining('would be sent to your own address'),
+      });
+      expect(GmailService.createDraft).not.toHaveBeenCalled();
+    });
+
+    it('send refuses an already-APPROVED draft addressed to the user, without claiming or calling Gmail', async () => {
+      (Draft.findOne as unknown as Mock).mockResolvedValue(
+        buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1', replyToGmailMessageId: 'mine' })
+      );
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(msg('mine', 'OUTBOUND', 'user@gmail.com'));
+
+      await expect(DraftService.sendDraft(userId, draftId, 'key-1')).rejects.toMatchObject({ statusCode: 409 });
+      expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+      expect(GmailService.sendDraft).not.toHaveBeenCalled();
+    });
   });
 
   it('supports thread consolidation', async () => {

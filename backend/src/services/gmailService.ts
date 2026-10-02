@@ -215,7 +215,7 @@ export class GmailService {
   }
 
   /** The From address for outgoing mail: the user's active Gmail account. */
-  private static async getSenderAddress(userId: string): Promise<string | undefined> {
+  static async getSenderAddress(userId: string): Promise<string | undefined> {
     const account = await GmailAccount.findOne({ userId: new Types.ObjectId(userId), revokedAt: null });
     return account?.gmailEmail;
   }

@@ -5,6 +5,7 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { OpenAIService } from './openaiService.js';
 import { GmailService } from './gmailService.js';
 import { ActivityLogService } from './activityLogService.js';
+import { mailboxAddress } from '../utils/mimeMessage.js';
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 
 /**
@@ -14,6 +15,27 @@ export class DraftService {
   private static readonly PROMPT_VERSION = '1.0';
   /** How long a send claim blocks other requests before it is considered stranded. */
   static readonly SEND_CLAIM_LEASE_MS = 5 * 60 * 1000;
+
+  private static replyTargetId(draft: any): string {
+    return draft.replyToGmailMessageId || (Array.isArray(draft.gmailMessageId)
+      ? draft.gmailMessageId[0]
+      : draft.gmailMessageId);
+  }
+
+  /**
+   * The reply is addressed to the target message's From. Refuse when that is
+   * the user's own message/address, so a reply can never be sent to the user.
+   */
+  private static async assertNotReplyingToSelf(userId: string, targetEmail: any): Promise<void> {
+    const recipient = mailboxAddress(targetEmail.from)?.toLowerCase();
+    const ownAddress = (await GmailService.getSenderAddress(userId))?.toLowerCase();
+
+    if (targetEmail.direction === 'OUTBOUND' || (recipient && ownAddress && recipient === ownAddress)) {
+      throw new ConflictError(
+        'This reply would be sent to your own address. Reject it and generate a new draft from the message you received.'
+      );
+    }
+  }
 
   /** Parse a draft id from the URL; a malformed id is simply "not found". */
   private static toDraftObjectId(draftId: string): Types.ObjectId {
@@ -64,10 +86,17 @@ export class DraftService {
           throw new NotFoundError('No emails found in thread');
         }
 
+        // Only messages from someone else can be replied to. The user's own
+        // messages (including copies of Draftly's sent replies, and replies
+        // that landed in their own inbox) must never become the target, or the
+        // reply would be addressed to the user.
+        const inboundEmails = threadEmails.filter((e) => e.direction === 'INBOUND');
+        if (inboundEmails.length === 0) {
+          throw new AppError('This thread has no message from someone else to reply to.', 422);
+        }
+
         // Get all unread inbound emails in thread
-        const unreadEmails = threadEmails.filter(
-          (e) => e.direction === 'INBOUND' && e.labels?.includes('UNREAD')
-        );
+        const unreadEmails = inboundEmails.filter((e) => e.labels?.includes('UNREAD'));
 
         if (unreadEmails.length > 1) {
           // Multiple emails: consolidate
@@ -82,9 +111,10 @@ export class DraftService {
           // Single unread email
           gmailMessageIds = [unreadEmails[0].gmailMessageId];
           targetThreadId = threadId;
-        } else if (threadEmails.length > 0) {
-          // No unread, use latest email
-          gmailMessageIds = [threadEmails[0].gmailMessageId];
+        } else {
+          // No unread: reply to the latest message from someone else
+          // (newest-first), never simply the latest message in the thread.
+          gmailMessageIds = [inboundEmails[0].gmailMessageId];
           targetThreadId = threadId;
         }
       } else if (gmailMessageId) {
@@ -96,6 +126,9 @@ export class DraftService {
 
         if (!email) {
           throw new NotFoundError('Email not found');
+        }
+        if (email.direction === 'OUTBOUND') {
+          throw new AppError('This is your own message. Open a message you received to reply to it.', 422);
         }
 
         gmailMessageIds = [gmailMessageId];
@@ -394,6 +427,7 @@ export class DraftService {
       if (!originalEmail) {
         throw new NotFoundError('Original email not found');
       }
+      await this.assertNotReplyingToSelf(userId, originalEmail);
 
       const replyMetadata = await GmailService.getReplyMetadata(
         userId,
@@ -533,6 +567,18 @@ export class DraftService {
 
       if (draft.status === 'APPROVED' && !draft.gmailDraftId) {
         throw new ConflictError('Gmail draft ID not found. Please approve the draft first.');
+      }
+
+      // Drafts approved before reply targets were restricted may already be
+      // addressed to the user; never send those.
+      if (draft.status === 'APPROVED') {
+        const targetEmail = await EmailMessage.findOne({
+          userId: userObjectId,
+          gmailMessageId: this.replyTargetId(draft),
+        });
+        if (targetEmail) {
+          await this.assertNotReplyingToSelf(userId, targetEmail);
+        }
       }
 
       // Atomically claim the send. Only one request can match this filter.

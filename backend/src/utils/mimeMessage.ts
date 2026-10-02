@@ -50,6 +50,17 @@ export function encodeHeaderText(value: string): string {
 const ADDRESS = /^[^\s<>@",;:()\[\]\\]+@[^\s<>@",;:()\[\]\\]+$/;
 
 /**
+ * The address of the first mailbox in a From/To value (original case), or null.
+ * Compare addresses case-insensitively.
+ */
+export function mailboxAddress(value: string | null | undefined): string | null {
+  const sanitized = sanitizeHeaderValue(value ?? '');
+  const angle = sanitized.match(/<([^<>]+)>/);
+  const address = (angle ? angle[1] : sanitized.split(/[\s,;]+/)[0]).trim();
+  return ADDRESS.test(address) ? address : null;
+}
+
+/**
  * Turn the inbound From value into exactly one recipient mailbox. Only the
  * first <address> (or a bare address) is kept, so text a sender appends to
  * their From header can never add recipients (e.g. via group syntax).
@@ -57,9 +68,9 @@ const ADDRESS = /^[^\s<>@",;:()\[\]\\]+@[^\s<>@",;:()\[\]\\]+$/;
 export function formatMailbox(value: string): string {
   const sanitized = sanitizeHeaderValue(value);
   const angle = sanitized.match(/<([^<>]+)>/);
-  const address = (angle ? angle[1] : sanitized.split(/[\s,;]+/)[0]).trim();
+  const address = mailboxAddress(value);
 
-  if (!ADDRESS.test(address)) {
+  if (!address) {
     throw new Error('Cannot determine a valid reply address');
   }
 
