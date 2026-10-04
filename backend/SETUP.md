@@ -108,27 +108,16 @@ Response:
 ```
 backend/
 ├── src/
-│   ├── config/
-│   │   └── env.ts           # Environment config with validation
-│   ├── models/
-│   │   ├── User.ts
-│   │   ├── GmailAccount.ts
-│   │   ├── UserPreference.ts
-│   │   ├── EmailMessage.ts
-│   │   ├── Draft.ts
-│   │   ├── ActivityLog.ts
-│   │   └── index.ts
-│   ├── middleware/
-│   │   └── auth.ts          # JWT authentication
-│   ├── controllers/
-│   │   └── authController.ts
+│   ├── config/env.ts        # Environment config with validation
+│   ├── models/              # User, GmailAccount, UserPreference, EmailMessage, Draft, ActivityLog
+│   ├── middleware/auth.ts   # Bearer JWT authentication
+│   ├── controllers/         # Input validation and status codes (auth, gmail, drafts, preferences, logs)
 │   ├── routes/
-│   │   └── authRoutes.ts
-│   ├── utils/
-│   │   ├── logger.ts
-│   │   └── crypto.ts        # AES-256-GCM encryption
+│   ├── services/            # Business logic (auth, Gmail, Gmail OAuth, drafts, OpenAI, preferences, logs)
+│   ├── utils/               # errors, logger, crypto (AES-256-GCM), MIME building, redaction, concurrency
 │   ├── app.ts               # Express app setup
 │   └── server.ts            # Server entry point
+├── tests/                   # Vitest + Supertest (+ mongodb-memory-server)
 ├── .env.example
 ├── .env                     # (create from example)
 ├── package.json
@@ -140,12 +129,12 @@ backend/
 ### Authentication
 - JWT-based authentication with access & refresh tokens
 - Password hashing with bcryptjs
-- Login/Register endpoints with rate limiting
+- Login/Register endpoints limited to 5 failed attempts per 15 minutes per client IP
 
 ### Security
 - CORS configured to frontend URL
 - Helmet for security headers
-- Rate limiting on auth endpoints
+- Rate limiting on failed logins/registrations and on draft generation (10 per minute per user)
 - Encryption for stored sensitive data (OAuth tokens)
 
 ### Data Encryption
@@ -223,4 +212,4 @@ npm run start
 
 ## Next Steps
 
-See [PLAN.md](../PLAN.md) for the full implementation roadmap.
+See the [project README](../README.md) for the full API and Docker setup, and [PLAN.md](../PLAN.md) for the review findings and hardening stages.

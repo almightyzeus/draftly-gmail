@@ -1,27 +1,45 @@
-# Frontend
+# Draftly frontend
 
-This project was generated with [Angular CLI](https://github.com/angular/angular-cli) version 16.2.16.
+Angular 21 single-page app for Draftly (standalone components, lazy-loaded routes, Angular Material 21). See the [project README](../README.md) for the full setup, API, and Docker instructions.
+
+Requires Node.js ≥ 20.19 (the repository pins 20.19.5 in `.nvmrc`; run `nvm use`).
 
 ## Development server
 
-Run `ng serve` for a dev server. Navigate to `http://localhost:4200/`. The application will automatically reload if you change any of the source files.
+```bash
+npm install
+npm start
+```
 
-## Code scaffolding
-
-Run `ng generate component component-name` to generate a new component. You can also use `ng generate directive|pipe|service|class|guard|interface|enum|module`.
+Open http://localhost:4200. `npm start` runs `ng serve` with `proxy.conf.json`, which forwards `/api` to the backend on http://localhost:3000.
 
 ## Build
 
-Run `ng build` to build the project. The build artifacts will be stored in the `dist/` directory.
+```bash
+npm run build
+```
 
-## Running unit tests
+Output goes to `dist/frontend/browser`. In Docker, nginx serves this folder and proxies `/api` to the backend (see `nginx.conf` and `Dockerfile`).
 
-Run `ng test` to execute the unit tests via [Karma](https://karma-runner.github.io).
+## Tests
 
-## Running end-to-end tests
+Unit tests use Vitest:
 
-Run `ng e2e` to execute the end-to-end tests via a platform of your choice. To use this command, you need to first add a package that implements end-to-end testing capabilities.
+```bash
+npm test
+npm run test:coverage
+```
 
-## Further help
+Tests live in `tests/*.vitest.ts`.
 
-To get more help on the Angular CLI use `ng help` or go check out the [Angular CLI Overview and Command Reference](https://angular.io/cli) page.
+## Structure
+
+```text
+src/
+  styles.css      # global design tokens and shared layout/state styles
+  app/
+    app.routes.ts # lazy-loaded routes
+    pages/        # login, register, dashboard (Inbox/Drafts), email detail, draft detail
+    services/     # API clients, auth service, interceptor, guard
+    shared/       # top bar, confirm dialog, formatting helpers
+```

@@ -9,7 +9,30 @@ No dependency upgrades and no commits unless explicitly approved.
 
 ---
 
-## 1. Current baseline (verified)
+## 0. Status — all stages complete (verified 2026-10-04, Node 20.19.5)
+
+| Stage | Outcome |
+|---|---|
+| 1 Session & OAuth hardening | Done: header-only auth, no token cookies, `GET /api/gmail/oauth/url`, OAuth state has its own audience, per-callback OAuth client, redacted request logs (S1, S2, S3, S8) |
+| 2 Draft & send integrity | Done: single hardened MIME builder (CR/LF stripped, single parsed recipient, encoded subject, base64 bodies), Gmail-sync-before-save for approved drafts, save-before-approve/send in the UI, exact direction detection, no placeholder drafts, Gmail `internalDate` (C1, C2, S4, S6, C4, C5) |
+| 3 Errors, config, dead code | Done: typed errors and 404/409/422/400/413 status codes, one error helper, string-typed inputs and length caps, per-user generate limit, OpenAI config/timeout/prompt caps, dead code removed, Docker in production mode as non-root (C3, A1, A3, A4, S7, S10, S11) |
+| 4 Frontend structure | Done: lazy routes (initial bundle 995 kB → 523 kB), observer-style subscriptions, dashboard leak/double-load fixed, signal-based busy state, safer email rendering (A5, C7, S9-partial) |
+| 5 UI/UX polish | Done: shared top bar with Gmail status, Inbox/Drafts tabs, drafts list, recipient header, Material confirm dialogs, snackbars, global styles, accessibility, responsive layouts |
+| 6 Verification & docs | Done: full validation suite, Docker checks, README / frontend README / SETUP.md / `.env.example` updated |
+
+Fixes added during the stages (beyond the original plan):
+
+- Reject on an APPROVED draft always failed; now it withdraws the draft and deletes its Gmail copy (Stage 3).
+- Malformed / oversized JSON bodies returned 500; now 400 / 413 (Stage 3).
+- **Replies could be addressed to the user** when a thread's newest messages were the user's own: reply targets are now always messages from someone else, and approve/send refuse self-addressed replies.
+- Inbox listing fetched Gmail messages sequentially (6.6–7.7 s per page); now 10 in parallel (≈1.1–2.9 s).
+- Deprecated Mongoose `new: true` options replaced with `returnDocument: 'after'`.
+
+Still open (documented in the README, deliberately not done): S5 (OAuth state not bound to the browser), C6 (HTML-only emails have no plain-text body for the AI), A7 (unused `zod`/`joi` dependencies), stateless refresh tokens, remote images in email HTML, in-memory rate limits.
+
+## 1. Baseline
+
+At the time of the review:
 
 | Area | Status |
 |---|---|
@@ -19,6 +42,17 @@ No dependency upgrades and no commits unless explicitly approved.
 | Frontend coverage | 83.83% statements, 67.1% branches (needs Node ≥ 20) |
 | Production build | passes; **initial bundle 994.85 kB vs a 1 MB hard error budget** |
 | Docker | `docker compose up --build` works; nginx proxies `/api` to the backend |
+
+After all stages:
+
+| Area | Status |
+|---|---|
+| Backend tests | 22 files, 336 tests passing; `npx tsc --noEmit` clean |
+| Backend coverage | 95.5% statements, 84.48% branches |
+| Frontend tests | 4 files, 78 tests passing; app typecheck clean |
+| Frontend coverage | 93.67% statements, 80.1% branches |
+| Production build | passes; initial bundle 527.21 kB (only the 500 kB warning budget is exceeded) |
+| Docker | rebuilt from committed code; backend in production mode as `node`; `MONGODB_URI=mongodb://mongodb:27017/draftly`; nginx proxies `/api`; port 3000 bound to 127.0.0.1 |
 
 ### Completed work (preserve)
 
