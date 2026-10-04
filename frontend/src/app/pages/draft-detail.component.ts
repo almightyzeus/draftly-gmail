@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, computed, signal } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -48,10 +48,12 @@ export class DraftDetailComponent implements OnInit {
   draft: Draft | null = null;
   editedContent: string = '';
   isLoading = true;
-  isSaving = false;
-  isApproving = false;
-  isRejecting = false;
-  isSending = false;
+  readonly isSaving = signal(false);
+  readonly isApproving = signal(false);
+  readonly isRejecting = signal(false);
+  readonly isSending = signal(false);
+  /** Any action in flight: all action buttons and the editor are disabled. */
+  readonly isBusy = computed(() => this.isSaving() || this.isApproving() || this.isRejecting() || this.isSending());
   /** Failure to load the draft (replaces the page content). */
   error: string | null = null;
   /** Failure of an action (save/approve/reject/send); the editor stays visible. */
@@ -81,18 +83,18 @@ export class DraftDetailComponent implements OnInit {
     this.isLoading = true;
     this.error = null;
 
-    this.draftService.getDraftDetail(draftId).subscribe(
-      (response) => {
+    this.draftService.getDraftDetail(draftId).subscribe({
+      next: (response) => {
         this.draft = response;
         this.editedContent = response.draftBody;
         this.isLoading = false;
       },
-      (error) => {
+      error: (error) => {
         console.error('Failed to fetch draft:', error);
-        this.error = 'Failed to load draft';
+        this.error = error?.error?.error || 'Failed to load draft';
         this.isLoading = false;
-      }
-    );
+      },
+    });
   }
 
   onContentChange(): void {
@@ -104,20 +106,20 @@ export class DraftDetailComponent implements OnInit {
       return;
     }
 
-    this.isSaving = true;
+    this.isSaving.set(true);
     this.actionError = null;
     this.successMessage = null;
 
     this.saveIfChanged().subscribe({
       next: () => {
-        this.isSaving = false;
+        this.isSaving.set(false);
         this.successMessage = 'Draft saved successfully!';
         setTimeout(() => (this.successMessage = null), 3000);
       },
       error: (error) => {
         console.error('Failed to save draft:', error);
         this.actionError = error?.error?.error || 'Failed to save draft';
-        this.isSaving = false;
+        this.isSaving.set(false);
       },
     });
   }
@@ -144,7 +146,7 @@ export class DraftDetailComponent implements OnInit {
     }
 
     const draftId = this.draft._id;
-    this.isApproving = true;
+    this.isApproving.set(true);
     this.actionError = null;
     this.successMessage = null;
 
@@ -153,14 +155,14 @@ export class DraftDetailComponent implements OnInit {
       .subscribe({
         next: (updated) => {
           this.draft = updated;
-          this.isApproving = false;
+          this.isApproving.set(false);
           this.successMessage = 'Draft approved and saved to Gmail drafts. You can now send or edit further.';
         },
         error: (error) => {
           console.error('Failed to approve draft:', error);
           this.actionError =
             error?.error?.error || 'Failed to approve draft. Please confirm Gmail is connected and try again.';
-          this.isApproving = false;
+          this.isApproving.set(false);
         },
       });
   }
@@ -171,23 +173,23 @@ export class DraftDetailComponent implements OnInit {
     }
 
     if (confirm('Are you sure you want to reject this draft?')) {
-      this.isRejecting = true;
+      this.isRejecting.set(true);
       this.actionError = null;
       this.successMessage = null;
 
-      this.draftService.rejectDraft(this.draft._id).subscribe(
-        (updated) => {
+      this.draftService.rejectDraft(this.draft._id).subscribe({
+        next: (updated) => {
           this.draft = updated;
-          this.isRejecting = false;
+          this.isRejecting.set(false);
           this.successMessage = 'Draft rejected.';
           setTimeout(() => this.router.navigate(['/dashboard']), 2000);
         },
-        (error) => {
+        error: (error) => {
           console.error('Failed to reject draft:', error);
           this.actionError = error?.error?.error || 'Failed to reject draft';
-          this.isRejecting = false;
-        }
-      );
+          this.isRejecting.set(false);
+        },
+      });
     }
   }
 
@@ -198,7 +200,7 @@ export class DraftDetailComponent implements OnInit {
 
     if (confirm('Are you sure you want to send this draft?')) {
       const draftId = this.draft._id;
-      this.isSending = true;
+      this.isSending.set(true);
       this.actionError = null;
       this.successMessage = null;
 
@@ -213,14 +215,14 @@ export class DraftDetailComponent implements OnInit {
           next: (updated) => {
             this.draft = updated;
             this.sendIdempotencyKey = null;
-            this.isSending = false;
+            this.isSending.set(false);
             this.successMessage = 'Draft sent successfully. Message ID: ' + updated.sentGmailMessageId;
             setTimeout(() => this.router.navigate(['/dashboard']), 2000);
           },
           error: (error) => {
             console.error('Failed to send draft:', error);
             this.actionError = 'Failed to send draft: ' + (error?.error?.error || error.message);
-            this.isSending = false;
+            this.isSending.set(false);
           },
         });
     }

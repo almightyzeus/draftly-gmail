@@ -55,13 +55,11 @@
             <mat-divider class="divider"></mat-divider>
             <div class="body">
               <!-- Display HTML version if available, otherwise plain text -->
-              @if (email.bodyHtml) {
-                <div [innerHTML]="sanitizeHtml(email.bodyHtml)"></div>
-              }
-              @if (!email.bodyHtml && email.bodyPlain) {
-                <p [innerHTML]="formatPlainText(email.bodyPlain)"></p>
-              }
-              @if (!email.bodyHtml && !email.bodyPlain) {
+              @if (safeBodyHtml) {
+                <div [innerHTML]="safeBodyHtml"></div>
+              } @else if (email.bodyPlain) {
+                <p class="plain-body">{{ email.bodyPlain }}</p>
+              } @else {
                 <p class="no-body">No email body available</p>
               }
             </div>
@@ -102,6 +100,9 @@
                 ></textarea>
               </mat-form-field>
             </div>
+            @if (actionError) {
+              <p class="action-error" role="alert">{{ actionError }}</p>
+            }
             <div class="button-group">
               <button
                 mat-raised-button

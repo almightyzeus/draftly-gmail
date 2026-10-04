@@ -55,7 +55,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   isLoadingEmails = false;
   emailsError: string | null = null;
   displayedColumns: string[] = ['from', 'subject', 'snippet', 'internalDate'];
-  private isInitialLoad = true;
+  /** The startup inbox load happens once, when a Gmail-connected user is known. */
+  private initialLoadRequested = false;
+  private userSubscription?: Subscription;
 
   /** Text in the search box. */
   searchQuery = '';
@@ -77,35 +79,21 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ) {}
 
   ngOnInit(): void {
-    this.authService.currentUser$.subscribe((user) => {
+    // AuthService.restoreSession() loads /me at startup and login/register set
+    // the user, so currentUser$ is the single source of user state here.
+    this.userSubscription = this.authService.currentUser$.subscribe((user) => {
       this.currentUser = user;
-      // Only fetch emails on initial load, not on every user$ update
-      if (this.isInitialLoad && user?.googleConnected && this.emails.length === 0) {
-        this.fetchEmails();
-      } else if (!user?.googleConnected) {
+      if (user?.googleConnected) {
+        if (!this.initialLoadRequested) {
+          this.initialLoadRequested = true;
+          this.fetchEmails();
+        }
+      } else {
         // Clear emails if Gmail is not connected
         this.emails = [];
         this.isLoadingEmails = false;
       }
     });
-
-    // On component load, ensure we have the latest user data
-    if (this.authService.isAuthenticated()) {
-      this.authService.getMe().subscribe(
-        (response) => {
-          this.currentUser = response.user;
-          if (response.user?.googleConnected && this.isInitialLoad && this.emails.length === 0) {
-            this.fetchEmails();
-            this.isInitialLoad = false;
-          }
-        },
-        (error) => {
-          // If getMe fails, it's likely a token issue - let the interceptor handle it
-          console.error('Failed to fetch user data:', error);
-          this.isInitialLoad = false;
-        }
-      );
-    }
   }
 
   logout(): void {
@@ -125,18 +113,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   disconnectGmail(): void {
     if (confirm('Are you sure you want to disconnect your Gmail account?')) {
-      this.gmailService.revokeGmail().subscribe(
-        () => {
+      this.gmailService.revokeGmail().subscribe({
+        next: () => {
           if (this.currentUser) {
             this.currentUser.googleConnected = false;
             this.emails = [];
             this.resetPagination();
           }
         },
-        (error) => {
+        error: (error) => {
           console.error('Failed to disconnect Gmail:', error);
-        }
-      );
+        },
+      });
     }
   }
 
@@ -219,15 +207,15 @@ export class DashboardComponent implements OnInit, OnDestroy {
         q: this.activeQuery,
         pageToken: this.pageTokens[index],
       })
-      .subscribe(
-        (page) => {
+      .subscribe({
+        next: (page) => {
           this.emails = page.emails;
           this.pageIndex = index;
           // Keep the history up to this page and record the token for the next one.
           this.pageTokens = [...this.pageTokens.slice(0, index + 1), page.nextPageToken];
           this.isLoadingEmails = false;
         },
-        (error) => {
+        error: (error) => {
           console.error('Failed to fetch emails:', error);
           this.emails = [];
           if (error.status === 401) {
@@ -244,11 +232,12 @@ export class DashboardComponent implements OnInit, OnDestroy {
             this.emailsError = error.error?.error || 'Failed to fetch emails. Please try again.';
           }
           this.isLoadingEmails = false;
-        }
-      );
+        },
+      });
   }
 
   ngOnDestroy(): void {
+    this.userSubscription?.unsubscribe();
     this.listSubscription?.unsubscribe();
   }
 

@@ -45,16 +45,16 @@ export class LoginComponent {
     this.isLoading = true;
     const { email, password } = this.loginForm.value;
 
-    this.authService.login(email, password).subscribe(
-      () => {
+    this.authService.login(email, password).subscribe({
+      next: () => {
         this.snackBar.open('Login successful!', 'Close', { duration: 3000 });
         this.router.navigate(['/dashboard']);
       },
-      (error) => {
+      error: (error) => {
         this.isLoading = false;
         const message = error?.error?.error || 'Login failed. Please try again.';
         this.snackBar.open(message, 'Close', { duration: 5000, panelClass: ['error'] });
-      }
-    );
+      },
+    });
   }
 }

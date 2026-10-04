@@ -69,13 +69,7 @@
                 class="draft-editor"
                 [(ngModel)]="editedContent"
                 (ngModelChange)="onContentChange()"
-              [disabled]="
-                isSaving ||
-                isApproving ||
-                isRejecting ||
-                isSending ||
-                (draft.status !== 'PENDING' && draft.status !== 'APPROVED')
-              "
+              [disabled]="isBusy() || (draft.status !== 'PENDING' && draft.status !== 'APPROVED')"
                 placeholder="Edit your draft reply here..."
               ></textarea>
               <div class="char-count">
@@ -95,19 +89,19 @@
                     mat-raised-button
                     color="accent"
                     (click)="saveDraft()"
-                    [disabled]="isSaving || isApproving || isRejecting || isSending"
+                    [disabled]="isBusy()"
                     class="save-btn"
                     >
-                    @if (!isSaving) {
+                    @if (!isSaving()) {
                       <mat-icon>save</mat-icon>
                     }
-                    @if (isSaving) {
+                    @if (isSaving()) {
                       <mat-spinner
                         diameter="20"
                         class="inline-spinner"
                       ></mat-spinner>
                     }
-                    {{ isSaving ? 'Saving...' : 'Save Changes' }}
+                    {{ isSaving() ? 'Saving...' : 'Save Changes' }}
                   </button>
                 </div>
               }
@@ -118,37 +112,37 @@
                     mat-raised-button
                     color="primary"
                     (click)="approveDraft()"
-                    [disabled]="isSaving || isApproving || isRejecting || isSending"
+                    [disabled]="isBusy()"
                     class="approve-btn"
                     >
-                    @if (!isApproving) {
+                    @if (!isApproving()) {
                       <mat-icon>check_circle</mat-icon>
                     }
-                    @if (isApproving) {
+                    @if (isApproving()) {
                       <mat-spinner
                         diameter="20"
                         class="inline-spinner"
                       ></mat-spinner>
                     }
-                    {{ isApproving ? 'Approving...' : 'Approve' }}
+                    {{ isApproving() ? 'Approving...' : 'Approve' }}
                   </button>
                   <button
                     mat-stroked-button
                     color="warn"
                     (click)="rejectDraft()"
-                    [disabled]="isSaving || isApproving || isRejecting || isSending"
+                    [disabled]="isBusy()"
                     class="reject-btn"
                     >
-                    @if (!isRejecting) {
+                    @if (!isRejecting()) {
                       <mat-icon>cancel</mat-icon>
                     }
-                    @if (isRejecting) {
+                    @if (isRejecting()) {
                       <mat-spinner
                         diameter="20"
                         class="inline-spinner"
                       ></mat-spinner>
                     }
-                    {{ isRejecting ? 'Rejecting...' : 'Reject' }}
+                    {{ isRejecting() ? 'Rejecting...' : 'Reject' }}
                   </button>
                 </div>
               }
@@ -159,37 +153,37 @@
                     mat-raised-button
                     color="primary"
                     (click)="sendDraft()"
-                    [disabled]="isSaving || isApproving || isRejecting || isSending"
+                    [disabled]="isBusy()"
                     class="send-btn"
                     >
-                    @if (!isSending) {
+                    @if (!isSending()) {
                       <mat-icon>send</mat-icon>
                     }
-                    @if (isSending) {
+                    @if (isSending()) {
                       <mat-spinner
                         diameter="20"
                         class="inline-spinner"
                       ></mat-spinner>
                     }
-                    {{ isSending ? 'Sending...' : 'Send' }}
+                    {{ isSending() ? 'Sending...' : 'Send' }}
                   </button>
                   <button
                     mat-stroked-button
                     color="warn"
                     (click)="rejectDraft()"
-                    [disabled]="isSaving || isApproving || isRejecting || isSending"
+                    [disabled]="isBusy()"
                     class="reject-btn"
                     >
-                    @if (!isRejecting) {
+                    @if (!isRejecting()) {
                       <mat-icon>cancel</mat-icon>
                     }
-                    @if (isRejecting) {
+                    @if (isRejecting()) {
                       <mat-spinner
                         diameter="20"
                         class="inline-spinner"
                       ></mat-spinner>
                     }
-                    {{ isRejecting ? 'Rejecting...' : 'Reject' }}
+                    {{ isRejecting() ? 'Rejecting...' : 'Reject' }}
                   </button>
                 </div>
               }

@@ -103,6 +103,33 @@ describe('frontend page classes', () => {
     expect(component.emailsError).toContain('Authentication failed');
   });
 
+  it('DashboardComponent loads the inbox once at startup, however often the user stream emits', () => {
+    const user$ = new BehaviorSubject<any>(null);
+    const auth = { currentUser$: user$.asObservable(), getMe: vi.fn() };
+    const gmail = { fetchEmailPage: vi.fn().mockReturnValue(of({ emails: [], nextPageToken: null })) };
+    const component = new DashboardComponent(auth as any, gmail as any, router as any);
+
+    component.ngOnInit();
+    expect(gmail.fetchEmailPage).not.toHaveBeenCalled();
+
+    const user = { id: '1', name: 'User', email: 'user@example.com', googleConnected: true };
+    user$.next(user);
+    user$.next({ ...user });
+    expect(gmail.fetchEmailPage).toHaveBeenCalledTimes(1);
+    expect(auth.getMe).not.toHaveBeenCalled();
+  });
+
+  it('DashboardComponent stops listening to the user stream when destroyed', () => {
+    const user$ = new BehaviorSubject<any>({ id: '1', name: 'User', email: 'user@example.com', googleConnected: false });
+    const component = new DashboardComponent({ currentUser$: user$.asObservable() } as any, {} as any, router as any);
+    component.ngOnInit();
+    expect(user$.observed).toBe(true);
+
+    component.ngOnDestroy();
+
+    expect(user$.observed).toBe(false);
+  });
+
   it('DashboardComponent starts the Gmail connection and reports a failure', () => {
     const auth = {
       currentUser$: of({ id: '1', name: 'User', email: 'user@example.com', googleConnected: false }),
@@ -339,28 +366,55 @@ describe('frontend page classes', () => {
     });
   });
 
-  it('EmailDetailComponent loads email, generates drafts, sanitizes, and navigates back', () => {
+  it('EmailDetailComponent loads email, generates drafts, and navigates back', () => {
     const route = { params: of({ gmailMessageId: 'msg-1' }) };
     const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 'thread-1', bodyPlain: 'Hi' })) };
     const draft = { generateThreadDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1' })) };
-    const sanitizer = {
-      sanitize: vi.fn().mockReturnValue('<p>safe</p>'),
-      bypassSecurityTrustHtml: vi.fn((value) => value),
-    };
+    const sanitizer = { sanitize: vi.fn() };
     const component = new EmailDetailComponent(route as any, router as any, gmail as any, draft as any, sanitizer as any);
 
     component.ngOnInit();
     expect(component.email?.gmailMessageId).toBe('msg-1');
+    // Plain-text email: rendered via interpolation, no HTML sanitizing or trust bypass.
+    expect(component.safeBodyHtml).toBeNull();
+    expect(sanitizer.sanitize).not.toHaveBeenCalled();
 
     component.customContext = 'context';
     component.generateDraft();
     expect(draft.generateThreadDraft).toHaveBeenCalledWith('thread-1', 'formal', 'context');
     expect(router.navigate).toHaveBeenCalledWith(['/draft', 'draft-1']);
 
-    expect(component.sanitizeHtml('<p>x</p>')).toBe('<p>safe</p>');
-    expect(component.formatPlainText('<x>\n&')).toContain('&lt;x&gt;');
     component.goBack();
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
+  });
+
+  it('EmailDetailComponent sanitizes an HTML body once, when the email loads', () => {
+    const gmail = {
+      getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 't', bodyHtml: '<p onclick="x()">Hi</p><script>bad()</script>' })),
+    };
+    const sanitizer = { sanitize: vi.fn().mockReturnValue('<p>Hi</p>') };
+    const component = new EmailDetailComponent({ params: of({ gmailMessageId: 'msg-1' }) } as any, router as any, gmail as any, {} as any, sanitizer as any);
+
+    component.ngOnInit();
+
+    expect(sanitizer.sanitize).toHaveBeenCalledTimes(1);
+    expect(sanitizer.sanitize).toHaveBeenCalledWith(1 /* SecurityContext.HTML */, '<p onclick="x()">Hi</p><script>bad()</script>');
+    expect(component.safeBodyHtml).toBe('<p>Hi</p>');
+  });
+
+  it('EmailDetailComponent shows the backend reason when generation fails and keeps the email visible', () => {
+    const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 'thread-1', bodyPlain: 'Hi' })) };
+    const reason = 'This thread has no message from someone else to reply to.';
+    const draft = { generateThreadDraft: vi.fn().mockReturnValue(throwError(() => ({ status: 422, error: { error: reason } }))) };
+    const component = new EmailDetailComponent({ params: of({ gmailMessageId: 'msg-1' }) } as any, router as any, gmail as any, draft as any, { sanitize: vi.fn() } as any);
+    component.ngOnInit();
+
+    component.generateDraft();
+
+    expect(component.actionError).toBe(reason);
+    expect(component.error).toBeNull();
+    expect(component.email?.gmailMessageId).toBe('msg-1');
+    expect(component.isGenerating).toBe(false);
   });
 
   it('DraftDetailComponent loads, edits, approves, rejects, and sends drafts', () => {
@@ -412,7 +466,7 @@ describe('frontend page classes', () => {
     component.sendDraft();
     expect(component.actionError).toContain('Gmail unavailable');
     expect(component.error).toBeNull();
-    expect(component.isSending).toBe(false);
+    expect(component.isSending()).toBe(false);
     component.sendDraft();
     component.sendDraft();
     expect(component.draft?.status).toBe('SENT');
@@ -426,6 +480,25 @@ describe('frontend page classes', () => {
     component.draft = { ...(component.draft as any), status: 'APPROVED' };
     component.sendDraft();
     expect(draft.sendDraft.mock.calls[3][1]).not.toBe(keys[0]);
+  });
+
+  it('DraftDetailComponent derives one busy state from all in-flight actions', () => {
+    const pending = new Subject<any>();
+    const draft = {
+      getDraftDetail: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Body', status: 'PENDING' })),
+      approveDraft: vi.fn().mockReturnValue(pending),
+    };
+    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, {} as any);
+    component.ngOnInit();
+    expect(component.isBusy()).toBe(false);
+
+    component.approveDraft();
+    expect(component.isApproving()).toBe(true);
+    expect(component.isBusy()).toBe(true);
+
+    pending.next({ _id: 'draft-1', draftBody: 'Body', status: 'APPROVED' });
+    pending.complete();
+    expect(component.isBusy()).toBe(false);
   });
 
   describe('DraftDetailComponent saves unsaved edits before approve/send', () => {
@@ -471,7 +544,7 @@ describe('frontend page classes', () => {
       expect(component.error).toBeNull();
       expect(component.editedContent).toBe('Edited');
       expect(component.hasChanges).toBe(true);
-      expect(component.isApproving).toBe(false);
+      expect(component.isApproving()).toBe(false);
     });
 
     it('approves directly when there are no unsaved edits', () => {

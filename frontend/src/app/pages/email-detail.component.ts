@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, SecurityContext } from '@angular/core';
 import { CommonModule } from '@angular/common';
 import { ActivatedRoute, Router, RouterModule } from '@angular/router';
 import { FormsModule } from '@angular/forms';
@@ -11,7 +11,7 @@ import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
-import { DomSanitizer, SafeHtml } from '@angular/platform-browser';
+import { DomSanitizer } from '@angular/platform-browser';
 import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
 
@@ -55,7 +55,12 @@ export class EmailDetailComponent implements OnInit {
   selectedTone = 'formal';
   customContext = '';
   toneOptions = ['formal', 'concise', 'friendly'];
+  /** Failure to load the email (replaces the page content). */
   error: string | null = null;
+  /** Failure to generate a draft; the email stays visible. */
+  actionError: string | null = null;
+  /** The HTML body, sanitized once when the email loads. */
+  safeBodyHtml: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -78,17 +83,22 @@ export class EmailDetailComponent implements OnInit {
     this.isLoading = true;
     this.error = null;
 
-    this.gmailService.getEmailDetail(gmailMessageId).subscribe(
-      (response) => {
+    this.gmailService.getEmailDetail(gmailMessageId).subscribe({
+      next: (response) => {
         this.email = response;
+        // Angular's sanitizer strips scripts and event handlers; doing it once
+        // here avoids re-sanitizing on every change-detection pass.
+        this.safeBodyHtml = response.bodyHtml
+          ? this.sanitizer.sanitize(SecurityContext.HTML, response.bodyHtml)
+          : null;
         this.isLoading = false;
       },
-      (error) => {
+      error: (error) => {
         console.error('Failed to fetch email:', error);
-        this.error = 'Failed to load email';
+        this.error = error?.error?.error || 'Failed to load email';
         this.isLoading = false;
-      }
-    );
+      },
+    });
   }
 
   generateDraft(): void {
@@ -97,41 +107,23 @@ export class EmailDetailComponent implements OnInit {
     }
 
     this.isGenerating = true;
-    this.error = null;
+    this.actionError = null;
 
     this.draftService
       .generateThreadDraft(this.email.threadId, this.selectedTone, this.customContext || undefined)
-      .subscribe(
-        (draft: any) => {
+      .subscribe({
+        next: (draft: any) => {
           this.isGenerating = false;
           // Navigate to draft detail view
           this.router.navigate(['/draft', draft._id]);
         },
-        (error) => {
+        error: (error) => {
           console.error('Failed to generate draft:', error);
-          this.error = 'Failed to generate draft';
+          // e.g. 422 "This thread has no message from someone else to reply to."
+          this.actionError = error?.error?.error || 'Failed to generate draft';
           this.isGenerating = false;
-        }
-      );
-  }
-
-  /**
-   * Sanitize HTML to prevent XSS attacks
-   */
-  sanitizeHtml(html: string): SafeHtml {
-    return this.sanitizer.sanitize(1, html) || ''; // 1 = SecurityContext.HTML
-  }
-
-  /**
-   * Format plain text by converting newlines to <br> tags
-   */
-  formatPlainText(text: string): SafeHtml {
-    const formatted = text
-      .replace(/&/g, '&amp;')
-      .replace(/</g, '&lt;')
-      .replace(/>/g, '&gt;')
-      .replace(/\n/g, '<br>');
-    return this.sanitizer.bypassSecurityTrustHtml(formatted);
+        },
+      });
   }
 
   goBack(): void {

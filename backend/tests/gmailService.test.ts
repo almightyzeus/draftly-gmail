@@ -276,6 +276,19 @@ describe('GmailService', () => {
       expect(savedUpdate().direction).toBe(direction);
     });
 
+    it('keeps a message from someone else INBOUND even when the user is also in To/Cc with others', async () => {
+      const groupMail = message('Alice <alice@example.com>');
+      groupMail.payload.headers.push(
+        { name: 'To', value: 'User <user@gmail.com>, Bob <bob@example.com>' },
+        { name: 'Cc', value: 'user@gmail.com, carol@example.com' }
+      );
+      listOne(groupMail);
+
+      await GmailService.fetchEmails(userId, {});
+
+      expect(savedUpdate().direction).toBe('INBOUND');
+    });
+
     it('treats anything Gmail labels SENT as OUTBOUND', async () => {
       listOne(message('someone-else@example.com', { labelIds: ['SENT'] }));
 

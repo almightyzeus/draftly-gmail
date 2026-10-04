@@ -189,6 +189,56 @@ describe('DraftService', () => {
       expect(GmailService.createDraft).not.toHaveBeenCalled();
     });
 
+    describe('the user being one of several recipients does not block replies', () => {
+      // From someone else; the user is in To/Cc alongside other people.
+      const groupMail = {
+        ...msg('group-1', 'INBOUND', 'Alice <alice@example.com>', true),
+        to: 'User <user@gmail.com>, Bob <bob@example.com>',
+      };
+
+      it('generate targets the group message', async () => {
+        (GmailService.fetchThreadEmails as unknown as Mock).mockResolvedValue([
+          msg('mine', 'OUTBOUND', 'User <user@gmail.com>'),
+          groupMail,
+        ]);
+        arrangeNewDraft();
+
+        const result = await DraftService.generateDraft(userId, undefined, 'formal', 'thread-1');
+
+        expect(result.replyToGmailMessageId).toBe('group-1');
+      });
+
+      it('approve creates the Gmail draft addressed to the sender', async () => {
+        (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ replyToGmailMessageId: 'group-1' }));
+        (EmailMessage.findOne as unknown as Mock).mockResolvedValue(groupMail);
+        (GmailService.createDraft as unknown as Mock).mockResolvedValue('gmail-draft-1');
+
+        await expect(DraftService.approveDraft(userId, draftId)).resolves.toMatchObject({ status: 'APPROVED' });
+        expect(GmailService.createDraft).toHaveBeenCalledWith(
+          userId,
+          'Alice <alice@example.com>',
+          expect.any(String),
+          expect.any(String),
+          expect.any(String),
+          expect.any(String),
+          expect.any(String)
+        );
+      });
+
+      it('send goes ahead', async () => {
+        const approved = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1', replyToGmailMessageId: 'group-1' });
+        (Draft.findOne as unknown as Mock).mockResolvedValue(approved);
+        (EmailMessage.findOne as unknown as Mock).mockResolvedValue(groupMail);
+        (Draft.findOneAndUpdate as unknown as Mock)
+          .mockResolvedValueOnce({ ...approved, sendIdempotencyKey: 'key-1' })
+          .mockResolvedValueOnce({ ...approved, status: 'SENT', sentGmailMessageId: 'sent-1' });
+        (GmailService.sendDraft as unknown as Mock).mockResolvedValue('sent-1');
+
+        await expect(DraftService.sendDraft(userId, draftId, 'key-1')).resolves.toMatchObject({ status: 'SENT' });
+        expect(GmailService.sendDraft).toHaveBeenCalledTimes(1);
+      });
+    });
+
     it('send refuses an already-APPROVED draft addressed to the user, without claiming or calling Gmail', async () => {
       (Draft.findOne as unknown as Mock).mockResolvedValue(
         buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1', replyToGmailMessageId: 'mine' })

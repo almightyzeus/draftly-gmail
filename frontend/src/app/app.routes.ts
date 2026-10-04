@@ -1,28 +1,31 @@
 import { Routes } from '@angular/router';
-import { LoginComponent } from './pages/login.component';
-import { RegisterComponent } from './pages/register.component';
-import { DashboardComponent } from './pages/dashboard.component';
-import { EmailDetailComponent } from './pages/email-detail.component';
-import { DraftDetailComponent } from './pages/draft-detail.component';
 import { authGuard } from './services/auth.guard';
 
+// Pages are lazy-loaded so each one is only downloaded when first visited,
+// keeping the initial bundle small.
 export const routes: Routes = [
   { path: '', redirectTo: 'dashboard', pathMatch: 'full' },
-  { path: 'login', component: LoginComponent },
-  { path: 'register', component: RegisterComponent },
+  {
+    path: 'login',
+    loadComponent: () => import('./pages/login.component').then((m) => m.LoginComponent),
+  },
+  {
+    path: 'register',
+    loadComponent: () => import('./pages/register.component').then((m) => m.RegisterComponent),
+  },
   {
     path: 'dashboard',
-    component: DashboardComponent,
+    loadComponent: () => import('./pages/dashboard.component').then((m) => m.DashboardComponent),
     canActivate: [authGuard],
   },
   {
     path: 'email/:gmailMessageId',
-    component: EmailDetailComponent,
+    loadComponent: () => import('./pages/email-detail.component').then((m) => m.EmailDetailComponent),
     canActivate: [authGuard],
   },
   {
     path: 'draft/:id',
-    component: DraftDetailComponent,
+    loadComponent: () => import('./pages/draft-detail.component').then((m) => m.DraftDetailComponent),
     canActivate: [authGuard],
   },
   { path: '**', redirectTo: 'dashboard' },

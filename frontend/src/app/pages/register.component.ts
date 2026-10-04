@@ -60,18 +60,18 @@ export class RegisterComponent {
     this.isLoading = true;
     const { name, email, password } = this.registerForm.value;
 
-    this.authService.register(name, email, password).subscribe(
-      () => {
+    this.authService.register(name, email, password).subscribe({
+      next: () => {
         this.snackBar.open('Registration successful! Welcome to Draftly!', 'Close', {
           duration: 3000,
         });
         this.router.navigate(['/dashboard']);
       },
-      (error) => {
+      error: (error) => {
         this.isLoading = false;
         const message = error?.error?.error || 'Registration failed. Please try again.';
         this.snackBar.open(message, 'Close', { duration: 5000, panelClass: ['error'] });
-      }
-    );
+      },
+    });
   }
 }

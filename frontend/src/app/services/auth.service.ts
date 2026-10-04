@@ -58,16 +58,16 @@ export class AuthService {
    */
   restoreSession(): void {
     if (this.getAccessToken()) {
-      this.getMe().subscribe(
-        (response) => this.currentUserSubject.next(response.user),
-        (error) => {
+      this.getMe().subscribe({
+        next: (response) => this.currentUserSubject.next(response.user),
+        error: (error) => {
           // Only a 401 (left over after the interceptor's refresh attempt) means
           // the session is invalid. Network/server errors keep the stored tokens.
           if (error?.status === 401) {
             this.logout();
           }
-        }
-      );
+        },
+      });
     }
   }
 
