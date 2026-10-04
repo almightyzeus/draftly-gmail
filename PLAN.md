@@ -28,7 +28,9 @@ Fixes added during the stages (beyond the original plan):
 - Inbox listing fetched Gmail messages sequentially (6.6–7.7 s per page); now 10 in parallel (≈1.1–2.9 s).
 - Deprecated Mongoose `new: true` options replaced with `returnDocument: 'after'`.
 
-Still open (documented in the README, deliberately not done): S5 (OAuth state not bound to the browser), C6 (HTML-only emails have no plain-text body for the AI), A7 (unused `zod`/`joi` dependencies), stateless refresh tokens, remote images in email HTML, in-memory rate limits.
+Follow-up (2026-10-04): C6 fixed (AI gets text derived from HTML-only emails; single-part HTML emails are stored as HTML), A7 fixed (`zod` and `joi` removed; the stale `ts-node-dev` lockfile entries were pruned in the same `npm uninstall`), and S9 extended (remote email images hidden until "Show images"). Backend 23 files / 348 tests, frontend 5 files / 83 tests.
+
+Still open (documented in the README, deliberately not done): S5 (OAuth state not bound to the browser), stateless refresh tokens, in-memory rate limits.
 
 ## 1. Baseline
 

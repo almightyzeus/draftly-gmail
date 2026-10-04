@@ -27,6 +27,13 @@
           <dd>{{ email.internalDate | date: 'EEE, MMM d, y, h:mm a' }}</dd>
         </dl>
         <mat-divider></mat-divider>
+        @if (blockedImageCount > 0) {
+          <div class="images-notice" role="status">
+            <mat-icon>image_not_supported</mat-icon>
+            <span>Remote images are hidden to protect your privacy.</span>
+            <button mat-button (click)="showRemoteImages()">Show images</button>
+          </div>
+        }
         <div class="body">
           @if (safeBodyHtml) {
             <div [innerHTML]="safeBodyHtml"></div>

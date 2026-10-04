@@ -194,6 +194,28 @@ describe('GmailService', () => {
     await expect(GmailService.deleteDraft(userId, 'draft-1')).resolves.toBeUndefined();
   });
 
+  it('returns legacy cached HTML (stored as plain text) as HTML', async () => {
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue({
+      _id: 'email-id',
+      gmailMessageId: 'msg-legacy',
+      threadId: 't',
+      from: 'a@example.com',
+      to: 'user@gmail.com',
+      subject: 'Legacy',
+      snippet: 's',
+      bodyPlain: '<html><body><p>Legacy</p></body></html>',
+      bodyHtml: undefined,
+      direction: 'INBOUND',
+      internalDate: new Date(),
+      labels: ['INBOX'],
+    });
+
+    const email = await GmailService.getEmail(userId, 'msg-legacy');
+
+    expect(email.bodyHtml).toBe('<html><body><p>Legacy</p></body></html>');
+    expect(email.bodyPlain).toBe('');
+  });
+
   it('uses stored RFC headers instead of Gmail internal IDs for reply metadata', async () => {
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue({
       gmailMessageId: 'gmail-internal-id',
@@ -287,6 +309,23 @@ describe('GmailService', () => {
       await GmailService.fetchEmails(userId, {});
 
       expect(savedUpdate().direction).toBe('INBOUND');
+    });
+
+    it('stores a single-part text/html email as HTML, not as plain text', async () => {
+      const html = '<html><body><p>Hello</p></body></html>';
+      listOne({
+        ...message('a@example.com'),
+        payload: {
+          mimeType: 'text/html',
+          headers: [{ name: 'From', value: 'a@example.com' }],
+          body: { data: Buffer.from(html).toString('base64') },
+        },
+      });
+
+      await GmailService.fetchEmails(userId, {});
+
+      expect(savedUpdate().bodyHtml).toBe(html);
+      expect(savedUpdate().bodyPlain).toBe('');
     });
 
     it('treats anything Gmail labels SENT as OUTBOUND', async () => {

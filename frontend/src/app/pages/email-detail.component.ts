@@ -14,6 +14,7 @@ import { DomSanitizer } from '@angular/platform-browser';
 import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
 import { TopBarComponent } from '../shared/top-bar.component';
+import { blockRemoteImages } from '../shared/email-html';
 
 interface Email {
   id: string;
@@ -59,8 +60,12 @@ export class EmailDetailComponent implements OnInit {
   error: string | null = null;
   /** Failure to generate a draft; the email stays visible. */
   actionError: string | null = null;
-  /** The HTML body, sanitized once when the email loads. */
+  /** The HTML body as displayed: sanitized, with remote images removed until the user allows them. */
   safeBodyHtml: string | null = null;
+  /** Number of remote images hidden in this email (0 once shown). */
+  blockedImageCount = 0;
+  /** Sanitized HTML including remote images, shown only on request. */
+  private sanitizedBodyHtml: string | null = null;
 
   constructor(
     private route: ActivatedRoute,
@@ -88,9 +93,13 @@ export class EmailDetailComponent implements OnInit {
         this.email = response;
         // Angular's sanitizer strips scripts and event handlers; doing it once
         // here avoids re-sanitizing on every change-detection pass.
-        this.safeBodyHtml = response.bodyHtml
+        this.sanitizedBodyHtml = response.bodyHtml
           ? this.sanitizer.sanitize(SecurityContext.HTML, response.bodyHtml)
           : null;
+        // Remote images (often tracking pixels) stay hidden until the user asks.
+        const { html, blocked } = blockRemoteImages(this.sanitizedBodyHtml ?? '');
+        this.safeBodyHtml = this.sanitizedBodyHtml === null ? null : html;
+        this.blockedImageCount = blocked;
         this.isLoading = false;
       },
       error: (error) => {
@@ -124,6 +133,12 @@ export class EmailDetailComponent implements OnInit {
           this.isGenerating = false;
         },
       });
+  }
+
+  /** Load the remote images of this email (the sender may learn it was opened). */
+  showRemoteImages(): void {
+    this.safeBodyHtml = this.sanitizedBodyHtml;
+    this.blockedImageCount = 0;
   }
 
   goBack(): void {

@@ -9,6 +9,7 @@ import { logger } from '../utils/logger.js';
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { buildRawReply } from '../utils/mimeMessage.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
+import { looksLikeHtml } from '../utils/htmlToText.js';
 
 /**
  * GmailService - Handles Gmail email fetching and sending
@@ -169,9 +170,15 @@ export class GmailService {
       }
     };
 
-    // Check if message has a simple data payload
+    // Single-part message: the body's type decides where it belongs
+    // (an HTML-only email must not be stored as "plain text").
     if (message.body?.data) {
-      bodyPlain = Buffer.from(message.body.data, 'base64').toString('utf-8');
+      const content = Buffer.from(message.body.data, 'base64').toString('utf-8');
+      if (message.mimeType === 'text/html') {
+        bodyHtml = content;
+      } else {
+        bodyPlain = content;
+      }
     }
 
     // Search through all parts (handles multipart messages)
@@ -459,6 +466,10 @@ export class GmailService {
         throw new NotFoundError('Email not found');
       }
 
+      // Older cache entries stored single-part HTML emails as "plain text";
+      // return that HTML as HTML so the client renders (and sanitizes) it.
+      const legacyHtml = !email.bodyHtml && looksLikeHtml(email.bodyPlain);
+
       return {
         id: email._id,
         gmailMessageId: email.gmailMessageId,
@@ -467,8 +478,8 @@ export class GmailService {
         to: email.to,
         subject: email.subject,
         snippet: email.snippet,
-        bodyPlain: email.bodyPlain,
-        bodyHtml: email.bodyHtml,
+        bodyPlain: legacyHtml ? '' : email.bodyPlain,
+        bodyHtml: legacyHtml ? email.bodyPlain : email.bodyHtml,
         direction: email.direction,
         internalDate: email.internalDate,
         labels: email.labels,

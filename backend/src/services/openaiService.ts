@@ -5,6 +5,7 @@ import { UserPreference } from '../models/UserPreference.js';
 import { GmailService } from './gmailService.js';
 import { logger } from '../utils/logger.js';
 import { env } from '../config/env.js';
+import { emailPlainText } from '../utils/htmlToText.js';
 import { AppError, NotFoundError } from '../utils/errors.js';
 
 const openai = new OpenAI({
@@ -53,7 +54,7 @@ export class OpenAIService {
       }
 
       const styleExamples = outboundEmails
-        .map((email: any) => `Subject: ${email.subject}\n\n${truncate(email.bodyPlain, MAX_STYLE_EXAMPLE_CHARS)}`)
+        .map((email: any) => `Subject: ${email.subject}\n\n${truncate(emailPlainText(email), MAX_STYLE_EXAMPLE_CHARS)}`)
         .join('\n---\n');
 
       return `\n\nHere are examples of my writing style:\n${styleExamples}`;
@@ -137,14 +138,14 @@ export class OpenAIService {
       // from silently being generated from only its first message.
       const threadContext = threadEmails
         .slice(-MAX_THREAD_MESSAGES)
-        .map((email: any) => `${email.from}: ${truncate(email.bodyPlain, MAX_MESSAGE_CHARS)}`)
+        .map((email: any) => `${email.from}: ${truncate(emailPlainText(email), MAX_MESSAGE_CHARS)}`)
         .join('\n\n---\n\n');
 
       const relevantEmails = relevantMessageIds
         .map((messageId) => threadEmails.find((email: any) => email.gmailMessageId === messageId))
         .filter(Boolean);
       const relevantMessagesContext = relevantEmails
-        .map((email: any) => `From: ${email.from}\nSubject: ${email.subject}\n\n${truncate(email.bodyPlain, MAX_MESSAGE_CHARS)}`)
+        .map((email: any) => `From: ${email.from}\nSubject: ${email.subject}\n\n${truncate(emailPlainText(email), MAX_MESSAGE_CHARS)}`)
         .join('\n\n---\n\n');
 
       // Build user prompt with optional custom context
@@ -161,7 +162,7 @@ ${threadContext}
 
 Use this most recent relevant email as the reply target:
 Subject: ${originalEmail.subject}
-Body: ${truncate(originalEmail.bodyPlain, MAX_MESSAGE_CHARS)}
+Body: ${truncate(emailPlainText(originalEmail), MAX_MESSAGE_CHARS)}
 ${learningEmailsContext}
 
 Generate one thoughtful, appropriate reply that addresses all relevant messages.`;

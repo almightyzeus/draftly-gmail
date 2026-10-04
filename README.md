@@ -486,8 +486,8 @@ Last verified with Node 20.19.5:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 22 | 336 passing | 95.5% | 84.48% | 99.18% | 95.5% |
-| Frontend | 4 | 78 passing | 93.67% | 80.1% | 93.66% | 94.23% |
+| Backend | 23 | 348 passing | 95.59% | 84.62% | 99.21% | 95.59% |
+| Frontend | 5 | 83 passing | 93.87% | 80.71% | 93.79% | 94.43% |
 
 Validation before a demo:
 
@@ -510,6 +510,8 @@ Some backend test output includes logged error stack traces from tests that exer
 - Reply messages are built in one place: header values are stripped of line breaks, the recipient is reduced to a single parsed address, non-ASCII subjects are encoded, and bodies are base64-encoded.
 - A reply is never addressed to the user: reply targets are always messages from someone else, and approve/send refuse a draft whose recipient is the user's own address.
 - User style learning retrieves recent outbound emails and includes them (truncated) as examples in the OpenAI prompt.
+- The AI always gets readable text: for HTML-only emails, plain text is derived from the HTML (markup, styles and scripts removed).
+- Remote images in emails (often tracking pixels) are hidden until the user chooses **Show images**, so opening an email does not reveal that it was read.
 - The app keeps the human-in-the-loop requirement by never sending generated text automatically.
 - Request logs redact OAuth codes, OAuth state, and search queries.
 
@@ -519,10 +521,9 @@ Some backend test output includes logged error stack traces from tests that exer
 - Sending is idempotent but not mathematically exactly-once (see [Idempotent sending](#idempotent-sending)).
 - Replies go to the sender only: there is no reply-all, and a `Reply-To` header is not used.
 - Thread context comes from cached messages, i.e. messages that have appeared in an inbox listing.
-- For HTML-only emails the cached plain-text body is empty, so the AI sees little of their content.
 - Rate limits are kept in memory per backend process.
 - Refresh tokens are stateless JWTs: logout clears them in the browser, but a copied refresh token stays valid until it expires. Tokens are stored in `localStorage`.
-- Email HTML is sanitized and shown inline; remote images in emails load when an email is opened.
+- Email HTML is sanitized and shown inline (not in a sandboxed iframe). Remote images are hidden until the user clicks **Show images**.
 - The OAuth `state` is signed and expiring but not tied to the browser that started the flow.
 - The Drafts tab shows the latest 50 drafts. Preferences and activity logs have APIs but no frontend screens yet.
 
@@ -532,6 +533,5 @@ Some backend test output includes logged error stack traces from tests that exer
 - CI/CD pipeline for automated testing and deployment
 - Retry with backoff for transient Gmail failures
 - Reply-all and `Reply-To` support
-- Plain-text extraction for HTML-only emails
 - Preferences and activity log screens
 - Server-side refresh-token revocation

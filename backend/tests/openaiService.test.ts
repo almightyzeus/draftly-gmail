@@ -170,6 +170,26 @@ describe('OpenAIService', () => {
       }
     });
 
+    it('gives the AI readable text for HTML-only emails instead of nothing or raw markup', async () => {
+      const html = '<html><head><style>.x{}</style></head><body><p>Can you confirm <b>Friday</b>?</p></body></html>';
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue({
+        gmailMessageId: 'msg-1', threadId: 'thread-1', from: 'a@example.com', subject: 'Q', bodyPlain: '', bodyHtml: html,
+      });
+      (EmailMessage.find as unknown as Mock).mockReturnValue({
+        sort: vi.fn().mockReturnThis(),
+        limit: vi.fn().mockReturnThis(),
+        lean: vi.fn().mockResolvedValue([{ gmailMessageId: 'msg-1', from: 'a@example.com', subject: 'Q', bodyPlain: '', bodyHtml: html }]),
+      });
+      (UserPreference.findOne as unknown as Mock).mockResolvedValue(null);
+
+      await OpenAIService.generateDraft('507f191e810c19729de860ea', ['msg-1']);
+
+      const prompt = userPrompt();
+      expect(prompt).toContain('Can you confirm Friday?');
+      expect(prompt).not.toContain('<b>');
+      expect(prompt).not.toContain('.x{}');
+    });
+
     it('uses the configured model, not a hard-coded default', async () => {
       const { env } = await import('../src/config/env.js');
       arrangeEmail();
