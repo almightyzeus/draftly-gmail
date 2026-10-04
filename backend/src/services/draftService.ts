@@ -215,6 +215,33 @@ export class DraftService {
   }
 
   /**
+   * Shape drafts for the API: plain objects with a `replyTo` summary (the
+   * recipient and subject of the message being answered), so the UI can show
+   * who a reply goes to. One query for any number of drafts.
+   */
+  static async toResponse(userId: string, draft: any): Promise<any>;
+  static async toResponse(userId: string, drafts: any[]): Promise<any[]>;
+  static async toResponse(userId: string, input: any | any[]): Promise<any | any[]> {
+    const list = (Array.isArray(input) ? input : [input]).map((draft) =>
+      typeof draft?.toObject === 'function' ? draft.toObject() : draft
+    );
+    const targetIds = [...new Set(list.map((draft) => this.replyTargetId(draft)).filter(Boolean))];
+
+    const targets = targetIds.length
+      ? await EmailMessage.find({ userId: new Types.ObjectId(userId), gmailMessageId: { $in: targetIds } })
+          .select('gmailMessageId from subject')
+          .lean()
+      : [];
+    const byId = new Map(targets.map((email: any) => [email.gmailMessageId, email]));
+
+    const shaped = list.map((draft) => {
+      const target: any = byId.get(this.replyTargetId(draft));
+      return { ...draft, replyTo: target ? { from: target.from, subject: target.subject } : null };
+    });
+    return Array.isArray(input) ? shaped : shaped[0];
+  }
+
+  /**
    * Get drafts for user with optional status filter
    */
   static async getUserDrafts(

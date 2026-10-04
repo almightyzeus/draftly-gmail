@@ -7,7 +7,7 @@ export default {
     coverage: {
       provider: 'v8',
       reporter: ['text', 'lcov'],
-      include: ['src/app/services/**/*.ts', 'src/app/pages/**/*.ts'],
+      include: ['src/app/services/**/*.ts', 'src/app/pages/**/*.ts', 'src/app/shared/**/*.ts'],
       exclude: ['src/**/*.spec.ts'],
       thresholds: {
         statements: 70,

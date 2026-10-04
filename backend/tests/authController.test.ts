@@ -233,6 +233,7 @@ describe('AuthController', () => {
         email: 'john@example.com',
         name: 'John Doe',
         googleConnected: true,
+        gmailEmail: 'john@gmail.com',
       };
 
       (AuthService.getUserById as unknown as Mock).mockResolvedValue(mockUser);
@@ -245,8 +246,24 @@ describe('AuthController', () => {
           email: 'john@example.com',
           name: 'John Doe',
           googleConnected: true,
+          gmailEmail: 'john@gmail.com',
         },
       });
+    });
+
+    it('does not expose a stale gmailEmail when Gmail is disconnected', async () => {
+      mockReq.userId = 'user123';
+      (AuthService.getUserById as unknown as Mock).mockResolvedValue({
+        _id: { toString: () => 'user123' },
+        email: 'john@example.com',
+        name: 'John Doe',
+        googleConnected: false,
+        gmailEmail: 'old@gmail.com',
+      });
+
+      await me(mockReq, mockRes as Response);
+
+      expect((mockRes.json as Mock).mock.calls[0][0].user.gmailEmail).toBeNull();
     });
 
     it('should return 401 if userId is missing', async () => {

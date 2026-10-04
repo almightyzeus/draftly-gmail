@@ -75,6 +75,7 @@ export const me = async (req: AuthRequest, res: Response) => {
         email: user.email,
         name: user.name,
         googleConnected: user.googleConnected || false,
+        gmailEmail: user.googleConnected ? user.gmailEmail ?? null : null,
       },
     });
   } catch (error) {

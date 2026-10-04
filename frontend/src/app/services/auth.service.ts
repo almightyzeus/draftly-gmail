@@ -7,6 +7,8 @@ export interface User {
   email: string;
   name: string;
   googleConnected?: boolean;
+  /** The connected Gmail address, when Gmail is connected. */
+  gmailEmail?: string | null;
 }
 
 export interface AuthResponse {
@@ -134,6 +136,21 @@ export class AuthService {
       );
 
     return this.refreshRequest$;
+  }
+
+  /**
+   * Record a Gmail connection change (disconnect, or an expired grant the
+   * backend reported) so every view following currentUser$ updates at once.
+   */
+  setGoogleConnected(connected: boolean): void {
+    const user = this.currentUserSubject.value;
+    if (user && user.googleConnected !== connected) {
+      this.currentUserSubject.next({
+        ...user,
+        googleConnected: connected,
+        gmailEmail: connected ? user.gmailEmail : null,
+      });
+    }
   }
 
   /**

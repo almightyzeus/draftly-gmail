@@ -236,7 +236,7 @@ describe('GmailService', () => {
     expect(EmailMessage.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ gmailMessageId: 'gmail-internal-id' }),
       { rfcMessageId: '<rfc-message@example.com>', references: '<older@example.com>' },
-      { new: true }
+      { returnDocument: 'after' }
     );
   });
 
@@ -387,8 +387,28 @@ describe('GmailService', () => {
       expect(EmailMessage.findOneAndUpdate).toHaveBeenCalledWith(
         { userId: new Types.ObjectId(userId), gmailMessageId: 'm1' },
         expect.objectContaining({ rfcMessageId: '<m1@example.com>', subject: 'Quarterly report' }),
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
+    });
+
+    it('fetches message details in parallel (at most 10 at once) and keeps Gmail order', async () => {
+      const ids = Array.from({ length: 25 }, (_, i) => `m${i}`);
+      list.mockResolvedValue({ data: { messages: ids.map((id) => ({ id })), nextPageToken: null } });
+      let inFlight = 0;
+      let peak = 0;
+      get.mockImplementation(async ({ id }: { id: string }) => {
+        inFlight++;
+        peak = Math.max(peak, inFlight);
+        // Later messages answer sooner, so completion order differs from list order.
+        await new Promise((resolve) => setTimeout(resolve, 30 - Number(id.slice(1))));
+        inFlight--;
+        return gmailMessage(id);
+      });
+
+      const result = await GmailService.fetchEmails(userId, { limit: 25 });
+
+      expect(peak).toBe(10);
+      expect(result.emails.map((e) => e.gmailMessageId)).toEqual(ids);
     });
 
     it('returns an empty page with the token Gmail provides', async () => {
@@ -584,7 +604,7 @@ describe('GmailService', () => {
       expect(GmailAccount.findOneAndUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ userId: userObjectId, gmailEmail: 'user@gmail.com' }),
         expect.objectContaining({ accessTokenEnc: 'encrypted-refreshed-access' }),
-        { new: true }
+        { returnDocument: 'after' }
       );
     });
 
@@ -654,7 +674,7 @@ describe('GmailService', () => {
           accessTokenEnc: 'encrypted-refreshed-access',
           refreshTokenEnc: 'encrypted-new-refresh',
         }),
-        { new: true }
+        { returnDocument: 'after' }
       );
     });
 
@@ -718,7 +738,7 @@ describe('GmailService', () => {
       expect(GmailAccount.findOneAndUpdate).toHaveBeenCalledWith(
         expect.any(Object),
         expect.not.objectContaining({ refreshTokenEnc: expect.anything() }),
-        { new: true }
+        { returnDocument: 'after' }
       );
     });
   });

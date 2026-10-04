@@ -1,140 +1,100 @@
-<div class="email-detail-container">
-  <!-- Toolbar with back button -->
-  <mat-toolbar color="primary" class="toolbar">
-    <button mat-icon-button (click)="goBack()" class="back-btn">
-      <mat-icon>arrow_back</mat-icon>
-    </button>
-    <span>Email Detail</span>
-  </mat-toolbar>
+<app-top-bar title="Email" [showBack]="true" (back)="goBack()" />
 
-  <div class="content">
-    <!-- Loading state -->
-    @if (isLoading) {
-      <div class="loading-state">
-        <mat-spinner diameter="40"></mat-spinner>
-        <p>Loading email...</p>
+<main class="page-content page-content--narrow">
+  @if (isLoading) {
+    <div class="state">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading email…</p>
+    </div>
+  } @else if (error) {
+    <mat-card appearance="outlined">
+      <div class="state state--error" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <p>{{ error }}</p>
+        <button mat-stroked-button (click)="goBack()">Back to inbox</button>
       </div>
-    }
+    </mat-card>
+  } @else if (email) {
+    <mat-card appearance="outlined">
+      <mat-card-content class="message">
+        <h1 class="subject">{{ email.subject }}</h1>
+        <dl class="meta">
+          <dt>From</dt>
+          <dd>{{ email.from }}</dd>
+          <dt>To</dt>
+          <dd>{{ email.to }}</dd>
+          <dt>Date</dt>
+          <dd>{{ email.internalDate | date: 'EEE, MMM d, y, h:mm a' }}</dd>
+        </dl>
+        <mat-divider></mat-divider>
+        <div class="body">
+          @if (safeBodyHtml) {
+            <div [innerHTML]="safeBodyHtml"></div>
+          } @else if (email.bodyPlain) {
+            <p class="plain-body">{{ email.bodyPlain }}</p>
+          } @else {
+            <p class="muted">No email body available.</p>
+          }
+        </div>
+      </mat-card-content>
+    </mat-card>
 
-    <!-- Error state -->
-    @if (error && !isLoading) {
-      <div class="error-state">
-        <mat-card class="error-card">
-          <mat-card-content>
-            <mat-icon class="error-icon">error_outline</mat-icon>
-            <p>{{ error }}</p>
-            <button mat-raised-button color="primary" (click)="goBack()">
-              Go Back
-            </button>
-          </mat-card-content>
-        </mat-card>
-      </div>
-    }
+    <mat-card appearance="outlined">
+      <mat-card-content class="compose">
+        <h2 class="compose-title">
+          <mat-icon>auto_awesome</mat-icon>
+          Draft a reply with AI
+        </h2>
+        <p class="muted compose-help">
+          Draftly reads the whole thread and replies to the latest message from the other person. You review it before
+          anything is sent.
+        </p>
 
-    <!-- Email content -->
-    @if (email && !isLoading && !error) {
-      <div class="email-content">
-        <mat-card class="email-card">
-          <mat-card-header>
-            <div class="header-row">
-              <div class="sender-info">
-                <strong>From:</strong> {{ email.from }}
-              </div>
-              <div class="date-info">
-                {{ email.internalDate | date : 'short' }}
-              </div>
-            </div>
-            <div class="to-info">
-              <strong>To:</strong> {{ email.to }}
-            </div>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="subject">
-              <h2>{{ email.subject }}</h2>
-            </div>
-            <mat-divider class="divider"></mat-divider>
-            <div class="body">
-              <!-- Display HTML version if available, otherwise plain text -->
-              @if (safeBodyHtml) {
-                <div [innerHTML]="safeBodyHtml"></div>
-              } @else if (email.bodyPlain) {
-                <p class="plain-body">{{ email.bodyPlain }}</p>
-              } @else {
-                <p class="no-body">No email body available</p>
-              }
-            </div>
-          </mat-card-content>
-        </mat-card>
-        <!-- Draft generation section -->
-        <mat-card class="draft-generation-card">
-          <mat-card-header>
-            <mat-card-title>Generate Draft Reply</mat-card-title>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="tone-selector">
-              <mat-form-field appearance="fill">
-                <mat-label>Select Tone</mat-label>
-                <mat-select
-                  [(ngModel)]="selectedTone"
-                  [disabled]="isGenerating"
-                  >
-                  @for (tone of toneOptions; track tone) {
-                    <mat-option
-                      [value]="tone"
-                      >
-                      {{ tone | titlecase }}
-                    </mat-option>
-                  }
-                </mat-select>
-              </mat-form-field>
-            </div>
-            <div class="custom-context">
-              <mat-form-field appearance="fill" class="full-width">
-                <mat-label>Additional Context (Optional)</mat-label>
-                <textarea
-                  matInput
-                  [(ngModel)]="customContext"
-                  [disabled]="isGenerating"
-                  rows="4"
-                  placeholder="Add any additional context or instructions for the draft generation. Example: 'I will not be free on Saturday' or 'Please mention my availability'"
-                ></textarea>
-              </mat-form-field>
-            </div>
-            @if (actionError) {
-              <p class="action-error" role="alert">{{ actionError }}</p>
+        <div class="field">
+          <span class="field-label" id="tone-label">Tone</span>
+          <mat-button-toggle-group
+            [(ngModel)]="selectedTone"
+            [disabled]="isGenerating"
+            aria-labelledby="tone-label"
+            hideSingleSelectionIndicator
+          >
+            @for (tone of toneOptions; track tone) {
+              <mat-button-toggle [value]="tone">{{ tone | titlecase }}</mat-button-toggle>
             }
-            <div class="button-group">
-              <button
-                mat-raised-button
-                color="primary"
-                (click)="generateDraft()"
-                [disabled]="isGenerating"
-                class="generate-btn"
-                >
-                @if (!isGenerating) {
-                  <mat-icon>auto_awesome</mat-icon>
-                }
-                @if (isGenerating) {
-                  <mat-spinner
-                    diameter="20"
-                    class="inline-spinner"
-                  ></mat-spinner>
-                }
-                {{
-                isGenerating ? 'Generating Draft...' : 'Generate Draft with AI'
-                }}
-              </button>
-              <button
-                mat-stroked-button
-                (click)="goBack()"
-                [disabled]="isGenerating"
-                >
-                Cancel
-              </button>
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </div>
-    }
-  </div>
-</div>
+          </mat-button-toggle-group>
+        </div>
+
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Additional context (optional)</mat-label>
+          <textarea
+            matInput
+            rows="3"
+            maxlength="2000"
+            [(ngModel)]="customContext"
+            [disabled]="isGenerating"
+            placeholder="e.g. I'm not free on Saturday — suggest Monday instead."
+          ></textarea>
+          <mat-hint align="end">{{ customContext.length }} / 2000</mat-hint>
+        </mat-form-field>
+
+        @if (actionError) {
+          <p class="inline-error action-error" role="alert">
+            <mat-icon>error_outline</mat-icon>
+            {{ actionError }}
+          </p>
+        }
+
+        <div class="actions">
+          <button mat-flat-button color="primary" (click)="generateDraft()" [disabled]="isGenerating">
+            @if (isGenerating) {
+              <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+            } @else {
+              <mat-icon>auto_awesome</mat-icon>
+            }
+            {{ isGenerating ? 'Generating…' : 'Generate draft' }}
+          </button>
+        </div>
+      </mat-card-content>
+    </mat-card>
+  }
+</main>

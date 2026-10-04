@@ -195,12 +195,12 @@ describe('GmailOAuthService', () => {
       expect(GmailAccount.findOneAndUpdate).toHaveBeenCalledWith(
         expect.objectContaining({ gmailEmail: 'user@gmail.com' }),
         expect.objectContaining({ accessTokenEnc: 'encrypted-access', refreshTokenEnc: 'encrypted-refresh' }),
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
       expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
         expect.any(Object),
         expect.objectContaining({ googleConnected: true, gmailEmail: 'user@gmail.com' }),
-        { new: true }
+        { returnDocument: 'after' }
       );
     });
 
@@ -323,7 +323,7 @@ describe('GmailOAuthService', () => {
       expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
         userObjectId,
         expect.objectContaining({ googleConnected: false, gmailEmail: null }),
-        { new: true }
+        { returnDocument: 'after' }
       );
     });
 
@@ -363,7 +363,7 @@ describe('GmailOAuthService', () => {
       expect(User.findByIdAndUpdate).toHaveBeenCalledWith(
         userObjectId,
         expect.objectContaining({ googleConnected: false, gmailEmail: null }),
-        { new: true }
+        { returnDocument: 'after' }
       );
     });
 

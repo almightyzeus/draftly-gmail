@@ -95,7 +95,7 @@ describe('PreferenceService', () => {
       expect(UserPreference.findOneAndUpdate).toHaveBeenCalledWith(
         { userId },
         { $set: updates },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       );
     });
 
@@ -120,7 +120,7 @@ describe('PreferenceService', () => {
       expect(UserPreference.findOneAndUpdate).toHaveBeenCalledWith(
         { userId },
         { $set: partialUpdates },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       );
       expect(result).toEqual(updatedPreferences);
     });

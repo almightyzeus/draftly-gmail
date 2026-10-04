@@ -40,7 +40,7 @@ export class PreferenceService {
       const prefs = await UserPreference.findOneAndUpdate(
         { userId },
         { $set: updates },
-        { new: true, runValidators: true }
+        { returnDocument: 'after', runValidators: true }
       );
 
       if (!prefs) {

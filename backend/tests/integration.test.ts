@@ -131,6 +131,10 @@ describe('Integration workflows', () => {
 
     expect(generate.status).toBe(201);
     expect(generate.body.status).toBe('PENDING');
+    expect(generate.body.replyTo).toEqual({ from: 'sender@example.com', subject: 'Question' });
+
+    const list = await request(app).get('/api/drafts').set('Authorization', `Bearer ${token}`);
+    expect(list.body.map((d: any) => d.replyTo)).toEqual([{ from: 'sender@example.com', subject: 'Question' }]);
 
     const draftId = generate.body._id;
     const edit = await request(app)

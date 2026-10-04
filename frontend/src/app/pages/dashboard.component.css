@@ -1,357 +1,121 @@
-.dashboard {
-  min-height: 100vh;
-  background: #f5f5f5;
+.workspace {
+  overflow: hidden;
 }
 
-mat-toolbar {
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-}
-
-.spacer {
-  flex: 1 1 auto;
-}
-
-.user-info {
-  margin-right: 16px;
-  font-weight: 500;
-}
-
-.container {
-  max-width: 1200px;
-  margin: 32px auto;
-  padding: 0 16px;
-}
-
-mat-card {
-  margin-bottom: 24px;
-  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-}
-
-mat-card-header {
-  margin-bottom: 16px;
-}
-
-mat-card-title {
-  font-size: 24px;
-  font-weight: 600;
-  color: #333;
-}
-
-mat-card-content {
-  padding: 16px 0;
-}
-
-p {
-  font-size: 16px;
-  line-height: 1.6;
-  color: #666;
-  margin-bottom: 24px;
-}
-
-h3 {
-  margin-top: 24px;
-  margin-bottom: 12px;
-  color: #333;
-  font-size: 18px;
-}
-
-ul {
-  list-style: none;
-  padding: 0;
-  margin-bottom: 24px;
-}
-
-li {
-  padding: 8px 0;
-  padding-left: 24px;
-  position: relative;
-  color: #666;
-}
-
-li:before {
-  content: '✓';
-  position: absolute;
-  left: 0;
-  color: #4caf50;
-  font-weight: bold;
-}
-
-.button-group {
-  display: flex;
+.tab-body {
+  display: grid;
+  /* minmax(0, 1fr): let wide children (filters, tables) shrink to the card
+     instead of stretching the column past it. */
+  grid-template-columns: minmax(0, 1fr);
   gap: 12px;
-  margin-top: 24px;
-}
-
-button {
-  height: 44px;
-  font-size: 16px;
-}
-
-.margin-top {
-  margin-top: 16px;
-}
-
-/* Status Card Styles */
-.status-card {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-  color: white;
-}
-
-.status-card mat-card-title {
-  color: white;
-}
-
-.status-card mat-card-content {
-  color: white;
-}
-
-.status-card p {
-  color: white;
-  opacity: 0.95;
-}
-
-.connected-status,
-.disconnected-status {
-  display: flex;
-  align-items: center;
-  gap: 16px;
-  padding: 12px 0;
-}
-
-.status-text {
-  flex: 1;
-}
-
-.status-label {
-  font-weight: 500;
-  margin: 0;
-  font-size: 18px;
-}
-
-.status-text p {
-  margin: 4px 0;
-  font-size: 14px;
-}
-
-.status-section {
-  background: #f9f9f9;
-  border-left: 4px solid #2196f3;
   padding: 16px;
-  margin: 24px 0;
-  border-radius: 4px;
 }
 
-.status-section h3 {
-  margin-top: 0;
-}
-
-.status-section p {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 8px 0;
-}
-
-.status-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
-}
-
-.status-icon.success {
-  color: #4caf50;
-}
-
-.status-icon.warning {
-  color: #ff9800;
-}
-
-.text-muted {
-  color: #999 !important;
-  font-size: 14px !important;
-}
-
-/* Emails Card Styles */
-.emails-card {
-  margin-top: 32px;
-}
-
-.emails-header {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  width: 100%;
-}
-
-.emails-table-container {
-  overflow-x: auto;
-  margin: 16px 0;
-}
-
-.emails-table {
-  width: 100%;
-  background: white;
-  border-collapse: collapse;
-}
-
-.emails-table th {
-  background-color: #f5f5f5;
-  font-weight: 600;
-  padding: 12px 16px;
-  text-align: left;
-  border-bottom: 2px solid #ddd;
-  color: #333;
-  font-size: 14px;
-}
-
-.emails-table td {
-  padding: 12px 16px;
-  border-bottom: 1px solid #eee;
-  font-size: 14px;
-}
-
-.email-row {
-  transition: background-color 0.2s;
-  cursor: pointer;
-}
-
-.email-row:hover {
-  background-color: #f9f9f9;
-}
-
-.email-from {
-  font-weight: 500;
-  color: #2196f3;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 200px;
-}
-
-.email-subject {
-  font-weight: 500;
-  color: #333;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 300px;
-}
-
-.email-snippet {
-  color: #999;
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  max-width: 400px;
-  font-style: italic;
-}
-
-.email-date {
-  color: #999;
-  font-size: 13px;
-  white-space: nowrap;
-}
-
-.loading-spinner {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 16px;
-}
-
-.loading-spinner p {
-  margin-top: 16px;
-  color: #666;
-}
-
-.no-emails {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 48px 16px;
-  color: #999;
-}
-
-.no-emails mat-icon {
-  font-size: 48px;
-  width: 48px;
-  height: 48px;
-  margin-bottom: 16px;
-  opacity: 0.5;
-}
-
-.no-emails p {
-  color: #999;
-  font-size: 16px;
-  margin: 0;
-}
-
-.error-message {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  background-color: #ffebee;
-  color: #c62828;
-  padding: 16px;
-  border-radius: 4px;
-  margin-bottom: 16px;
-  border-left: 4px solid #c62828;
-}
-
-.error-message mat-icon {
-  font-size: 20px;
-  width: 20px;
-  height: 20px;
-}
-
-.search-row,
-.pagination {
+.controls,
+.search {
   display: flex;
   flex-wrap: wrap;
   align-items: center;
-  gap: 12px;
-  margin-bottom: 16px;
+  gap: 8px;
+}
+
+.search {
+  flex: 1 1 360px;
 }
 
 .search-field {
-  flex: 1 1 260px;
+  flex: 1 1 220px;
+}
+
+/* On narrow screens the status filters scroll sideways instead of widening the card. */
+mat-button-toggle-group {
+  min-width: 0;
+  max-width: 100%;
+  overflow-x: auto;
+}
+
+.toggle-on {
+  background: rgba(63, 81, 181, 0.08);
+}
+
+/* Fixed layout so long subjects ellipsize instead of widening the table. */
+.list-table {
+  width: 100%;
+  table-layout: fixed;
+}
+
+.list-table td {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.mat-column-from,
+.mat-column-to {
+  width: 24%;
+}
+
+.mat-column-status {
+  width: 120px;
+}
+
+.date-cell {
+  width: 96px;
+  text-align: right;
+  color: var(--dr-text-muted);
+}
+
+.snippet {
+  color: var(--dr-text-muted);
+}
+
+tr.unread td {
+  font-weight: 600;
+}
+
+tr.unread .snippet {
+  font-weight: 400;
 }
 
 .pagination {
+  display: flex;
+  align-items: center;
   justify-content: flex-end;
-  margin: 16px 0 0;
+  gap: 8px;
 }
 
-/* Responsive Design */
-@media (max-width: 768px) {
-  .container {
-    max-width: 100%;
-    margin: 16px auto;
+.connect-title {
+  margin: 0;
+  font-size: 22px;
+  font-weight: 500;
+  color: var(--dr-text);
+}
+
+@media (max-width: 600px) {
+  .tab-body {
+    padding: 12px 8px;
   }
 
-  mat-card-title {
-    font-size: 20px;
+  .snippet,
+  .mat-column-updatedAt {
+    display: none;
   }
 
-  .button-group {
-    flex-direction: column;
+  .mat-column-from,
+  .mat-column-to {
+    width: 34%;
   }
 
-  button {
-    width: 100%;
+  .date-cell {
+    width: 76px;
   }
 
-  .emails-table th,
-  .emails-table td {
-    padding: 8px;
-    font-size: 12px;
+  .list-table :is(td, th) {
+    padding-left: 8px;
+    padding-right: 8px;
   }
 
-  .email-from,
-  .email-subject,
-  .email-snippet {
-    max-width: 150px;
+  .mat-column-status {
+    width: 100px;
   }
 }

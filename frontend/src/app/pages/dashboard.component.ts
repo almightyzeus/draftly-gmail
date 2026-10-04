@@ -1,20 +1,22 @@
 import { Component, OnDestroy, OnInit } from '@angular/core';
 import { FormsModule } from '@angular/forms';
+import { ActivatedRoute, Router } from '@angular/router';
 import { Subscription } from 'rxjs';
-
-import { RouterModule, Router } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
-import { MatMenuModule } from '@angular/material/menu';
 import { MatTableModule } from '@angular/material/table';
+import { MatTabsModule } from '@angular/material/tabs';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
-import { MatDividerModule } from '@angular/material/divider';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
+import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService, User } from '../services/auth.service';
 import { GmailService } from '../services/gmail.service';
+import { DraftService } from '../services/draft.service';
+import { TopBarComponent } from '../shared/top-bar.component';
+import { formatListDate, senderName } from '../shared/format';
 
 interface Email {
   id: string;
@@ -29,24 +31,35 @@ interface Email {
   labels?: string[];
 }
 
+export interface DraftSummary {
+  _id: string;
+  status: 'PENDING' | 'APPROVED' | 'REJECTED' | 'SENT';
+  tone: string;
+  updatedAt: string;
+  createdAt: string;
+  replyTo: { from: string; subject: string } | null;
+}
+
+export type DraftFilter = '' | DraftSummary['status'];
+
 @Component({
-    selector: 'app-dashboard',
-    imports: [
-    RouterModule,
-    MatButtonModule,
-    MatCardModule,
-    MatToolbarModule,
-    MatIconModule,
-    MatMenuModule,
-    MatTableModule,
-    MatProgressSpinnerModule,
-    MatDividerModule,
+  selector: 'app-dashboard',
+  imports: [
     FormsModule,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatIconModule,
+    MatTableModule,
+    MatTabsModule,
+    MatProgressSpinnerModule,
     MatFormFieldModule,
-    MatInputModule
-],
-    templateUrl: './dashboard.component.html',
-    styleUrls: ['./dashboard.component.css']
+    MatInputModule,
+    MatTooltipModule,
+    TopBarComponent,
+  ],
+  templateUrl: './dashboard.component.html',
+  styleUrls: ['./dashboard.component.css'],
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   readonly pageSize = 20;
@@ -54,7 +67,27 @@ export class DashboardComponent implements OnInit, OnDestroy {
   emails: Email[] = [];
   isLoadingEmails = false;
   emailsError: string | null = null;
-  displayedColumns: string[] = ['from', 'subject', 'snippet', 'internalDate'];
+  displayedColumns: string[] = ['from', 'subject', 'internalDate'];
+  readonly formatDate = formatListDate;
+  readonly senderName = senderName;
+
+  /** 0 = Inbox, 1 = Drafts; mirrored in the URL (?tab=drafts). */
+  selectedTab = 0;
+
+  drafts: DraftSummary[] = [];
+  draftsFilter: DraftFilter = '';
+  readonly draftFilters: { value: DraftFilter; label: string }[] = [
+    { value: '', label: 'All' },
+    { value: 'PENDING', label: 'Pending' },
+    { value: 'APPROVED', label: 'Approved' },
+    { value: 'SENT', label: 'Sent' },
+    { value: 'REJECTED', label: 'Rejected' },
+  ];
+  draftColumns: string[] = ['to', 'subject', 'status', 'updatedAt'];
+  isLoadingDrafts = false;
+  draftsError: string | null = null;
+  private draftsLoaded = false;
+  private draftsSubscription?: Subscription;
   /** The startup inbox load happens once, when a Gmail-connected user is known. */
   private initialLoadRequested = false;
   private userSubscription?: Subscription;
@@ -75,10 +108,14 @@ export class DashboardComponent implements OnInit, OnDestroy {
   constructor(
     private authService: AuthService,
     private gmailService: GmailService,
-    private router: Router
+    private draftService: DraftService,
+    private router: Router,
+    private route: ActivatedRoute
   ) {}
 
   ngOnInit(): void {
+    this.selectedTab = this.route.snapshot.queryParamMap.get('tab') === 'drafts' ? 1 : 0;
+
     // AuthService.restoreSession() loads /me at startup and login/register set
     // the user, so currentUser$ is the single source of user state here.
     this.userSubscription = this.authService.currentUser$.subscribe((user) => {
@@ -87,18 +124,74 @@ export class DashboardComponent implements OnInit, OnDestroy {
         if (!this.initialLoadRequested) {
           this.initialLoadRequested = true;
           this.fetchEmails();
+          if (this.selectedTab === 1) {
+            this.loadDrafts();
+          }
         }
       } else {
-        // Clear emails if Gmail is not connected
+        // Gmail not connected (or just disconnected): nothing to show.
+        this.listSubscription?.unsubscribe();
         this.emails = [];
         this.isLoadingEmails = false;
+        this.resetPagination();
+        this.initialLoadRequested = false;
       }
     });
   }
 
-  logout(): void {
-    this.authService.logout();
-    this.router.navigate(['/login']);
+  onTabChange(index: number): void {
+    this.selectedTab = index;
+    this.router.navigate([], {
+      relativeTo: this.route,
+      queryParams: { tab: index === 1 ? 'drafts' : null },
+      replaceUrl: true,
+    });
+    if (index === 1 && !this.draftsLoaded) {
+      this.loadDrafts();
+    }
+  }
+
+  setDraftsFilter(filter: DraftFilter): void {
+    this.draftsFilter = filter;
+    this.loadDrafts();
+  }
+
+  loadDrafts(): void {
+    this.draftsSubscription?.unsubscribe();
+    this.isLoadingDrafts = true;
+    this.draftsError = null;
+    this.draftsLoaded = true;
+
+    this.draftsSubscription = this.draftService.getDrafts(this.draftsFilter || undefined, 50).subscribe({
+      next: (drafts) => {
+        this.drafts = drafts;
+        this.isLoadingDrafts = false;
+      },
+      error: (error) => {
+        console.error('Failed to load drafts:', error);
+        this.drafts = [];
+        this.draftsError = error?.error?.error || 'Failed to load drafts. Please try again.';
+        this.isLoadingDrafts = false;
+      },
+    });
+  }
+
+  get showDraftsEmptyState(): boolean {
+    return !this.isLoadingDrafts && !this.draftsError && this.drafts.length === 0;
+  }
+
+  get draftsEmptyMessage(): string {
+    return this.draftsFilter
+      ? `No ${this.draftsFilter.toLowerCase()} drafts.`
+      : 'No drafts yet. Open an email and generate a reply.';
+  }
+
+  openDraft(draft: DraftSummary): void {
+    this.router.navigate(['/draft', draft._id]);
+  }
+
+  isUnread(email: Email): boolean {
+    return !!email.labels?.includes('UNREAD');
   }
 
   connectGmail(): void {
@@ -109,23 +202,6 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.emailsError = 'Could not start the Gmail connection. Please try again.';
       },
     });
-  }
-
-  disconnectGmail(): void {
-    if (confirm('Are you sure you want to disconnect your Gmail account?')) {
-      this.gmailService.revokeGmail().subscribe({
-        next: () => {
-          if (this.currentUser) {
-            this.currentUser.googleConnected = false;
-            this.emails = [];
-            this.resetPagination();
-          }
-        },
-        error: (error) => {
-          console.error('Failed to disconnect Gmail:', error);
-        },
-      });
-    }
   }
 
   /** Reload the current page (Refresh button and initial load). */
@@ -221,10 +297,11 @@ export class DashboardComponent implements OnInit, OnDestroy {
           if (error.status === 401) {
             this.emailsError = 'Authentication failed. Please log in again.';
           } else if (error.status === 403 && this.currentUser) {
-            // The backend found the Gmail grant expired/revoked and disconnected it;
-            // show the Connect Gmail card instead of a dead inbox.
+            // The backend found the Gmail grant expired/revoked and disconnected it.
+            // Update the shared state so the top bar and this page show "Connect Gmail".
             this.emailsError = error.error?.error || 'Gmail access has expired. Please reconnect Gmail.';
             this.currentUser = { ...this.currentUser, googleConnected: false };
+            this.authService.setGoogleConnected(false);
             this.resetPagination();
           } else if (error.error?.error === 'Gmail account not connected') {
             this.emailsError = 'Gmail account not properly connected. Try disconnecting and reconnecting.';
@@ -239,17 +316,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   ngOnDestroy(): void {
     this.userSubscription?.unsubscribe();
     this.listSubscription?.unsubscribe();
-  }
-
-  formatDate(date: any): string {
-    if (!date) return '';
-    const dateObj = new Date(date);
-    return dateObj.toLocaleDateString() + ' ' + dateObj.toLocaleTimeString([], {hour: '2-digit', minute:'2-digit'});
-  }
-
-  truncateSnippet(snippet: string, length: number = 60): string {
-    if (!snippet) return '';
-    return snippet.length > length ? snippet.substring(0, length) + '...' : snippet;
+    this.draftsSubscription?.unsubscribe();
   }
 
   openEmailDetail(email: Email): void {

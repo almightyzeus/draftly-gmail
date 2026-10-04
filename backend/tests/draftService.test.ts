@@ -21,6 +21,7 @@ vi.mock('../src/models/Draft.js', () => {
 vi.mock('../src/models/EmailMessage.js', () => ({
   EmailMessage: {
     findOne: vi.fn(),
+    find: vi.fn(),
     create: vi.fn(),
   },
 }));
@@ -85,6 +86,56 @@ describe('DraftService', () => {
     (GmailService.getReplyMetadata as unknown as Mock).mockResolvedValue({
       inReplyTo: '<rfc-message@example.com>',
       references: '<older@example.com> <rfc-message@example.com>',
+    });
+  });
+
+  describe('toResponse', () => {
+    const arrangeTargets = (targets: any[]) => {
+      const chain = { select: vi.fn().mockReturnThis(), lean: vi.fn().mockResolvedValue(targets) };
+      (EmailMessage.find as unknown as Mock).mockReturnValue(chain);
+      return chain;
+    };
+
+    it('adds who the reply goes to and its subject, with one query for a list', async () => {
+      arrangeTargets([
+        { gmailMessageId: 'msg-1', from: 'Alice <alice@example.com>', subject: 'Budget' },
+        { gmailMessageId: 'msg-2', from: 'bob@example.com', subject: 'Trip' },
+      ]);
+      const drafts = [
+        { _id: 'd1', replyToGmailMessageId: 'msg-1', status: 'PENDING' },
+        { _id: 'd2', gmailMessageId: ['msg-2', 'msg-0'], status: 'SENT' },
+        { _id: 'd3', replyToGmailMessageId: 'gone', status: 'REJECTED' },
+      ];
+
+      const result = await DraftService.toResponse(userId, drafts);
+
+      expect(EmailMessage.find).toHaveBeenCalledTimes(1);
+      expect(EmailMessage.find).toHaveBeenCalledWith({
+        userId: new Types.ObjectId(userId),
+        gmailMessageId: { $in: ['msg-1', 'msg-2', 'gone'] },
+      });
+      expect(result.map((d: any) => d.replyTo)).toEqual([
+        { from: 'Alice <alice@example.com>', subject: 'Budget' },
+        { from: 'bob@example.com', subject: 'Trip' },
+        null,
+      ]);
+    });
+
+    it('shapes a single Mongoose document into a plain object', async () => {
+      arrangeTargets([{ gmailMessageId: 'msg-1', from: 'a@example.com', subject: 'Hi' }]);
+      const doc = { toObject: () => ({ _id: 'd1', replyToGmailMessageId: 'msg-1', draftBody: 'x' }) };
+
+      await expect(DraftService.toResponse(userId, doc)).resolves.toEqual({
+        _id: 'd1',
+        replyToGmailMessageId: 'msg-1',
+        draftBody: 'x',
+        replyTo: { from: 'a@example.com', subject: 'Hi' },
+      });
+    });
+
+    it('skips the query for an empty list', async () => {
+      await expect(DraftService.toResponse(userId, [])).resolves.toEqual([]);
+      expect(EmailMessage.find).not.toHaveBeenCalled();
     });
   });
 

@@ -8,11 +8,15 @@ import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { buildRawReply } from '../utils/mimeMessage.js';
+import { mapWithConcurrency } from '../utils/concurrency.js';
 
 /**
  * GmailService - Handles Gmail email fetching and sending
  */
 export class GmailService {
+  /** Parallel messages.get calls per inbox page. */
+  private static readonly MESSAGE_FETCH_CONCURRENCY = 10;
+
   private static getHeader(headers: any[], name: string): string | undefined {
     return headers.find((header: any) => header.name?.toLowerCase() === name.toLowerCase())?.value;
   }
@@ -74,7 +78,7 @@ export class GmailService {
       await GmailAccount.findOneAndUpdate(
         { userId: userObjectId, gmailEmail },
         updates,
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       logger.debug(`Refreshed tokens persisted for user ${userId}, email ${gmailEmail}`);
@@ -268,9 +272,9 @@ export class GmailService {
         return { emails: [], nextPageToken };
       }
 
-      // Fetch full message details and store in DB
-      const emails = [];
-      for (const msg of messageIds) {
+      // Fetch full message details and store in DB. Requests run in parallel
+      // (bounded, well within Gmail's per-user quota); results keep Gmail's order.
+      const fetched = await mapWithConcurrency(messageIds, this.MESSAGE_FETCH_CONCURRENCY, async (msg) => {
         try {
           const messageResponse = await gmail.users.messages.get({
             userId: 'me',
@@ -314,10 +318,10 @@ export class GmailService {
               direction,
               labels: message.labelIds || [],
             },
-            { upsert: true, new: true }
+            { upsert: true, returnDocument: 'after' }
           );
 
-          emails.push({
+          return {
             id: emailDoc._id,
             gmailMessageId: emailDoc.gmailMessageId,
             threadId: emailDoc.threadId,
@@ -328,14 +332,16 @@ export class GmailService {
             direction: emailDoc.direction,
             internalDate: emailDoc.internalDate,
             labels: emailDoc.labels,
-          });
+          };
         } catch (error) {
           logger.error(
             error instanceof Error ? error : new Error(String(error)),
             `Failed to fetch message ${msg.id}`
           );
+          return null;
         }
-      }
+      });
+      const emails = fetched.filter((email) => email !== null);
 
       logger.info(
         `Fetched ${emails.length} emails for user ${userId}`
@@ -510,7 +516,7 @@ export class GmailService {
     await EmailMessage.findOneAndUpdate(
       { userId: userObjectId, gmailMessageId },
       { rfcMessageId, references: references || null },
-      { new: true }
+      { returnDocument: 'after' }
     );
 
     return this.buildReplyHeaders(rfcMessageId, references);

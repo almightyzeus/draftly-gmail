@@ -1,171 +1,221 @@
-<div class="dashboard">
-  <!-- Header -->
-  <mat-toolbar color="primary">
-    <span class="spacer"></span>
-    @if (currentUser) {
-      <span class="user-info">{{ currentUser.name }}</span>
-    }
-    <button mat-icon-button [matMenuTriggerFor]="menu">
-      <mat-icon>account_circle</mat-icon>
-    </button>
-    <mat-menu #menu="matMenu">
-      <button mat-menu-item (click)="logout()">
-        <mat-icon>logout</mat-icon>
-        <span>Logout</span>
-      </button>
-    </mat-menu>
-  </mat-toolbar>
+<app-top-bar />
 
-  <!-- Main Content -->
-  <div class="container">
-    <!-- Gmail Connection Status Card -->
-    <mat-card class="status-card">
-      <mat-card-header>
-        <mat-card-title>Gmail Connection Status</mat-card-title>
-      </mat-card-header>
-      <mat-card-content>
-        @if (currentUser?.googleConnected) {
-          <div class="connected-status">
-            <mat-icon class="status-icon success">check_circle</mat-icon>
-            <div class="status-text">
-              <p class="status-label">Gmail Connected</p>
-              <p class="text-muted">Email: {{ currentUser?.email || 'N/A' }}</p>
-            </div>
-          </div>
-          <button mat-raised-button color="accent" (click)="disconnectGmail()" class="margin-top">
-            <mat-icon>mail</mat-icon>
-            Disconnect Gmail
-          </button>
-        }
-        @if (!currentUser?.googleConnected) {
-          <div class="disconnected-status">
-            <mat-icon class="status-icon warning">info</mat-icon>
-            <div class="status-text">
-              <p class="status-label">Gmail Not Connected</p>
-              <p class="text-muted">{{ emailsError || 'Connect your Gmail account to get started' }}</p>
-            </div>
-          </div>
-          <button mat-raised-button color="primary" (click)="connectGmail()" class="margin-top">
-            <mat-icon>mail</mat-icon>
-            Connect Gmail
-          </button>
-        }
-      </mat-card-content>
+<main class="page-content">
+  @if (!currentUser) {
+    <div class="state">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading your account…</p>
+    </div>
+  } @else if (!currentUser.googleConnected) {
+    <!-- Gmail not connected: one clear next step instead of an empty inbox -->
+    <mat-card appearance="outlined">
+      <div class="state connect-cta">
+        <mat-icon>mail_outline</mat-icon>
+        <h1 class="connect-title">Connect your Gmail</h1>
+        <p>{{ emailsError || 'Draftly reads your inbox, drafts replies with AI, and sends only what you approve.' }}</p>
+        <button mat-flat-button color="primary" (click)="connectGmail()">
+          <mat-icon>add_link</mat-icon>
+          Connect Gmail
+        </button>
+      </div>
     </mat-card>
-
-    <!-- Emails Section -->
-    @if (currentUser?.googleConnected) {
-      <mat-card class="emails-card">
-        <mat-card-header>
-          <mat-card-title>
-            <div class="emails-header">
-              <span>Inbox</span>
-              <button mat-icon-button (click)="fetchEmails()" [disabled]="isLoadingEmails" title="Refresh emails">
+  } @else {
+    <mat-card appearance="outlined" class="workspace">
+      <mat-tab-group
+        [selectedIndex]="selectedTab"
+        (selectedIndexChange)="onTabChange($event)"
+        animationDuration="0ms"
+        mat-stretch-tabs="false"
+      >
+        <!-- Inbox -->
+        <mat-tab label="Inbox">
+          <div class="tab-body">
+            <div class="controls">
+              <form class="search" role="search" (ngSubmit)="search()">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search-field">
+                  <mat-icon matPrefix>search</mat-icon>
+                  <input
+                    matInput
+                    name="q"
+                    [(ngModel)]="searchQuery"
+                    placeholder='Search mail, e.g. from:alice subject:"report"'
+                    aria-label="Search mail"
+                  />
+                  @if (searchQuery || activeQuery) {
+                    <button mat-icon-button matSuffix type="button" (click)="clearSearch()" aria-label="Clear search">
+                      <mat-icon>close</mat-icon>
+                    </button>
+                  }
+                </mat-form-field>
+                <button mat-flat-button color="primary" type="submit">Search</button>
+              </form>
+              <button
+                mat-stroked-button
+                type="button"
+                [class.toggle-on]="unreadOnly"
+                [attr.aria-pressed]="unreadOnly"
+                (click)="toggleUnreadOnly()"
+              >
+                <mat-icon>{{ unreadOnly ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
+                Unread only
+              </button>
+              <button
+                mat-icon-button
+                type="button"
+                (click)="fetchEmails()"
+                [disabled]="isLoadingEmails"
+                aria-label="Refresh inbox"
+                matTooltip="Refresh"
+              >
                 <mat-icon>refresh</mat-icon>
               </button>
             </div>
-          </mat-card-title>
-        </mat-card-header>
-        <mat-card-content>
-          <!-- Gmail search: free text or Gmail syntax (from:, subject:, has:attachment, ...) -->
-          <form class="search-row" (ngSubmit)="search()">
-            <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search-field">
-              <mat-label>Search mail</mat-label>
-              <input matInput name="q" [(ngModel)]="searchQuery" placeholder="e.g. from:alice subject:&quot;report&quot;" />
-            </mat-form-field>
-            <button mat-raised-button color="primary" type="submit">
-              <mat-icon>search</mat-icon>
-              Search
-            </button>
-            @if (searchQuery || activeQuery) {
-              <button mat-button type="button" (click)="clearSearch()">Clear</button>
-            }
-            <button mat-stroked-button type="button" [attr.aria-pressed]="unreadOnly" (click)="toggleUnreadOnly()">
-              <mat-icon>{{ unreadOnly ? 'check_box' : 'check_box_outline_blank' }}</mat-icon>
-              Unread only
-            </button>
-          </form>
-          <!-- Error Message -->
-          @if (emailsError) {
-            <div class="error-message">
-              <mat-icon>error</mat-icon>
-              <span>{{ emailsError }}</span>
-            </div>
-          }
-          <!-- Loading Spinner -->
-          @if (isLoadingEmails) {
-            <div class="loading-spinner">
-              <mat-spinner diameter="50"></mat-spinner>
-              <p>Loading emails...</p>
-            </div>
-          }
-          <!-- Emails Table -->
-          @if (!isLoadingEmails && emails.length > 0) {
-            <div class="emails-table-container">
-              <table mat-table [dataSource]="emails" class="emails-table">
-                <!-- From Column -->
+
+            @if (emailsError) {
+              <div class="state state--error" role="alert">
+                <mat-icon>error_outline</mat-icon>
+                <p>{{ emailsError }}</p>
+                <button mat-stroked-button (click)="fetchEmails()">Try again</button>
+              </div>
+            } @else if (isLoadingEmails) {
+              <div class="state">
+                <mat-spinner diameter="40"></mat-spinner>
+                <p>Loading emails…</p>
+              </div>
+            } @else if (showEmptyState) {
+              <div class="state">
+                <mat-icon>{{ activeQuery ? 'search_off' : 'inbox' }}</mat-icon>
+                <p>{{ emptyStateMessage }}</p>
+              </div>
+            } @else {
+              <table mat-table [dataSource]="emails" class="list-table">
                 <ng-container matColumnDef="from">
                   <th mat-header-cell *matHeaderCellDef>From</th>
-                  <td mat-cell *matCellDef="let email">
-                    <div class="email-from" title="{{ email.from }}">{{ email.from }}</div>
-                  </td>
+                  <td mat-cell *matCellDef="let email" [title]="email.from">{{ senderName(email.from) }}</td>
                 </ng-container>
-                <!-- Subject Column -->
                 <ng-container matColumnDef="subject">
                   <th mat-header-cell *matHeaderCellDef>Subject</th>
                   <td mat-cell *matCellDef="let email">
-                    <div class="email-subject" title="{{ email.subject }}">{{ email.subject }}</div>
+                    <span class="subject">{{ email.subject }}</span>
+                    <span class="snippet"> — {{ email.snippet }}</span>
                   </td>
                 </ng-container>
-                <!-- Snippet Column -->
-                <ng-container matColumnDef="snippet">
-                  <th mat-header-cell *matHeaderCellDef>Preview</th>
-                  <td mat-cell *matCellDef="let email">
-                    <div class="email-snippet" title="{{ email.snippet }}">
-                      {{ truncateSnippet(email.snippet, 80) }}
-                    </div>
-                  </td>
-                </ng-container>
-                <!-- Date Column -->
                 <ng-container matColumnDef="internalDate">
-                  <th mat-header-cell *matHeaderCellDef>Date</th>
-                  <td mat-cell *matCellDef="let email">
-                    <div class="email-date">{{ formatDate(email.internalDate) }}</div>
-                  </td>
+                  <th mat-header-cell *matHeaderCellDef class="date-cell">Date</th>
+                  <td mat-cell *matCellDef="let email" class="date-cell">{{ formatDate(email.internalDate) }}</td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
                 <tr
                   mat-row
-                  *matRowDef="let email; columns: displayedColumns;"
-                  class="email-row"
+                  *matRowDef="let email; columns: displayedColumns"
+                  class="clickable-row"
+                  [class.unread]="isUnread(email)"
+                  tabindex="0"
+                  [attr.aria-label]="(isUnread(email) ? 'Unread. ' : '') + 'From ' + senderName(email.from) + ': ' + email.subject"
                   (click)="openEmailDetail(email)"
+                  (keydown.enter)="openEmailDetail(email)"
                 ></tr>
               </table>
-            </div>
-          }
-          <!-- No Emails Message -->
-          @if (showEmptyState) {
-            <div class="no-emails">
-              <mat-icon>mail_outline</mat-icon>
-              <p>{{ emptyStateMessage }}</p>
-            </div>
-          }
-          <!-- Pagination (Gmail page tokens) -->
-          @if (hasPreviousPage || hasNextPage) {
-            <div class="pagination">
-              <button mat-button (click)="previousPage()" [disabled]="!hasPreviousPage || isLoadingEmails">
-                <mat-icon>chevron_left</mat-icon>
-                Previous
+            }
+
+            @if (hasPreviousPage || hasNextPage) {
+              <nav class="pagination" aria-label="Inbox pages">
+                <button mat-button (click)="previousPage()" [disabled]="!hasPreviousPage || isLoadingEmails">
+                  <mat-icon>chevron_left</mat-icon>
+                  Previous
+                </button>
+                <span>Page {{ pageIndex + 1 }}</span>
+                <button mat-button (click)="nextPage()" [disabled]="!hasNextPage || isLoadingEmails">
+                  Next
+                  <mat-icon iconPositionEnd>chevron_right</mat-icon>
+                </button>
+              </nav>
+            }
+          </div>
+        </mat-tab>
+
+        <!-- Drafts -->
+        <mat-tab label="Drafts">
+          <div class="tab-body">
+            <div class="controls">
+              <mat-button-toggle-group
+                [value]="draftsFilter"
+                (change)="setDraftsFilter($event.value)"
+                aria-label="Filter drafts by status"
+                hideSingleSelectionIndicator
+              >
+                @for (filter of draftFilters; track filter.value) {
+                  <mat-button-toggle [value]="filter.value">{{ filter.label }}</mat-button-toggle>
+                }
+              </mat-button-toggle-group>
+              <span class="spacer"></span>
+              <button
+                mat-icon-button
+                type="button"
+                (click)="loadDrafts()"
+                [disabled]="isLoadingDrafts"
+                aria-label="Refresh drafts"
+                matTooltip="Refresh"
+              >
+                <mat-icon>refresh</mat-icon>
               </button>
-              <span>Page {{ pageIndex + 1 }}</span>
-              <button mat-button (click)="nextPage()" [disabled]="!hasNextPage || isLoadingEmails">
-                Next
-                <mat-icon iconPositionEnd>chevron_right</mat-icon>
-              </button>
             </div>
-          }
-        </mat-card-content>
-      </mat-card>
-    }
-  </div>
-</div>
+
+            @if (draftsError) {
+              <div class="state state--error" role="alert">
+                <mat-icon>error_outline</mat-icon>
+                <p>{{ draftsError }}</p>
+                <button mat-stroked-button (click)="loadDrafts()">Try again</button>
+              </div>
+            } @else if (isLoadingDrafts) {
+              <div class="state">
+                <mat-spinner diameter="40"></mat-spinner>
+                <p>Loading drafts…</p>
+              </div>
+            } @else if (showDraftsEmptyState) {
+              <div class="state">
+                <mat-icon>edit_note</mat-icon>
+                <p>{{ draftsEmptyMessage }}</p>
+              </div>
+            } @else {
+              <table mat-table [dataSource]="drafts" class="list-table">
+                <ng-container matColumnDef="to">
+                  <th mat-header-cell *matHeaderCellDef>To</th>
+                  <td mat-cell *matCellDef="let draft" [title]="draft.replyTo?.from || ''">
+                    {{ draft.replyTo ? senderName(draft.replyTo.from) : '—' }}
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="subject">
+                  <th mat-header-cell *matHeaderCellDef>Subject</th>
+                  <td mat-cell *matCellDef="let draft">
+                    <span class="subject">{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '(original email unavailable)' }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="status">
+                  <th mat-header-cell *matHeaderCellDef>Status</th>
+                  <td mat-cell *matCellDef="let draft">
+                    <span class="status-badge status-badge--{{ draft.status.toLowerCase() }}">{{ draft.status }}</span>
+                  </td>
+                </ng-container>
+                <ng-container matColumnDef="updatedAt">
+                  <th mat-header-cell *matHeaderCellDef class="date-cell">Updated</th>
+                  <td mat-cell *matCellDef="let draft" class="date-cell">{{ formatDate(draft.updatedAt) }}</td>
+                </ng-container>
+                <tr mat-header-row *matHeaderRowDef="draftColumns"></tr>
+                <tr
+                  mat-row
+                  *matRowDef="let draft; columns: draftColumns"
+                  class="clickable-row"
+                  tabindex="0"
+                  [attr.aria-label]="draft.status + ' draft to ' + (draft.replyTo ? senderName(draft.replyTo.from) : 'unknown recipient')"
+                  (click)="openDraft(draft)"
+                  (keydown.enter)="openDraft(draft)"
+                ></tr>
+              </table>
+            }
+          </div>
+        </mat-tab>
+      </mat-tab-group>
+    </mat-card>
+  }
+</main>

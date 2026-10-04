@@ -1,12 +1,11 @@
 import { Component, OnInit, SecurityContext } from '@angular/core';
-import { CommonModule } from '@angular/common';
-import { ActivatedRoute, Router, RouterModule } from '@angular/router';
+import { DatePipe, TitleCasePipe } from '@angular/common';
+import { ActivatedRoute, Router } from '@angular/router';
 import { FormsModule } from '@angular/forms';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatCardModule } from '@angular/material/card';
-import { MatToolbarModule } from '@angular/material/toolbar';
 import { MatIconModule } from '@angular/material/icon';
-import { MatSelectModule } from '@angular/material/select';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
@@ -14,6 +13,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { DomSanitizer } from '@angular/platform-browser';
 import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
+import { TopBarComponent } from '../shared/top-bar.component';
 
 interface Email {
   id: string;
@@ -30,23 +30,23 @@ interface Email {
 }
 
 @Component({
-    selector: 'app-email-detail',
-    imports: [
-        CommonModule,
-        RouterModule,
-        FormsModule,
-        MatButtonModule,
-        MatCardModule,
-        MatToolbarModule,
-        MatIconModule,
-        MatSelectModule,
-        MatFormFieldModule,
-        MatInputModule,
-        MatProgressSpinnerModule,
-        MatDividerModule,
-    ],
-    templateUrl: './email-detail.component.html',
-    styleUrls: ['./email-detail.component.css']
+  selector: 'app-email-detail',
+  imports: [
+    DatePipe,
+    TitleCasePipe,
+    FormsModule,
+    MatButtonModule,
+    MatButtonToggleModule,
+    MatCardModule,
+    MatIconModule,
+    MatFormFieldModule,
+    MatInputModule,
+    MatProgressSpinnerModule,
+    MatDividerModule,
+    TopBarComponent,
+  ],
+  templateUrl: './email-detail.component.html',
+  styleUrls: ['./email-detail.component.css'],
 })
 export class EmailDetailComponent implements OnInit {
   email: Email | null = null;

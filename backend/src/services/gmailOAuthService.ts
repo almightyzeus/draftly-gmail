@@ -122,7 +122,7 @@ export class GmailOAuthService {
           tokenExpiry: new Date(tokens.expiry_date || Date.now() + 3600000),
           scopes: tokens.scope?.split(' ') || [],
         },
-        { upsert: true, new: true }
+        { upsert: true, returnDocument: 'after' }
       );
 
       // Update User model - set googleConnected flag and gmailEmail
@@ -132,7 +132,7 @@ export class GmailOAuthService {
           googleConnected: true,
           gmailEmail: gmailEmail,
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       logger.info(`Gmail account connected for user ${userId} with email ${gmailEmail}`);
@@ -199,7 +199,7 @@ export class GmailOAuthService {
           googleConnected: false,
           gmailEmail: null,
         },
-        { new: true }
+        { returnDocument: 'after' }
       );
 
       logger.info(`Gmail account revoked for user ${userId}`);

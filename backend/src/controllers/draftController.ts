@@ -55,7 +55,7 @@ export const generateDraft = async (req: any, res: Response) => {
       customContext
     );
 
-    res.status(201).json(draft);
+    res.status(201).json(await DraftService.toResponse(userId, draft));
   } catch (error) {
     handleError(error, res);
   }
@@ -80,7 +80,7 @@ export const getAllDrafts = async (req: any, res: Response) => {
 
     const drafts = await DraftService.getUserDrafts(userId, statusStr, limitNum);
 
-    res.json(drafts);
+    res.json(await DraftService.toResponse(userId, drafts));
   } catch (error) {
     handleError(error, res);
   }
@@ -96,7 +96,7 @@ export const getDraftById = async (req: any, res: Response) => {
 
     const draft = await DraftService.getDraftById(userId, id);
 
-    res.json(draft);
+    res.json(await DraftService.toResponse(userId, draft));
   } catch (error) {
     handleError(error, res);
   }
@@ -122,7 +122,7 @@ export const updateDraft = async (req: any, res: Response) => {
 
     const draft = await DraftService.updateDraft(userId, id, draftBody);
 
-    res.json(draft);
+    res.json(await DraftService.toResponse(userId, draft));
   } catch (error) {
     handleError(error, res);
   }
@@ -138,7 +138,7 @@ export const approveDraft = async (req: any, res: Response) => {
 
     const draft = await DraftService.approveDraft(userId, id);
 
-    res.json(draft);
+    res.json(await DraftService.toResponse(userId, draft));
   } catch (error) {
     handleError(error, res);
   }
@@ -154,7 +154,7 @@ export const rejectDraft = async (req: any, res: Response) => {
 
     const draft = await DraftService.rejectDraft(userId, id);
 
-    res.json(draft);
+    res.json(await DraftService.toResponse(userId, draft));
   } catch (error) {
     handleError(error, res);
   }
@@ -189,7 +189,7 @@ export const sendDraft = async (req: any, res: Response) => {
 
     const draft = await DraftService.sendDraft(userId, id, idempotencyKey);
 
-    res.json(draft);
+    res.json(await DraftService.toResponse(userId, draft));
   } catch (error) {
     handleError(error, res);
   }

@@ -32,6 +32,8 @@ describe('DraftController', () => {
       status: vi.fn().mockReturnThis(),
       json: vi.fn().mockReturnThis(),
     };
+    // Response shaping is covered in draftService tests; pass drafts through here.
+    (DraftService.toResponse as unknown as Mock).mockImplementation(async (_userId: string, draft: any) => draft);
   });
 
   describe('generateDraft', () => {

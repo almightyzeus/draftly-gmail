@@ -6,7 +6,10 @@ import { env } from '../src/config/env.js';
 import { DraftService } from '../src/services/draftService.js';
 
 vi.mock('../src/services/draftService.js', () => ({
-  DraftService: { generateDraft: vi.fn().mockResolvedValue({ _id: 'draft-1' }) },
+  DraftService: {
+    generateDraft: vi.fn().mockResolvedValue({ _id: 'draft-1' }),
+    toResponse: vi.fn(async (_userId: string, draft: unknown) => draft),
+  },
 }));
 
 vi.mock('../src/utils/logger.js', () => ({

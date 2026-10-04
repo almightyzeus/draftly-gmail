@@ -1,4 +1,186 @@
-/* You can add global styles to this file, and also import other style files */
+/*
+ * Global styles: design tokens and the few layout/state patterns shared by
+ * every page. Components keep only what is specific to them.
+ * Colours follow the Material indigo-pink theme plus Draftly's brand gradient.
+ */
+
+:root {
+  --dr-bg: #f4f5f9;
+  --dr-surface: #ffffff;
+  --dr-text: rgba(0, 0, 0, 0.87);
+  --dr-text-muted: rgba(0, 0, 0, 0.6);
+  --dr-border: rgba(0, 0, 0, 0.12);
+  --dr-primary: #3f51b5;
+  --dr-danger: #c62828;
+  --dr-success: #2e7d32;
+  --dr-warning: #e65100;
+  --dr-brand-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --dr-radius: 8px;
+  --dr-gap: 16px;
+}
 
 html, body { height: 100%; }
-body { margin: 0; font-family: Roboto, "Helvetica Neue", sans-serif; }
+body {
+  margin: 0;
+  font-family: Roboto, "Helvetica Neue", sans-serif;
+  background: var(--dr-bg);
+  color: var(--dr-text);
+}
+
+/* ---------- Page layout ---------- */
+
+.page-content {
+  max-width: 1100px;
+  margin: 24px auto;
+  padding: 0 var(--dr-gap);
+  display: grid;
+  gap: var(--dr-gap);
+}
+
+.page-content--narrow {
+  max-width: 860px;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.muted {
+  color: var(--dr-text-muted);
+}
+
+/* ---------- Loading / empty / error states ---------- */
+
+.state {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  padding: 48px var(--dr-gap);
+  text-align: center;
+  color: var(--dr-text-muted);
+}
+
+.state > mat-icon {
+  font-size: 48px;
+  width: 48px;
+  height: 48px;
+  opacity: 0.6;
+}
+
+.state p {
+  margin: 0;
+  max-width: 480px;
+}
+
+.state--error {
+  color: var(--dr-danger);
+}
+
+/* Inline failure of an action; the page content stays visible. */
+.inline-error {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin: 0;
+  padding: 10px 12px;
+  border-radius: var(--dr-radius);
+  background: #fdecea;
+  color: var(--dr-danger);
+}
+
+/* Spinner inside a button label. */
+.btn-spinner {
+  display: inline-block;
+  margin-right: 8px;
+  vertical-align: middle;
+}
+
+/* ---------- Status badges (drafts) ---------- */
+
+.status-badge {
+  display: inline-block;
+  padding: 2px 10px;
+  border-radius: 999px;
+  font-size: 12px;
+  font-weight: 500;
+  letter-spacing: 0.02em;
+  text-transform: uppercase;
+  background: #eceff1;
+  color: #455a64;
+}
+
+.status-badge--pending { background: #fff3e0; color: var(--dr-warning); }
+.status-badge--approved { background: #e8f5e9; color: var(--dr-success); }
+.status-badge--sent { background: #e8eaf6; color: var(--dr-primary); }
+.status-badge--rejected { background: #eceff1; color: #546e7a; }
+
+/* ---------- Clickable table rows ---------- */
+
+tr.clickable-row {
+  cursor: pointer;
+}
+
+tr.clickable-row:hover,
+tr.clickable-row:focus-visible {
+  background: rgba(63, 81, 181, 0.06);
+  outline: none;
+}
+
+/* ---------- Auth pages (login / register) ---------- */
+
+.auth-page {
+  min-height: 100vh;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: var(--dr-gap);
+  box-sizing: border-box;
+  background: var(--dr-brand-gradient);
+}
+
+.auth-card {
+  width: 100%;
+  max-width: 420px;
+  padding: 8px 8px 16px;
+}
+
+.auth-card form {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.auth-card .brand-title {
+  font-size: 24px;
+  font-weight: 600;
+}
+
+.auth-link {
+  text-align: center;
+  margin: 16px 0 0;
+  color: var(--dr-text-muted);
+}
+
+.auth-link a {
+  color: #5b5fc7;
+  font-weight: 600;
+  text-decoration: none;
+}
+
+.auth-link a:hover {
+  text-decoration: underline;
+}
+
+.full-width {
+  width: 100%;
+}
+
+/* ---------- Responsive helpers ---------- */
+
+@media (max-width: 700px) {
+  .hide-sm {
+    display: none !important;
+  }
+}

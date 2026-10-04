@@ -1,218 +1,118 @@
-<div class="draft-detail-container">
-  <!-- Toolbar with back button -->
-  <mat-toolbar color="primary" class="toolbar">
-    <button mat-icon-button (click)="goBack()" class="back-btn">
-      <mat-icon>arrow_back</mat-icon>
-    </button>
-    <span>Draft Reply</span>
-    <span class="status-badge" [ngClass]="draft?.status?.toLowerCase()">
-      {{ draft?.status }}
-    </span>
-  </mat-toolbar>
+<app-top-bar title="Draft reply" [showBack]="true" (back)="goBack()">
+  @if (draft) {
+    <span class="status-badge status-badge--{{ draft.status.toLowerCase() }} top-badge">{{ draft.status }}</span>
+  }
+</app-top-bar>
 
-  <div class="content">
-    <!-- Loading state -->
-    @if (isLoading) {
-      <div class="loading-state">
-        <mat-spinner diameter="40"></mat-spinner>
-        <p>Loading draft...</p>
+<main class="page-content page-content--narrow">
+  @if (isLoading) {
+    <div class="state">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading draft…</p>
+    </div>
+  } @else if (error) {
+    <mat-card appearance="outlined">
+      <div class="state state--error" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <p>{{ error }}</p>
+        <button mat-stroked-button (click)="goBack()">Back to drafts</button>
       </div>
-    }
+    </mat-card>
+  } @else if (draft) {
+    <mat-card appearance="outlined">
+      <mat-card-content class="draft">
+        <!-- Who this goes to: visible before anything is approved or sent -->
+        <dl class="meta">
+          <dt>To</dt>
+          <dd>{{ draft.replyTo?.from || 'Unknown recipient (original email unavailable)' }}</dd>
+          <dt>Subject</dt>
+          <dd>{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '—' }}</dd>
+          <dt>Tone</dt>
+          <dd>{{ draft.tone | titlecase }} · created {{ draft.createdAt | date: 'MMM d, h:mm a' }}</dd>
+        </dl>
 
-    <!-- Error state -->
-    @if (error && !isLoading) {
-      <div class="error-state">
-        <mat-card class="error-card">
-          <mat-card-content>
-            <mat-icon class="error-icon">error_outline</mat-icon>
-            <p>{{ error }}</p>
-            <button mat-raised-button color="primary" (click)="goBack()">
-              Go Back
-            </button>
-          </mat-card-content>
-        </mat-card>
-      </div>
-    }
+        <mat-form-field appearance="outline" class="full-width">
+          <mat-label>Reply</mat-label>
+          <textarea
+            matInput
+            id="draft-editor"
+            rows="14"
+            [(ngModel)]="editedContent"
+            (ngModelChange)="onContentChange()"
+            [disabled]="isBusy() || !isEditable"
+          ></textarea>
+          @if (hasChanges) {
+            <mat-hint>Unsaved changes</mat-hint>
+          }
+          <mat-hint align="end">{{ editedContent.length }} characters</mat-hint>
+        </mat-form-field>
 
-    <!-- Success message -->
-    @if (successMessage && !isLoading) {
-      <div class="success-message">
-        <mat-card class="success-card">
-          <mat-card-content>
-            {{ successMessage }}
-          </mat-card-content>
-        </mat-card>
-      </div>
-    }
+        @if (actionError) {
+          <p class="inline-error action-error" role="alert">
+            <mat-icon>error_outline</mat-icon>
+            {{ actionError }}
+          </p>
+        }
 
-    <!-- Draft content -->
-    @if (draft && !isLoading && !error) {
-      <div class="draft-content">
-        <mat-card class="draft-card">
-          <mat-card-header>
-            <div class="header-info">
-              <div>
-                <strong>Tone:</strong> {{ draft.tone | titlecase }}
-              </div>
-              <div>
-                <strong>Created:</strong> {{ draft.createdAt | date : 'short' }}
-              </div>
-            </div>
-          </mat-card-header>
-          <mat-card-content>
-            <div class="editor-section">
-              <label for="draft-editor" class="editor-label">
-                <strong>Edit Your Draft</strong>
-              </label>
-              <textarea
-                id="draft-editor"
-                class="draft-editor"
-                [(ngModel)]="editedContent"
-                (ngModelChange)="onContentChange()"
-              [disabled]="isBusy() || (draft.status !== 'PENDING' && draft.status !== 'APPROVED')"
-                placeholder="Edit your draft reply here..."
-              ></textarea>
-              <div class="char-count">
-                {{ editedContent.length }} characters
-              </div>
-            </div>
-            <mat-divider class="divider"></mat-divider>
-            @if (actionError) {
-              <p class="action-error" role="alert">{{ actionError }}</p>
+        @if (isEditable) {
+          <div class="actions">
+            @if (hasChanges) {
+              <button mat-stroked-button (click)="saveDraft()" [disabled]="isBusy()">
+                @if (isSaving()) {
+                  <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+                } @else {
+                  <mat-icon>save</mat-icon>
+                }
+                {{ isSaving() ? 'Saving…' : 'Save changes' }}
+              </button>
             }
-            <!-- Actions -->
-            <div class="actions">
-              <!-- Save section -->
-              @if (hasChanges && (draft.status === 'PENDING' || draft.status === 'APPROVED')) {
-                <div class="save-section">
-                  <button
-                    mat-raised-button
-                    color="accent"
-                    (click)="saveDraft()"
-                    [disabled]="isBusy()"
-                    class="save-btn"
-                    >
-                    @if (!isSaving()) {
-                      <mat-icon>save</mat-icon>
-                    }
-                    @if (isSaving()) {
-                      <mat-spinner
-                        diameter="20"
-                        class="inline-spinner"
-                      ></mat-spinner>
-                    }
-                    {{ isSaving() ? 'Saving...' : 'Save Changes' }}
-                  </button>
-                </div>
+            <span class="spacer"></span>
+            <button mat-stroked-button color="warn" (click)="rejectDraft()" [disabled]="isBusy()">
+              @if (isRejecting()) {
+                <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+              } @else {
+                <mat-icon>block</mat-icon>
               }
-              <!-- PENDING state actions: Approve, Reject -->
-              @if (draft.status === 'PENDING') {
-                <div class="approval-actions">
-                  <button
-                    mat-raised-button
-                    color="primary"
-                    (click)="approveDraft()"
-                    [disabled]="isBusy()"
-                    class="approve-btn"
-                    >
-                    @if (!isApproving()) {
-                      <mat-icon>check_circle</mat-icon>
-                    }
-                    @if (isApproving()) {
-                      <mat-spinner
-                        diameter="20"
-                        class="inline-spinner"
-                      ></mat-spinner>
-                    }
-                    {{ isApproving() ? 'Approving...' : 'Approve' }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    color="warn"
-                    (click)="rejectDraft()"
-                    [disabled]="isBusy()"
-                    class="reject-btn"
-                    >
-                    @if (!isRejecting()) {
-                      <mat-icon>cancel</mat-icon>
-                    }
-                    @if (isRejecting()) {
-                      <mat-spinner
-                        diameter="20"
-                        class="inline-spinner"
-                      ></mat-spinner>
-                    }
-                    {{ isRejecting() ? 'Rejecting...' : 'Reject' }}
-                  </button>
-                </div>
-              }
-              <!-- APPROVED state actions: Send, Reject -->
-              @if (draft.status === 'APPROVED') {
-                <div class="send-actions">
-                  <button
-                    mat-raised-button
-                    color="primary"
-                    (click)="sendDraft()"
-                    [disabled]="isBusy()"
-                    class="send-btn"
-                    >
-                    @if (!isSending()) {
-                      <mat-icon>send</mat-icon>
-                    }
-                    @if (isSending()) {
-                      <mat-spinner
-                        diameter="20"
-                        class="inline-spinner"
-                      ></mat-spinner>
-                    }
-                    {{ isSending() ? 'Sending...' : 'Send' }}
-                  </button>
-                  <button
-                    mat-stroked-button
-                    color="warn"
-                    (click)="rejectDraft()"
-                    [disabled]="isBusy()"
-                    class="reject-btn"
-                    >
-                    @if (!isRejecting()) {
-                      <mat-icon>cancel</mat-icon>
-                    }
-                    @if (isRejecting()) {
-                      <mat-spinner
-                        diameter="20"
-                        class="inline-spinner"
-                      ></mat-spinner>
-                    }
-                    {{ isRejecting() ? 'Rejecting...' : 'Reject' }}
-                  </button>
-                </div>
-              }
-              <!-- READ-ONLY state for SENT or REJECTED -->
-              @if (draft.status === 'SENT' || draft.status === 'REJECTED') {
-                <div class="read-only-actions">
-                  <p class="status-info">
-                    @if (draft.status === 'SENT') {
-                      <strong>This draft has been sent.</strong>
-                    }
-                    @if (draft.status === 'REJECTED') {
-                      <strong>This draft was rejected.</strong>
-                    }
-                  </p>
-                  <button
-                    mat-stroked-button
-                    color="primary"
-                    (click)="goBack()"
-                    class="back-to-list-btn"
-                    >
-                    <mat-icon>arrow_back</mat-icon>
-                    Back to Drafts
-                  </button>
-                </div>
-              }
-            </div>
-          </mat-card-content>
-        </mat-card>
-      </div>
-    }
-  </div>
-</div>
+              {{ isRejecting() ? 'Rejecting…' : 'Reject' }}
+            </button>
+            @if (draft.status === 'PENDING') {
+              <button mat-flat-button color="primary" (click)="approveDraft()" [disabled]="isBusy()">
+                @if (isApproving()) {
+                  <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+                } @else {
+                  <mat-icon>check_circle</mat-icon>
+                }
+                {{ isApproving() ? 'Approving…' : 'Approve' }}
+              </button>
+            } @else {
+              <button mat-flat-button color="primary" (click)="sendDraft()" [disabled]="isBusy()">
+                @if (isSending()) {
+                  <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+                } @else {
+                  <mat-icon>send</mat-icon>
+                }
+                {{ isSending() ? 'Sending…' : 'Send' }}
+              </button>
+            }
+          </div>
+          <p class="hint muted">
+            @if (draft.status === 'PENDING') {
+              Approving saves this reply to your Gmail drafts. Nothing is sent until you press Send.
+            } @else {
+              Approved and saved in Gmail. Edits are synced to Gmail before sending.
+            }
+          </p>
+        } @else {
+          <p class="final-state muted">
+            <mat-icon>{{ draft.status === 'SENT' ? 'mark_email_read' : 'block' }}</mat-icon>
+            @if (draft.status === 'SENT') {
+              Sent{{ draft.sentAt ? ' ' + (draft.sentAt | date: 'MMM d, h:mm a') : '' }}.
+            } @else {
+              This draft was rejected and can no longer be sent.
+            }
+          </p>
+        }
+      </mat-card-content>
+    </mat-card>
+  }
+</main>
