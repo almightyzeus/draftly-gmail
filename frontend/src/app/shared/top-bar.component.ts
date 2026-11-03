@@ -70,6 +70,10 @@ import { ConfirmService } from './confirm.service';
             <span class="account-name">{{ user.name }}</span>
             <span class="account-email">{{ user.email }}</span>
           </div>
+          <a mat-menu-item routerLink="/preferences">
+            <mat-icon>tune</mat-icon>
+            <span>Preferences</span>
+          </a>
           <button mat-menu-item (click)="logout()">
             <mat-icon>logout</mat-icon>
             <span>Log out</span>

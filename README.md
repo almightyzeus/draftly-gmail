@@ -71,6 +71,7 @@ Frontend:
 - Dashboard with an **Inbox** tab (search, unread filter, pagination) and a **Drafts** tab (filter by status)
 - Email detail with AI draft generation
 - Draft detail with editing, approve, reject, and send (with confirmation dialogs)
+- Preferences page (account menu → **Preferences**): default tone, signature, and number of style examples
 
 ## Project Structure
 
@@ -269,6 +270,7 @@ Google then redirects the browser to the callback, which always redirects back t
 2. Open `http://localhost:4200`.
 3. Register or log in.
 4. Click **Connect Gmail** (top bar) and complete Google OAuth.
+   Optionally, open **Preferences** from the account menu to set your default tone, signature, and number of style examples.
 5. Back on the dashboard, browse the **Inbox**: search with Gmail syntax (e.g. `from:alice subject:"report"`), toggle **Unread only**, and use **Next**/**Previous**.
 6. Open an email.
 7. Choose a tone, optionally add context, and click **Generate draft**. Generating again with another tone or new context replaces the pending draft.
@@ -445,7 +447,9 @@ Update preferences body:
 }
 ```
 
-`signature` is at most 1000 characters; `learningEmailCount` is an integer from 1 to 20. `defaultTone` is used whenever a draft is generated without a tone.
+`signature` is at most 1000 characters; `learningEmailCount` is an integer from 1 to 20. `defaultTone` is used whenever a draft is generated without a tone. Fields left out keep their current value.
+
+Both endpoints return `{ "defaultTone", "signature", "learningEmailCount" }`. A user without stored preferences gets the defaults (`formal`, empty signature, 5 examples), which are created on first access.
 
 ### Logs
 
@@ -498,8 +502,8 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 23 | 374 passing | 96.24% | 85.67% | 98.52% | 96.24% |
-| Frontend | 5 | 100 passing | 94.84% | 82.62% | 94.83% | 95.4% |
+| Backend | 23 | 371 passing | 96.25% | 85.57% | 98.52% | 96.25% |
+| Frontend | 6 | 114 passing | 95.27% | 81.62% | 95.26% | 95.79% |
 
 Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
 
@@ -541,7 +545,7 @@ Some backend test output includes logged error stack traces from tests that exer
 - Refresh tokens are stateless JWTs: logout clears them in the browser, but a copied refresh token stays valid until it expires. Tokens are stored in `localStorage`.
 - Email HTML is sanitized and shown inline (not in a sandboxed iframe). Remote images are hidden until the user clicks **Show images**.
 - The OAuth `state` is signed and expiring but not tied to the browser that started the flow.
-- The Drafts tab shows the latest 50 drafts. Preferences and activity logs have APIs but no frontend screens yet.
+- The Drafts tab shows the latest 50 drafts. Activity logs have an API but no frontend screen yet.
 
 ## Future Improvements
 
@@ -549,5 +553,5 @@ Some backend test output includes logged error stack traces from tests that exer
 - CI/CD pipeline for automated testing and deployment
 - Retry with backoff for transient Gmail failures
 - Reply-all and `Reply-To` support
-- Preferences and activity log screens
+- Activity log screen
 - Server-side refresh-token revocation

@@ -21,4 +21,9 @@ export class PreferenceService {
   getPreferences(): Observable<UserPreferences> {
     return this.http.get<UserPreferences>(this.apiUrl);
   }
+
+  /** Save preferences; fields left out keep their current value. Returns the stored preferences. */
+  updatePreferences(changes: Partial<UserPreferences>): Observable<UserPreferences> {
+    return this.http.put<UserPreferences>(this.apiUrl, changes);
+  }
 }

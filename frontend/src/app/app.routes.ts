@@ -28,5 +28,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/draft-detail.component').then((m) => m.DraftDetailComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'preferences',
+    loadComponent: () => import('./pages/preferences.component').then((m) => m.PreferencesComponent),
+    canActivate: [authGuard],
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];

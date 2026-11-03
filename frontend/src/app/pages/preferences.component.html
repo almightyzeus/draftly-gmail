@@ -1,0 +1,97 @@
+<app-top-bar title="Preferences" [showBack]="true" (back)="goBack()" />
+
+<main class="page-content page-content--narrow">
+  @if (isLoading) {
+    <div class="state">
+      <mat-spinner diameter="40"></mat-spinner>
+      <p>Loading your preferences…</p>
+    </div>
+  } @else if (loadError) {
+    <mat-card appearance="outlined">
+      <div class="state state--error" role="alert">
+        <mat-icon>error_outline</mat-icon>
+        <p>{{ loadError }}</p>
+        <button mat-stroked-button (click)="load()">Try again</button>
+      </div>
+    </mat-card>
+  } @else {
+    <mat-card appearance="outlined">
+      <mat-card-header>
+        <mat-card-title>Drafting preferences</mat-card-title>
+        <mat-card-subtitle>Used every time Draftly writes a reply for you.</mat-card-subtitle>
+      </mat-card-header>
+
+      <mat-card-content>
+        <form class="prefs" [formGroup]="form" (ngSubmit)="save()">
+          <section class="pref">
+            <span class="pref-label" id="tone-label">Default tone</span>
+            <mat-button-toggle-group
+              formControlName="defaultTone"
+              aria-labelledby="tone-label"
+              hideSingleSelectionIndicator
+            >
+              @for (tone of toneOptions; track tone) {
+                <mat-button-toggle [value]="tone">{{ tone | titlecase }}</mat-button-toggle>
+              }
+            </mat-button-toggle-group>
+            <p class="muted pref-help">Preselected when you generate a draft. You can still pick another tone each time.</p>
+          </section>
+
+          <mat-form-field appearance="outline" class="full-width">
+            <mat-label>Signature</mat-label>
+            <textarea
+              matInput
+              rows="4"
+              formControlName="signature"
+              [attr.maxlength]="maxSignatureLength"
+              placeholder="Best regards,&#10;Your Name"
+            ></textarea>
+            <mat-hint>Every draft ends with this. Leave empty for no signature.</mat-hint>
+            <mat-hint align="end">{{ signatureLength }} / {{ maxSignatureLength }}</mat-hint>
+            @if (form.get('signature')?.hasError('maxlength')) {
+              <mat-error>At most {{ maxSignatureLength }} characters.</mat-error>
+            }
+          </mat-form-field>
+
+          <mat-form-field appearance="outline" class="count-field">
+            <mat-label>Style examples</mat-label>
+            <input
+              matInput
+              type="number"
+              inputmode="numeric"
+              formControlName="learningEmailCount"
+              [min]="minStyleExamples"
+              [max]="maxStyleExamples"
+              step="1"
+            />
+            <mat-hint>Recent emails you sent, shown to the AI so drafts sound like you ({{ minStyleExamples }}–{{ maxStyleExamples }}).</mat-hint>
+            @if (form.get('learningEmailCount')?.invalid) {
+              <mat-error>Enter a whole number from {{ minStyleExamples }} to {{ maxStyleExamples }}.</mat-error>
+            }
+          </mat-form-field>
+
+          @if (saveError) {
+            <p class="inline-error" role="alert">
+              <mat-icon>error_outline</mat-icon>
+              {{ saveError }}
+            </p>
+          }
+
+          <div class="actions">
+            @if (form.dirty) {
+              <span class="muted">Unsaved changes</span>
+            }
+            <button mat-flat-button color="primary" type="submit" [disabled]="isSaving || form.pristine || form.invalid">
+              @if (isSaving) {
+                <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
+              } @else {
+                <mat-icon>save</mat-icon>
+              }
+              {{ isSaving ? 'Saving…' : 'Save preferences' }}
+            </button>
+          </div>
+        </form>
+      </mat-card-content>
+    </mat-card>
+  }
+</main>

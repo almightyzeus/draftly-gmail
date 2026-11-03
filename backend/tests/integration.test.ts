@@ -277,4 +277,37 @@ describe('Integration workflows', () => {
     expect(update.body.defaultTone).toBe('friendly');
     expect(update.body.signature).toBe('Regards');
   });
+
+  it('creates default preferences for a user who has none, on read and on a partial update', async () => {
+    const { user, token } = await registerUser();
+    await UserPreference.deleteMany({});
+
+    const get = await request(app).get('/api/preferences').set('Authorization', `Bearer ${token}`);
+    expect(get.status).toBe(200);
+    expect(get.body).toEqual({ defaultTone: 'formal', signature: '', learningEmailCount: 5 });
+    expect(await UserPreference.countDocuments({ userId: user.id })).toBe(1);
+
+    await UserPreference.deleteMany({});
+    const update = await request(app)
+      .put('/api/preferences')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ signature: 'Cheers,\nTest' });
+    expect(update.status).toBe(200);
+    expect(update.body).toEqual({ defaultTone: 'formal', signature: 'Cheers,\nTest', learningEmailCount: 5 });
+    expect(await UserPreference.countDocuments({ userId: user.id })).toBe(1);
+  });
+
+  it('generates with the saved default tone when no tone is sent', async () => {
+    const { user, token } = await registerUser();
+    await seedEmail(user.id);
+    await request(app).put('/api/preferences').set('Authorization', `Bearer ${token}`).send({ defaultTone: 'concise' });
+
+    const generate = await request(app)
+      .post('/api/drafts/generate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ gmailMessageId: 'msg-1' });
+
+    expect(generate.status).toBe(201);
+    expect(generate.body.tone).toBe('concise');
+  });
 });

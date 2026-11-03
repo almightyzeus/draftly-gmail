@@ -13,18 +13,19 @@ No dependency upgrades and no commits unless explicitly approved.
 ## 0. Current status (verified 2026-11-03)
 
 All six hardening stages (section 3) are complete. From the 2026-11-03 reconciliation, the P1
-items (section 5.1) and quick-win Batch 1 (section 5.2) are fixed.
+items (section 5.1), quick-win Batch 1 (section 5.2), verification (5.3) and F1, the Preferences
+page (5.4), are done.
 
 | Check | Result |
 |---|---|
 | Backend typecheck | `npx tsc --noEmit` clean |
-| Backend tests | 23 files, **374 passing** (`npm run test:ci`) |
-| Backend coverage | 96.24% statements, 85.67% branches, 98.52% functions, 96.24% lines |
+| Backend tests | 23 files, **371 passing** (`npm run test:ci`) |
+| Backend coverage | 96.25% statements, 85.57% branches, 98.52% functions, 96.25% lines |
 | Frontend dependencies | Clean `npm ci` from the lockfile: Angular 21.2.22, Material 21.2.14 (the local install had been a stale Angular 17) |
-| Frontend tests | 5 files, **100 passing** |
-| Frontend coverage | 94.84% statements, 82.62% branches, 94.83% functions, 95.4% lines |
+| Frontend tests | 6 files, **114 passing** |
+| Frontend coverage | 95.27% statements, 81.62% branches, 95.26% functions, 95.79% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
-| Production build | `ng build` passes; initial bundle 527.00 kB (only the 500 kB warning budget exceeded) |
+| Production build | `ng build` passes; initial bundle 527.12 kB (only the 500 kB warning budget exceeded); Preferences page is a 7.39 kB lazy chunk |
 | Docker | `docker compose up --build` run by the user on 2026-11-03 (images build on `node:20-alpine`); browser smoke test confirmed by the user |
 
 Verified on Node 24.15 (supported by Angular 21); no Node version manager is installed on this
@@ -166,11 +167,11 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | V2 | ~~`docker compose up --build`, building on Node 20.~~ | **Done** 2026-11-03 (run by the user). Both images build on `node:20-alpine`; the test suites themselves have only run on Node 24.15 (no Node version manager on the dev machine). |
 | V3 | ~~Browser smoke test: connect Gmail, cancel on Google's screen, generate, approve and send one real reply.~~ | **Done** 2026-11-03 (confirmed by the user). |
 
-### 5.4 Features — not started
+### 5.4 Features
 
 | # | Item | Evidence | Size |
 |---|---|---|---|
-| F1 | **Preferences page** (default tone, signature, style-example count). The signature can only be set via the API today, which limits draft quality. | `preferenceRoutes.ts`; frontend `PreferenceService` has only `getPreferences` | M |
+| F1 | ~~**Preferences page** (default tone, signature, style-example count).~~ | **Done** 2026-11-03: lazy, guarded `/preferences` page (account menu → Preferences) with validation matching the API, save, and a discard-changes confirmation. `GET`/`PUT /api/preferences` create the defaults atomically (upsert) for a user without stored preferences instead of returning 404. | M |
 | F2 | **CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5. | no `.github/` | M |
 | F3 | **Concurrent generation race**: two generations for the same thread can both create PENDING drafts. A partial unique index needs the supersede flow reordered (retire the old draft before saving the new one, restoring it if the save fails). | `DraftService.generateDraft` | M |
 | F4 | **Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`). | `GmailService.fetchThreadEmails`, `OpenAIService.generateDraft` | M |
