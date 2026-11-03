@@ -484,6 +484,8 @@ npm run test:coverage
 npm run test:ci        # coverage run for CI (test files run one at a time)
 ```
 
+CI: `.github/workflows/ci.yml` runs on every push to `master` and every pull request. The backend job runs `npm ci`, `npx tsc --noEmit` and `npm run test:ci`; the frontend job runs `npm ci`, `npx tsc -p tsconfig.app.json --noEmit`, `npm run test:coverage` and `npm run build`. Both use the Node version in `.nvmrc`, fail if the coverage thresholds are not met, and upload their coverage reports. The backend job sets placeholder values for the required environment variables (no secrets are needed: the tests use an in-memory MongoDB and mocks).
+
 Frontend:
 
 ```bash

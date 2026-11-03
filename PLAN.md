@@ -13,8 +13,8 @@ No dependency upgrades and no commits unless explicitly approved.
 ## 0. Current status (verified 2026-11-03)
 
 All six hardening stages (section 3) are complete. From the 2026-11-03 reconciliation, the P1
-items (section 5.1), quick-win Batch 1 (section 5.2), verification (5.3) and F1, the Preferences
-page (5.4), are done.
+items (section 5.1), quick-win Batch 1 (section 5.2), verification (5.3), F1 (the Preferences
+page) and F2 (CI pipeline) (5.4) are done.
 
 | Check | Result |
 |---|---|
@@ -26,6 +26,7 @@ page (5.4), are done.
 | Frontend coverage | 95.27% statements, 81.62% branches, 95.26% functions, 95.79% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
 | Production build | `ng build` passes; initial bundle 527.12 kB (only the 500 kB warning budget exceeded); Preferences page is a 7.39 kB lazy chunk |
+| CI | `.github/workflows/ci.yml` (GitHub Actions, Node from `.nvmrc`): every step passed in a clean checkout (fresh `npm ci`, no `.env`, placeholder env values) |
 | Docker | `docker compose up --build` run by the user on 2026-11-03 (images build on `node:20-alpine`); browser smoke test confirmed by the user |
 
 Verified on Node 24.15 (supported by Angular 21); no Node version manager is installed on this
@@ -172,7 +173,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | # | Item | Evidence | Size |
 |---|---|---|---|
 | F1 | ~~**Preferences page** (default tone, signature, style-example count).~~ | **Done** 2026-11-03: lazy, guarded `/preferences` page (account menu → Preferences) with validation matching the API, save, and a discard-changes confirmation. `GET`/`PUT /api/preferences` create the defaults atomically (upsert) for a user without stored preferences instead of returning 404. | M |
-| F2 | **CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5. | no `.github/` | M |
+| F2 | ~~**CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5.~~ | **Done** 2026-11-03: `.github/workflows/ci.yml` runs on pushes to `master`, pull requests and manual dispatch. Two parallel jobs on Node from `.nvmrc`: backend (`npm ci`, `tsc --noEmit`, `test:ci` with coverage thresholds, placeholder env values, cached MongoDB binary) and frontend (`npm ci`, app typecheck, `test:coverage`, `npm run build`). Coverage reports are uploaded as artifacts. Simulated locally in a clean worktree (Node 24.15); the first run on GitHub happens on the next push. | M |
 | F3 | **Concurrent generation race**: two generations for the same thread can both create PENDING drafts. A partial unique index needs the supersede flow reordered (retire the old draft before saving the new one, restoring it if the save fails). | `DraftService.generateDraft` | M |
 | F4 | **Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`). | `GmailService.fetchThreadEmails`, `OpenAIService.generateDraft` | M |
 | F5 | Activity-log screen. Low demo value. | `logRoutes.ts` | M |
