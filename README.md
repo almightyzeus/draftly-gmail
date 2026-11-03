@@ -540,7 +540,7 @@ cd frontend && npm run typecheck:tests && npm run test:coverage && npm run build
 docker compose up --build
 ```
 
-`npm run build` reports one warning: the initial bundle (≈527 kB) is above Angular's 500 kB warning budget; the hard limit is 1 MB.
+`npm run build` passes without warnings: the initial bundle is ≈464 kB (≈107 kB transferred), under Angular's 500 kB warning budget (hard limit 1 MB). Pages are lazy-loaded, and `@angular/animations` is not loaded (Angular Material 21 animates with CSS).
 
 Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tests exercise on purpose print nothing. Run `LOG_LEVEL=debug npm test` to see them.
 

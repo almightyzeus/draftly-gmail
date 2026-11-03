@@ -26,7 +26,7 @@ page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread contex
 | Frontend tests | 7 files, **135 passing** |
 | Frontend coverage | 95.60% statements, 82.45% branches, 95.83% functions, 96.18% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
-| Production build | `ng build` passes; initial bundle 527.41 kB (only the 500 kB warning budget exceeded); Preferences (7.39 kB) and Activity (74 kB, 10.4 kB gzipped) are lazy chunks |
+| Production build | `ng build` passes with no warnings; initial bundle 463.86 kB (107.25 kB transferred), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74 kB, 10.4 kB gzipped) are lazy chunks |
 | CI | `.github/workflows/ci.yml` (GitHub Actions, Node from `.nvmrc`): every step passed in a clean checkout (fresh `npm ci`, no `.env`, placeholder env values) |
 | Docker | Images rebuilt on `node:24-alpine` (D4): backend runs Node 24.22.2 and loads its compiled app; the frontend image's nginx config is valid (its `backend` upstream resolves inside compose). Earlier `node:20` stack and browser smoke test confirmed by the user |
 
@@ -187,7 +187,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 |---|---|---|
 | D1 | ~~Remove unused `cookie-parser` and `@types/cookie-parser` (backend).~~ | **Done** 2026-11-03 (approved): uninstalled; the lockfile also drops their dependency `cookie-signature@1.0.6` (Express keeps its own 1.2.2) and three optional-peer entries npm 11 no longer records (`zod`, two nested `gcp-metadata`; none are imported). Clean `npm ci`, typecheck, build and all 447 tests pass. |
 | D2 | `npm audit` (frontend): 35 vulnerabilities (22 moderate, 10 high, 3 critical). | Fix requires upgrades. |
-| D3 | Initial bundle 527 kB, above the 500 kB warning budget. | Investigate (e.g. `provideAnimations()`, Material imports) before changing budgets. |
+| D3 | ~~Initial bundle 527 kB, above the 500 kB warning budget.~~ | **Done** 2026-11-03 (approved): measured with `ng build --stats-json`. Material was already only in lazy chunks; the removable cost was `@angular/animations` (61 kB), pulled in solely by `provideAnimations()`. Angular Material 21 (and the CDK) no longer use it, and the app has no animation triggers, so the provider is removed: initial 527.41 → 463.86 kB (transfer 123.95 → 107.25 kB), no budget warning, budgets unchanged. What remains is Angular core/router/common, zone.js, rxjs and the prebuilt Material theme CSS (106 kB raw, 8 kB transferred). The `@angular/animations` package is still listed in `package.json` (unused). |
 | D4 | ~~**Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30.~~ | **Done** 2026-11-03 (approved): `.nvmrc` `20.19.5` → `24` (CI's `setup-node` and `nvm use` read it), both Dockerfiles `node:20-alpine` → `node:24-alpine`; docs updated. No dependency changes: every engine range already allows Node 24. Tests and builds pass on 24.15.0; `docker compose build` succeeds (Node 24.22.2 in the image). The first GitHub CI run on Node 24 happens on the next push. |
 
 ### 5.6 Cleanup
