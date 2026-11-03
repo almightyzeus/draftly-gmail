@@ -390,10 +390,12 @@ Generate draft body (send `threadId` for a consolidated reply, or `gmailMessageI
 
 The reply always targets a message from someone else: the unread incoming messages in the thread, or otherwise the latest incoming message — never your own messages. Generation is limited to 10 requests per minute per user.
 
-A thread has at most one `PENDING` draft:
+A thread has at most one `PENDING` draft, enforced by a partial unique index (`one_pending_draft_per_thread`), so this also holds when generations run at the same time:
 
 - The same request again (same tone, no `customContext`, e.g. a double click) returns the existing pending draft without calling OpenAI.
-- A different tone, or any `customContext`, generates a new draft. Once it is saved, the previous pending draft is marked `REJECTED` (audit action `SUPERSEDED`; it stays in the drafts list). If generation fails, the previous draft is kept.
+- A different tone, or any `customContext`, generates a new draft. The previous pending draft is then marked `REJECTED` (audit action `SUPERSEDED`; it stays in the drafts list) and the new one is saved. If generation or the save fails, the previous draft is kept (restored to `PENDING`).
+- If another generation for the thread saves its draft first, the slower request returns that draft when it matches (same tone, no `customContext`), and otherwise replaces it. After three such collisions it returns 409.
+- At startup, the backend retires duplicate pending drafts left from before the index existed (keeping the newest per thread), then builds the index.
 
 Update draft body (max 50,000 chars):
 
@@ -504,7 +506,7 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 23 | 371 passing | 96.25% | 85.57% | 98.52% | 96.25% |
+| Backend | 23 | 379 passing | 96.20% | 85.83% | 98.58% | 96.20% |
 | Frontend | 6 | 114 passing | 95.27% | 81.62% | 95.26% | 95.79% |
 
 Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
@@ -552,7 +554,7 @@ Some backend test output includes logged error stack traces from tests that exer
 ## Future Improvements
 
 - Cloud deployment (AWS/GCP/Azure) with production-grade secrets management
-- CI/CD pipeline for automated testing and deployment
+- Automated deployment (CI already runs tests and the build)
 - Retry with backoff for transient Gmail failures
 - Reply-all and `Reply-To` support
 - Activity log screen

@@ -137,5 +137,16 @@ const draftSchema = new Schema<IDraft>(
 
 // Compound indexes
 draftSchema.index({ userId: 1, status: 1, createdAt: -1 });
+// A thread has at most one PENDING draft, even when generations run concurrently.
+// Existing duplicates are retired at startup before this index is built
+// (DraftService.enforceSinglePendingDraftPerThread).
+draftSchema.index(
+  { userId: 1, threadId: 1 },
+  {
+    name: 'one_pending_draft_per_thread',
+    unique: true,
+    partialFilterExpression: { status: 'PENDING' },
+  }
+);
 
 export const Draft = model<IDraft>('Draft', draftSchema);

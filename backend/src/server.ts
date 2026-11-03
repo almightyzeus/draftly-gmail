@@ -2,6 +2,7 @@ import mongoose from 'mongoose';
 import { app } from './app.js';
 import { env } from './config/env.js';
 import { logger } from './utils/logger.js';
+import { DraftService } from './services/draftService.js';
 
 async function startServer() {
   try {
@@ -9,6 +10,10 @@ async function startServer() {
     logger.info(`Connecting to MongoDB: ${env.mongodbUri.replace(/:[^/]*@/, ':***@')}`);
     await mongoose.connect(env.mongodbUri);
     logger.info('MongoDB connected');
+
+    // Retire duplicate PENDING drafts left from before the
+    // one-pending-draft-per-thread index existed, then build the index.
+    await DraftService.enforceSinglePendingDraftPerThread();
 
     // Start Express server
     const server = app.listen(env.port, () => {

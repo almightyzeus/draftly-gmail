@@ -140,9 +140,10 @@ export class DraftService {
         throw new ValidationError('Either gmailMessageId or threadId must be provided');
       }
 
-      // A thread has at most one PENDING draft. Repeating the same request
-      // (e.g. a double click) returns it. A different tone or new instructions
-      // mean the user wants a new draft: it replaces the pending one below.
+      // A thread has at most one PENDING draft (a partial unique index enforces
+      // it). Repeating the same request (e.g. a double click) returns it without
+      // calling the AI. A different tone or new instructions mean the user wants
+      // a new draft: it replaces the pending one in savePendingDraft.
       const existingDraft = await Draft.findOne({
         userId: userObjectId,
         threadId: targetThreadId,
@@ -169,8 +170,7 @@ export class DraftService {
         customContext
       );
 
-      // Create draft record
-      const draft = new Draft({
+      const { draft, created } = await this.savePendingDraft(userId, userObjectId, tone, customContext, {
         userId: userObjectId,
         gmailMessageId: isConsolidated ? gmailMessageIds : gmailMessageIds[0],
         replyToGmailMessageId,
@@ -190,18 +190,16 @@ export class DraftService {
         ],
       });
 
-      await draft.save();
+      if (!created) {
+        // A matching draft was generated concurrently and is returned instead.
+        return draft;
+      }
+
       await this.logActivity(userId, 'DRAFT_GENERATED', draft._id.toString(), {
         tone,
         isConsolidated,
         emailCount: gmailMessageIds.length,
       });
-
-      // Retire the pending draft this one replaces, only now that the new one
-      // is saved, so a failed generation never loses the previous draft.
-      if (existingDraft) {
-        await this.supersedeDraft(userId, userObjectId, existingDraft._id, draft._id);
-      }
 
       logger.info(
         {
@@ -231,19 +229,99 @@ export class DraftService {
     return preferences?.defaultTone || 'formal';
   }
 
+  /** Attempts before giving up when concurrent generations keep colliding. */
+  static readonly MAX_PENDING_SAVE_ATTEMPTS = 3;
+
+  private static isDuplicateKeyError(error: unknown): boolean {
+    return (error as { code?: number } | null)?.code === 11000;
+  }
+
   /**
-   * Mark a PENDING draft as REJECTED because a newer draft replaced it. It
-   * stays visible in the drafts list. A draft that left PENDING meanwhile
-   * (e.g. it was approved) is left alone.
+   * Save a new draft as the thread's only PENDING draft. The partial unique
+   * index `one_pending_draft_per_thread` makes this safe when generations run
+   * concurrently:
+   * 1. the thread's current PENDING draft, if any, is retired (SUPERSEDED);
+   * 2. the new draft is inserted;
+   * 3. if the insert fails, the retired draft is restored, so a failed
+   *    generation never loses the previous draft;
+   * 4. if another generation inserted a PENDING draft in between (duplicate
+   *    key), that draft is returned when it matches this request (same tone,
+   *    no new instructions); otherwise it is replaced in the next attempt.
+   * `created` is false when a matching concurrent draft is returned instead.
    */
-  private static async supersedeDraft(
+  private static async savePendingDraft(
     userId: string,
+    userObjectId: Types.ObjectId,
+    tone: string,
+    customContext: string | undefined,
+    data: Record<string, any>
+  ): Promise<{ draft: any; created: boolean }> {
+    const pendingFilter = { userId: userObjectId, threadId: data.threadId, status: 'PENDING' };
+    const newDraftId = new Types.ObjectId();
+    let current = await Draft.findOne(pendingFilter);
+    // A draft retired in an earlier attempt that still points at newDraftId.
+    let carriedRetiredId: Types.ObjectId | null = null;
+
+    for (let attempt = 1; attempt <= this.MAX_PENDING_SAVE_ATTEMPTS; attempt++) {
+      if (current && current.tone === tone && !customContext) {
+        return { draft: current, created: false };
+      }
+
+      const retiredId: Types.ObjectId | null = current
+        ? await this.retirePendingDraft(userObjectId, current._id, newDraftId)
+        : carriedRetiredId;
+      carriedRetiredId = null;
+
+      const draft = new Draft({ ...data, _id: newDraftId });
+      try {
+        await draft.save();
+      } catch (error) {
+        if (!this.isDuplicateKeyError(error)) {
+          if (retiredId) {
+            await this.restoreRetiredDraft(userObjectId, retiredId, newDraftId);
+          }
+          throw error;
+        }
+
+        // Another generation saved a PENDING draft after the retire above.
+        current = await Draft.findOne(pendingFilter);
+        if (retiredId && current) {
+          // The retired draft was replaced by that draft, not by this one.
+          await this.repointSupersededDraft(userId, retiredId, newDraftId, current._id);
+        } else if (retiredId) {
+          // That draft already left PENDING; this draft still replaces it.
+          carriedRetiredId = retiredId;
+        }
+        logger.info(
+          { userId, threadId: data.threadId, attempt },
+          'Concurrent generation saved a pending draft first'
+        );
+        continue;
+      }
+
+      if (retiredId) {
+        await this.logActivity(userId, 'DRAFT_SUPERSEDED', retiredId.toString(), {
+          supersededBy: newDraftId.toString(),
+        });
+      }
+      return { draft, created: true };
+    }
+
+    throw new ConflictError('Another draft is being generated for this thread. Please try again.');
+  }
+
+  /**
+   * Mark a PENDING draft as REJECTED because a newer draft replaces it. It
+   * stays visible in the drafts list. Returns null when the draft left PENDING
+   * meanwhile (e.g. it was approved); it is then left alone.
+   */
+  private static async retirePendingDraft(
     userObjectId: Types.ObjectId,
     oldDraftId: Types.ObjectId,
     newDraftId: Types.ObjectId
-  ): Promise<void> {
+  ): Promise<Types.ObjectId | null> {
     const rejectedAt = new Date();
-    const superseded = await Draft.findOneAndUpdate(
+    const retired = await Draft.findOneAndUpdate(
       { _id: oldDraftId, userId: userObjectId, status: 'PENDING' },
       {
         $set: { status: 'REJECTED', rejectedAt },
@@ -258,12 +336,93 @@ export class DraftService {
       },
       { returnDocument: 'after' }
     );
+    return retired ? oldDraftId : null;
+  }
 
-    if (superseded) {
-      await this.logActivity(userId, 'DRAFT_SUPERSEDED', oldDraftId.toString(), {
-        supersededBy: newDraftId.toString(),
-      });
+  /** Undo retirePendingDraft after the replacement could not be saved. */
+  private static async restoreRetiredDraft(
+    userObjectId: Types.ObjectId,
+    oldDraftId: Types.ObjectId,
+    newDraftId: Types.ObjectId
+  ): Promise<void> {
+    try {
+      await Draft.updateOne(
+        {
+          _id: oldDraftId,
+          userId: userObjectId,
+          status: 'REJECTED',
+          'auditTrail.meta.supersededBy': newDraftId.toString(),
+        },
+        {
+          $set: { status: 'PENDING', rejectedAt: null },
+          $pull: { auditTrail: { action: 'SUPERSEDED', 'meta.supersededBy': newDraftId.toString() } },
+        }
+      );
+    } catch (error) {
+      // E.g. another generation saved a PENDING draft for the thread meanwhile.
+      logger.warn(
+        { error: error instanceof Error ? error.message : String(error), draftId: oldDraftId.toString() },
+        'Could not restore the previous pending draft'
+      );
     }
+  }
+
+  /** Record which draft actually replaced a retired draft after losing a race. */
+  private static async repointSupersededDraft(
+    userId: string,
+    oldDraftId: Types.ObjectId,
+    newDraftId: Types.ObjectId,
+    winnerDraftId: Types.ObjectId
+  ): Promise<void> {
+    await Draft.updateOne(
+      { _id: oldDraftId, 'auditTrail.meta.supersededBy': newDraftId.toString() },
+      { $set: { 'auditTrail.$.meta.supersededBy': winnerDraftId.toString() } }
+    );
+    await this.logActivity(userId, 'DRAFT_SUPERSEDED', oldDraftId.toString(), {
+      supersededBy: winnerDraftId.toString(),
+    });
+  }
+
+  /**
+   * Startup migration for the `one_pending_draft_per_thread` index: before it
+   * existed, a thread could end up with several PENDING drafts. Keep the
+   * newest one per thread, retire the rest (SUPERSEDED), then build the index.
+   * Returns how many drafts were retired.
+   */
+  static async enforceSinglePendingDraftPerThread(): Promise<number> {
+    const duplicates = await Draft.aggregate<{ ids: Types.ObjectId[] }>([
+      { $match: { status: 'PENDING' } },
+      { $sort: { createdAt: -1, _id: -1 } },
+      { $group: { _id: { userId: '$userId', threadId: '$threadId' }, ids: { $push: '$_id' } } },
+      { $match: { 'ids.1': { $exists: true } } },
+    ]);
+
+    let retired = 0;
+    for (const { ids } of duplicates) {
+      const [keep, ...older] = ids;
+      const rejectedAt = new Date();
+      const result = await Draft.updateMany(
+        { _id: { $in: older }, status: 'PENDING' },
+        {
+          $set: { status: 'REJECTED', rejectedAt },
+          $push: {
+            auditTrail: {
+              at: rejectedAt,
+              action: 'SUPERSEDED',
+              by: 'system',
+              meta: { supersededBy: keep.toString(), reason: 'duplicate_pending' },
+            },
+          },
+        }
+      );
+      retired += result.modifiedCount;
+    }
+
+    await Draft.createIndexes();
+    if (retired > 0) {
+      logger.warn({ retired }, 'Retired duplicate pending drafts before building the one-pending-draft index');
+    }
+    return retired;
   }
 
   /**

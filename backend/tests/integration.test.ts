@@ -10,6 +10,7 @@ import { Draft } from '../src/models/Draft.js';
 import { EmailMessage } from '../src/models/EmailMessage.js';
 import { UserPreference } from '../src/models/UserPreference.js';
 import { ActivityLog } from '../src/models/ActivityLog.js';
+import { DraftService } from '../src/services/draftService.js';
 
 vi.mock('../src/services/openaiService.js', () => ({
   OpenAIService: {
@@ -51,6 +52,8 @@ describe('Integration workflows', () => {
   beforeAll(async () => {
     mongoServer = await startMongoMemoryServer();
     await mongoose.connect(mongoServer.getUri());
+    // Build the one-pending-draft-per-thread index before any test relies on it.
+    await Draft.createIndexes();
   });
 
   afterAll(async () => {
@@ -309,5 +312,91 @@ describe('Integration workflows', () => {
 
     expect(generate.status).toBe(201);
     expect(generate.body.tone).toBe('concise');
+  });
+
+  describe('one PENDING draft per thread (concurrent generations)', () => {
+    const generate = (token: string, tone: string) =>
+      request(app).post('/api/drafts/generate').set('Authorization', `Bearer ${token}`).send({ gmailMessageId: 'msg-1', tone });
+
+    it('keeps exactly one PENDING draft when generations with different tones run at once', async () => {
+      const { user, token } = await registerUser();
+      await seedEmail(user.id);
+
+      const responses = await Promise.all(['formal', 'concise', 'friendly'].map((tone) => generate(token, tone)));
+
+      expect(responses.map((r) => r.status)).toEqual([201, 201, 201]);
+      const drafts = await Draft.find({ userId: user.id, threadId: 'thread-1' }).lean();
+      expect(drafts).toHaveLength(3);
+      const pending = drafts.filter((d) => d.status === 'PENDING');
+      expect(pending).toHaveLength(1);
+      for (const retired of drafts.filter((d) => d.status === 'REJECTED')) {
+        const superseded = retired.auditTrail.find((entry) => entry.action === 'SUPERSEDED');
+        expect(drafts.map((d) => d._id.toString())).toContain(superseded?.meta?.supersededBy);
+      }
+    });
+
+    it('returns the same draft for a double click', async () => {
+      const { user, token } = await registerUser();
+      await seedEmail(user.id);
+
+      const [first, second] = await Promise.all([generate(token, 'formal'), generate(token, 'formal')]);
+
+      expect([first.status, second.status]).toEqual([201, 201]);
+      expect(second.body._id).toBe(first.body._id);
+      expect(await Draft.countDocuments({ userId: user.id, threadId: 'thread-1' })).toBe(1);
+    });
+
+    it('rejects a second PENDING draft for the thread at the database level, but not other statuses', async () => {
+      const { user } = await registerUser();
+      const base = {
+        userId: new Types.ObjectId(user.id),
+        gmailMessageId: 'msg-1',
+        threadId: 'thread-1',
+        tone: 'formal',
+        promptVersion: '1.0',
+        draftBody: 'Body',
+      };
+
+      await Draft.create({ ...base, status: 'PENDING' });
+      await expect(Draft.create({ ...base, status: 'PENDING' })).rejects.toMatchObject({ code: 11000 });
+      await expect(Draft.create({ ...base, status: 'APPROVED' })).resolves.toBeTruthy();
+      await expect(Draft.create({ ...base, threadId: 'thread-2', status: 'PENDING' })).resolves.toBeTruthy();
+    });
+
+    it('retires duplicate PENDING drafts left from before the index, keeping the newest, then builds it', async () => {
+      const { user } = await registerUser();
+      await Draft.collection.dropIndex('one_pending_draft_per_thread');
+      const doc = (threadId: string, minutesAgo: number) => ({
+        _id: new Types.ObjectId(),
+        userId: new Types.ObjectId(user.id),
+        gmailMessageId: 'msg-1',
+        threadId,
+        tone: 'formal',
+        promptVersion: '1.0',
+        draftBody: 'Body',
+        status: 'PENDING',
+        auditTrail: [],
+        createdAt: new Date(Date.now() - minutesAgo * 60_000),
+      });
+      const [oldest, newest, middle, other] = [doc('thread-1', 30), doc('thread-1', 1), doc('thread-1', 10), doc('thread-2', 5)];
+      await Draft.collection.insertMany([oldest, newest, middle, other]);
+
+      await expect(DraftService.enforceSinglePendingDraftPerThread()).resolves.toBe(2);
+
+      const byId = async (d: { _id: Types.ObjectId }) => Draft.findById(d._id).lean();
+      expect((await byId(newest))?.status).toBe('PENDING');
+      expect((await byId(other))?.status).toBe('PENDING');
+      for (const retired of [oldest, middle]) {
+        const stored = await byId(retired);
+        expect(stored?.status).toBe('REJECTED');
+        expect(stored?.auditTrail.at(-1)).toMatchObject({
+          action: 'SUPERSEDED',
+          meta: { supersededBy: newest._id.toString(), reason: 'duplicate_pending' },
+        });
+      }
+      const indexes = await Draft.collection.indexes();
+      expect(indexes.map((index) => index.name)).toContain('one_pending_draft_per_thread');
+      await expect(DraftService.enforceSinglePendingDraftPerThread()).resolves.toBe(0);
+    });
   });
 });

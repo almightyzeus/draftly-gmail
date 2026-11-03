@@ -203,11 +203,14 @@ describe('DraftService', () => {
       const existing = buildDraft({ _id: oldDraftId, tone });
       (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
       (Draft.findOne as unknown as Mock).mockResolvedValue(existing);
-      (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, _id: new Types.ObjectId(draftId) }));
+      (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
       (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue({ ...existing, status: 'REJECTED' });
       return existing;
     };
-    const expectSuperseded = () => {
+    /** The id the service chose for the new draft (it is set before saving). */
+    const newDraftId = (call = 0) => (Draft as unknown as Mock).mock.calls[call][0]._id.toString();
+    const duplicateKey = () => Object.assign(new Error('E11000 duplicate key error'), { code: 11000 });
+    const expectSuperseded = (supersededBy = newDraftId()) => {
       expect(Draft.findOneAndUpdate).toHaveBeenCalledWith(
         { _id: oldDraftId, userId: new Types.ObjectId(userId), status: 'PENDING' },
         {
@@ -217,14 +220,14 @@ describe('DraftService', () => {
               at: expect.any(Date),
               action: 'SUPERSEDED',
               by: 'system',
-              meta: { supersededBy: draftId },
+              meta: { supersededBy },
             },
           },
         },
         { returnDocument: 'after' }
       );
       expect(ActivityLogService.logActivity).toHaveBeenCalledWith(
-        userId, 'DRAFT_SUPERSEDED', 'Draft', 'info', oldDraftId.toString(), { supersededBy: draftId }
+        userId, 'DRAFT_SUPERSEDED', 'Draft', 'info', oldDraftId.toString(), { supersededBy }
       );
     };
 
@@ -263,6 +266,96 @@ describe('DraftService', () => {
 
       await expect(DraftService.generateDraft(userId, 'msg-1', 'concise')).rejects.toMatchObject({ statusCode: 502 });
       expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('is retired before the new draft is saved, and restored if that save fails', async () => {
+      arrangeExisting('formal');
+      const save = vi.fn().mockRejectedValue(new Error('write failed'));
+      (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, save }));
+
+      await expect(DraftService.generateDraft(userId, 'msg-1', 'concise')).rejects.toThrow('write failed');
+
+      const retireOrder = (Draft.findOneAndUpdate as unknown as Mock).mock.invocationCallOrder[0];
+      expect(retireOrder).toBeLessThan(save.mock.invocationCallOrder[0]);
+      expect(Draft.updateOne).toHaveBeenCalledWith(
+        {
+          _id: oldDraftId,
+          userId: new Types.ObjectId(userId),
+          status: 'REJECTED',
+          'auditTrail.meta.supersededBy': newDraftId(),
+        },
+        {
+          $set: { status: 'PENDING', rejectedAt: null },
+          $pull: { auditTrail: { action: 'SUPERSEDED', 'meta.supersededBy': newDraftId() } },
+        }
+      );
+      expect(ActivityLogService.logActivity).not.toHaveBeenCalledWith(
+        userId, 'DRAFT_SUPERSEDED', expect.anything(), expect.anything(), expect.anything(), expect.anything()
+      );
+    });
+
+    describe('when a concurrent generation saves a pending draft first (duplicate key)', () => {
+      const winnerId = new Types.ObjectId();
+
+      it('returns that draft when it matches the request, and records it as the replacement', async () => {
+        const existing = arrangeExisting('formal');
+        const winner = buildDraft({ _id: winnerId, tone: 'concise' });
+        (Draft.findOne as unknown as Mock).mockResolvedValueOnce(existing) // pre-check
+          .mockResolvedValueOnce(existing) // savePendingDraft
+          .mockResolvedValueOnce(winner); // after the duplicate key
+        (Draft as unknown as Mock).mockImplementation((data) =>
+          buildDraft({ ...data, save: vi.fn().mockRejectedValue(duplicateKey()) })
+        );
+
+        await expect(DraftService.generateDraft(userId, 'msg-1', 'concise')).resolves.toBe(winner);
+
+        expect(Draft.updateOne).toHaveBeenCalledWith(
+          { _id: oldDraftId, 'auditTrail.meta.supersededBy': newDraftId() },
+          { $set: { 'auditTrail.$.meta.supersededBy': winnerId.toString() } }
+        );
+        expect(ActivityLogService.logActivity).toHaveBeenCalledWith(
+          userId, 'DRAFT_SUPERSEDED', 'Draft', 'info', oldDraftId.toString(), { supersededBy: winnerId.toString() }
+        );
+        expect(ActivityLogService.logActivity).not.toHaveBeenCalledWith(
+          userId, 'DRAFT_GENERATED', expect.anything(), expect.anything(), expect.anything(), expect.anything()
+        );
+      });
+
+      it('replaces that draft when it does not match the request', async () => {
+        (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+        const winner = buildDraft({ _id: winnerId, tone: 'formal' });
+        (Draft.findOne as unknown as Mock).mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(winner);
+        const save = vi.fn().mockRejectedValueOnce(duplicateKey()).mockResolvedValueOnce(true);
+        (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, save }));
+        (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue({ ...winner, status: 'REJECTED' });
+
+        const result = await DraftService.generateDraft(userId, 'msg-1', 'friendly');
+
+        expect(result.tone).toBe('friendly');
+        expect(save).toHaveBeenCalledTimes(2);
+        expect(newDraftId(1)).toBe(newDraftId(0));
+        expect(Draft.findOneAndUpdate).toHaveBeenCalledWith(
+          { _id: winnerId, userId: new Types.ObjectId(userId), status: 'PENDING' },
+          expect.objectContaining({ $set: { status: 'REJECTED', rejectedAt: expect.any(Date) } }),
+          { returnDocument: 'after' }
+        );
+        expect(ActivityLogService.logActivity).toHaveBeenCalledWith(
+          userId, 'DRAFT_SUPERSEDED', 'Draft', 'info', winnerId.toString(), { supersededBy: newDraftId() }
+        );
+        expect(ActivityLogService.logActivity).toHaveBeenCalledWith(
+          userId, 'DRAFT_GENERATED', 'Draft', 'info', newDraftId(), expect.any(Object)
+        );
+      });
+
+      it('gives up with 409 when every attempt collides', async () => {
+        (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+        (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+        const save = vi.fn().mockRejectedValue(duplicateKey());
+        (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, save }));
+
+        await expect(DraftService.generateDraft(userId, 'msg-1', 'formal')).rejects.toMatchObject({ statusCode: 409 });
+        expect(save).toHaveBeenCalledTimes(DraftService.MAX_PENDING_SAVE_ATTEMPTS);
+      });
     });
 
     it('is not logged as superseded if it left PENDING meanwhile (e.g. approved)', async () => {
