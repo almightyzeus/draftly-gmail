@@ -291,7 +291,7 @@ export class DraftService {
     customContext: string | undefined,
     data: Record<string, any>
   ): Promise<{ draft: any; created: boolean }> {
-    const pendingFilter = { userId: userObjectId, threadId: data.threadId, status: 'PENDING' };
+    const pendingFilter = { userId: userObjectId, threadId: data.threadId, status: 'PENDING' as const };
     const newDraftId = new Types.ObjectId();
     let current = await Draft.findOne(pendingFilter);
     // A draft retired in an earlier attempt that still points at newDraftId.

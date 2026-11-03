@@ -4,7 +4,8 @@ WORKDIR /app
 
 COPY package*.json ./
 
-RUN npm install --legacy-peer-deps
+# Exact versions from the lockfile (as in CI and the backend image).
+RUN npm ci
 
 COPY . .
 

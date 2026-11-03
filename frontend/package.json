@@ -13,26 +13,24 @@
   },
   "private": true,
   "dependencies": {
-    "@angular/animations": "^21.2.22",
     "@angular/cdk": "^21.2.14",
-    "@angular/common": "^21.2.22",
-    "@angular/compiler": "^21.2.22",
-    "@angular/core": "^21.2.22",
-    "@angular/forms": "^21.2.22",
+    "@angular/common": "21.2.25",
+    "@angular/compiler": "21.2.25",
+    "@angular/core": "21.2.25",
+    "@angular/forms": "21.2.25",
     "@angular/material": "^21.2.14",
-    "@angular/platform-browser": "^21.2.22",
-    "@angular/platform-browser-dynamic": "^21.2.22",
-    "@angular/router": "^21.2.22",
+    "@angular/platform-browser": "21.2.25",
+    "@angular/router": "21.2.25",
     "rxjs": "~7.8.0",
     "tslib": "^2.3.0",
     "zone.js": "~0.15.1"
   },
   "devDependencies": {
-    "@angular/build": "^21.2.22",
-    "@angular/cli": "^21.2.22",
-    "@angular/compiler-cli": "^21.2.22",
-    "@vitest/coverage-v8": "^4.1.11",
+    "@angular/build": "21.2.29",
+    "@angular/cli": "21.2.29",
+    "@angular/compiler-cli": "21.2.25",
+    "@vitest/coverage-v8": "^4.1.12",
     "typescript": "~5.9.3",
-    "vitest": "^4.1.11"
+    "vitest": "^4.1.12"
   }
 }
