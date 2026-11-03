@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
-import { Injector } from '@angular/core';
+import { Injector, runInInjectionContext } from '@angular/core';
 import { Router } from '@angular/router';
 import { authGuard } from '../src/app/services/auth.guard';
 import { AuthService } from '../src/app/services/auth.service';
@@ -33,7 +33,7 @@ describe('authGuard', () => {
   it('should allow navigation when user is authenticated', () => {
     (authService.isAuthenticated as any).mockReturnValue(true);
 
-    const result = injector.runInContext(() =>
+    const result = runInInjectionContext(injector, () =>
       authGuard({} as any, { url: '/dashboard' } as any)
     );
 
@@ -44,7 +44,7 @@ describe('authGuard', () => {
   it('should deny navigation and redirect to login when user is not authenticated', () => {
     (authService.isAuthenticated as any).mockReturnValue(false);
 
-    const result = injector.runInContext(() =>
+    const result = runInInjectionContext(injector, () =>
       authGuard({} as any, { url: '/dashboard' } as any)
     );
 
@@ -57,7 +57,7 @@ describe('authGuard', () => {
   it('should pass the original URL as returnUrl query parameter', () => {
     (authService.isAuthenticated as any).mockReturnValue(false);
 
-    injector.runInContext(() =>
+    runInInjectionContext(injector, () =>
       authGuard({} as any, { url: '/email/msg-123' } as any)
     );
 

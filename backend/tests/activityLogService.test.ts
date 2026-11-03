@@ -4,7 +4,7 @@ import { ActivityLog } from '../src/models/ActivityLog';
 import { InternalServerError } from '../src/utils/errors';
 
 vi.mock('../src/models/ActivityLog');
-vi.mock('../src/utils/logger');
+vi.mock('../src/utils/logger.js');
 
 describe('ActivityLogService', () => {
   beforeEach(() => {

@@ -194,7 +194,7 @@ describe('frontend services', () => {
     service
       .fetchEmailPage({ label: 'INBOX', limit: 20, q: '  from:alice+news@example.com subject:"Q&A report"  ', pageToken: 'page-2' })
       .subscribe((result) => (pageResult = result));
-    const url: string = http.get.mock.calls.at(-1)[0];
+    const url: string = http.get.mock.calls.at(-1)![0];
     expect(url).toBe(
       'api/gmail/emails?label=INBOX&limit=20&q=from%3Aalice%2Bnews%40example.com+subject%3A%22Q%26A+report%22&pageToken=page-2'
     );

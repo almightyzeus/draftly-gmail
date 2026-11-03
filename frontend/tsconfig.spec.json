@@ -1,14 +1,9 @@
-/* To learn more about this file see: https://angular.io/config/tsconfig. */
+/* Type-checks the Vitest suites (tests/*.vitest.ts): npm run typecheck:tests. Vitest itself strips types without checking them. */
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
-    "outDir": "./out-tsc/spec",
-    "types": [
-      "jasmine"
-    ]
+    "noEmit": true,
+    "types": ["vitest/globals"]
   },
-  "include": [
-    "src/**/*.spec.ts",
-    "src/**/*.d.ts"
-  ]
+  "include": ["tests/**/*.ts", "vitest.setup.ts", "src/**/*.d.ts"]
 }

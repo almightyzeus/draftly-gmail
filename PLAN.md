@@ -21,7 +21,7 @@ page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread contex
 |---|---|
 | Backend typecheck | `npx tsc --noEmit` clean |
 | Backend tests | 24 files, **447 passing** (`npm run test:ci`) |
-| Backend coverage | 96.46% statements, 87.39% branches, 97.51% functions, 96.46% lines |
+| Backend coverage | 96.34% statements, 87.39% branches, 97.51% functions, 96.34% lines |
 | Frontend dependencies | Clean `npm ci` from the lockfile: Angular 21.2.22, Material 21.2.14 (the local install had been a stale Angular 17) |
 | Frontend tests | 7 files, **135 passing** |
 | Frontend coverage | 95.60% statements, 82.45% branches, 95.83% functions, 96.18% lines |
@@ -190,12 +190,13 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | D3 | Initial bundle 527 kB, above the 500 kB warning budget. | Investigate (e.g. `provideAnimations()`, Material imports) before changing budgets. |
 | D4 | **Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30. Update `.nvmrc` (20.19.5), both Dockerfiles (`node:20-alpine`), and CI (reads `.nvmrc`); `@types/node` is already 25. | Tests and builds already pass on Node 24.15 locally (Angular 21 supports it). Re-run the Docker build and CI after the change. |
 
-### 5.6 Cleanup — not started
+### 5.6 Cleanup
 
 | # | Item | Notes |
 |---|---|---|
-| C-1 | Noisy backend test output (stack traces from failure-path tests; unmocked logger in some suites). | — |
-| C-2 | `frontend/tsconfig.spec.json` matches no files (`src/**/*.spec.ts`); tests live in `tests/*.vitest.ts`. | Stale config. |
+| C-1 | ~~Noisy backend test output (stack traces from failure-path tests; unmocked logger in some suites).~~ | **Done** 2026-11-03: the logger is `silent` when `NODE_ENV=test` (new optional `LOG_LEVEL` overrides it in any environment); dotenv's "injected env" tip is off (`quiet: true`, also in production logs). Two suites mocked the logger with a path that did not take effect and one env mock lacked `nodeEnv`; both fixed. A full run prints no log lines or stack traces. |
+| C-2 | ~~`frontend/tsconfig.spec.json` matches no files (`src/**/*.spec.ts`); tests live in `tests/*.vitest.ts`.~~ | **Done** 2026-11-03: `tsconfig.spec.json` now type-checks the Vitest suites (`npm run typecheck:tests`, also a CI step); the 4 errors it found are fixed (`runInInjectionContext` instead of the internal `Injector.runInContext`, one non-null assertion). The Karma `test` target in `angular.json` is removed (Karma is not installed; `ng test` could not run). |
+| C-3 | Backend tests are not type-checked (`tsconfig.json` excludes `tests/`); including them reports 41 errors in 8 files (mostly loose mock typing in controller tests). | Fix, then add a test typecheck step to CI like the frontend's. |
 
 ### 5.7 Deferred security hardening
 

@@ -4,6 +4,7 @@ import { Response, NextFunction } from 'express';
 // Hoist mocks before importing modules
 const envMocks = vi.hoisted(() => ({
   env: {
+    nodeEnv: 'test',
     frontendUrl: 'http://localhost:4200',
     jwt: {
       accessSecret: 'test-secret',
@@ -25,7 +26,7 @@ vi.mock('../src/services/googleClient.js', () => ({
 }));
 vi.mock('../src/services/gmailOAuthService');
 vi.mock('../src/services/gmailService');
-vi.mock('../src/utils/logger');
+vi.mock('../src/utils/logger.js');
 
 import {
   getOAuthUrl,

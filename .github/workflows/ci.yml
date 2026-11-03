@@ -83,6 +83,8 @@ jobs:
       - run: npm ci
       - name: Typecheck
         run: npx tsc -p tsconfig.app.json --noEmit
+      - name: Typecheck tests
+        run: npm run typecheck:tests
       - name: Tests with coverage thresholds
         run: npm run test:coverage
       - name: Production build

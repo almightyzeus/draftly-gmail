@@ -204,6 +204,9 @@ OPENAI_MODEL=gpt-4o-mini
 
 # Optional: number of reverse-proxy hops to trust (leave unset when not behind a proxy)
 # TRUST_PROXY=1
+
+# Optional: log level (default: info in production, debug in development, silent in tests)
+# LOG_LEVEL=debug
 ```
 
 To generate the encryption key and JWT secrets:
@@ -500,7 +503,7 @@ npm run test:coverage
 npm run test:ci        # coverage run for CI (test files run one at a time)
 ```
 
-CI: `.github/workflows/ci.yml` runs on every push to `master` and every pull request. The backend job runs `npm ci`, `npx tsc --noEmit` and `npm run test:ci`; the frontend job runs `npm ci`, `npx tsc -p tsconfig.app.json --noEmit`, `npm run test:coverage` and `npm run build`. Both use the Node version in `.nvmrc`, fail if the coverage thresholds are not met, and upload their coverage reports. The backend job sets placeholder values for the required environment variables (no secrets are needed: the tests use an in-memory MongoDB and mocks).
+CI: `.github/workflows/ci.yml` runs on every push to `master` and every pull request. The backend job runs `npm ci`, `npx tsc --noEmit` and `npm run test:ci`; the frontend job runs `npm ci`, `npx tsc -p tsconfig.app.json --noEmit`, `npm run typecheck:tests`, `npm run test:coverage` and `npm run build`. Both use the Node version in `.nvmrc`, fail if the coverage thresholds are not met, and upload their coverage reports. The backend job sets placeholder values for the required environment variables (no secrets are needed: the tests use an in-memory MongoDB and mocks).
 
 Frontend:
 
@@ -510,6 +513,7 @@ npm start
 npm run build
 npm test
 npm run test:coverage
+npm run typecheck:tests   # type-check the Vitest suites (Vitest itself does not)
 ```
 
 ## Testing Status
@@ -520,7 +524,7 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 24 | 447 passing | 96.46% | 87.39% | 97.51% | 96.46% |
+| Backend | 24 | 447 passing | 96.34% | 87.39% | 97.51% | 96.34% |
 | Frontend | 7 | 135 passing | 95.60% | 82.45% | 95.83% | 96.18% |
 
 Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
@@ -532,13 +536,13 @@ Validation before a demo:
 ```bash
 nvm use
 cd backend && npx tsc --noEmit && npm test && npm run test:coverage
-cd frontend && npm test && npm run test:coverage && npm run build
+cd frontend && npm run typecheck:tests && npm run test:coverage && npm run build
 docker compose up --build
 ```
 
 `npm run build` reports one warning: the initial bundle (≈527 kB) is above Angular's 500 kB warning budget; the hard limit is 1 MB.
 
-Some backend test output includes logged error stack traces from tests that exercise failure paths on purpose; they are not failures.
+Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tests exercise on purpose print nothing. Run `LOG_LEVEL=debug npm test` to see them.
 
 ## Design Notes
 

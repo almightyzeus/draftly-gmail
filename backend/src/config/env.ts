@@ -1,6 +1,7 @@
 import dotenv from 'dotenv';
 
-dotenv.config();
+// quiet: dotenv 17 otherwise prints an "injected env" tip on every start.
+dotenv.config({ quiet: true });
 
 /**
  * Environment configuration interface
