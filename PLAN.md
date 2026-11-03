@@ -185,7 +185,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 
 | # | Item | Notes |
 |---|---|---|
-| D1 | Remove unused `cookie-parser` and `@types/cookie-parser` (backend). | Never imported. |
+| D1 | ~~Remove unused `cookie-parser` and `@types/cookie-parser` (backend).~~ | **Done** 2026-11-03 (approved): uninstalled; the lockfile also drops their dependency `cookie-signature@1.0.6` (Express keeps its own 1.2.2) and three optional-peer entries npm 11 no longer records (`zod`, two nested `gcp-metadata`; none are imported). Clean `npm ci`, typecheck, build and all 447 tests pass. |
 | D2 | `npm audit` (frontend): 35 vulnerabilities (22 moderate, 10 high, 3 critical). | Fix requires upgrades. |
 | D3 | Initial bundle 527 kB, above the 500 kB warning budget. | Investigate (e.g. `provideAnimations()`, Material imports) before changing budgets. |
 | D4 | **Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30. Update `.nvmrc` (20.19.5), both Dockerfiles (`node:20-alpine`), and CI (reads `.nvmrc`); `@types/node` is already 25. | Tests and builds already pass on Node 24.15 locally (Angular 21 supports it). Re-run the Docker build and CI after the change. |
