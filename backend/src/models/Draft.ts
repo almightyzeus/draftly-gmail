@@ -30,6 +30,8 @@ export interface IDraft extends Document {
   /** When the current send claim was taken; used to expire stranded claims. */
   sendClaimedAt?: Date | null;
   isConsolidated?: boolean;
+  /** Also address the original message's other recipients (Cc). */
+  replyAll: boolean;
   auditTrail: IAuditTrailEntry[];
   createdAt: Date;
   updatedAt: Date;
@@ -124,6 +126,10 @@ const draftSchema = new Schema<IDraft>(
       default: null,
     },
     isConsolidated: {
+      type: Boolean,
+      default: false,
+    },
+    replyAll: {
       type: Boolean,
       default: false,
     },

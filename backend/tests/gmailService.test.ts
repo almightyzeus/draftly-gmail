@@ -249,7 +249,7 @@ describe('GmailService', () => {
     await expect(
       GmailService.createDraft(
         userId,
-        'to@example.com',
+        { to: ['to@example.com'], cc: ['"Team, Ops" <ops@example.com>', 'bob@example.com'] },
         'Subject',
         'Body',
         'thread-1',
@@ -263,10 +263,13 @@ describe('GmailService', () => {
     expect(rawMessage).toContain('References: <older@example.com> <rfc-message@example.com>');
     expect(rawMessage).not.toContain('In-Reply-To: draft-1');
     expect(rawMessage).toContain(`From: ${account.gmailEmail}`);
+    expect(rawMessage).toContain('To: to@example.com\r\n');
+    expect(rawMessage).toContain('Cc: "Team, Ops" <ops@example.com>,\r\n bob@example.com\r\n');
     expect(GmailAccount.findOne).toHaveBeenLastCalledWith({ userId: new Types.ObjectId(userId), revokedAt: null });
-    await expect(GmailService.updateDraft(userId, 'draft-1', 'Body 2', 'to@example.com', 'Subject', 'thread-1')).resolves.toBeUndefined();
+    await expect(GmailService.updateDraft(userId, 'draft-1', 'Body 2', { to: ['to@example.com'], cc: [] }, 'Subject', 'thread-1')).resolves.toBeUndefined();
     const updatedRaw = Buffer.from(draftApi.update.mock.calls[0][0].requestBody.message.raw, 'base64').toString('utf8');
     expect(updatedRaw).toContain(Buffer.from('Body 2').toString('base64'));
+    expect(updatedRaw).not.toContain('Cc:');
     await expect(GmailService.sendDraft(userId, 'draft-1', 'thread-1')).resolves.toBe('sent-1');
     await expect(GmailService.deleteDraft(userId, 'draft-1')).resolves.toBeUndefined();
   });
@@ -629,8 +632,8 @@ describe('GmailService', () => {
     });
 
     const operations: [string, () => Promise<unknown>, Mock][] = [
-      ['createDraft', () => GmailService.createDraft(userId, 'a@example.com', 'Re: Hi', 'Body', 'thread-1'), drafts.create],
-      ['updateDraft', () => GmailService.updateDraft(userId, 'gd-1', 'Body', 'a@example.com', 'Re: Hi', 'thread-1'), drafts.update],
+      ['createDraft', () => GmailService.createDraft(userId, { to: ['a@example.com'], cc: [] }, 'Re: Hi', 'Body', 'thread-1'), drafts.create],
+      ['updateDraft', () => GmailService.updateDraft(userId, 'gd-1', 'Body', { to: ['a@example.com'], cc: [] }, 'Re: Hi', 'thread-1'), drafts.update],
       ['sendDraft', () => GmailService.sendDraft(userId, 'gd-1', 'thread-1'), drafts.send],
       ['deleteDraft', () => GmailService.deleteDraft(userId, 'gd-1'), drafts.delete],
       [
@@ -674,7 +677,7 @@ describe('GmailService', () => {
     it('loads the Gmail account once and sends From the connected address', async () => {
       drafts.create.mockResolvedValue({ data: { id: 'gd-1' } });
 
-      await expect(GmailService.createDraft(userId, 'a@example.com', 'Re: Hi', 'Body', 'thread-1')).resolves.toBe('gd-1');
+      await expect(GmailService.createDraft(userId, { to: ['a@example.com'], cc: [] }, 'Re: Hi', 'Body', 'thread-1')).resolves.toBe('gd-1');
 
       expect(GmailAccount.findOne).toHaveBeenCalledTimes(1);
       const raw = Buffer.from(drafts.create.mock.calls[0][0].requestBody.message.raw, 'base64').toString();

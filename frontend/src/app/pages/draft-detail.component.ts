@@ -8,6 +8,7 @@ import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
+import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable, filter, of, switchMap, tap } from 'rxjs';
 import { DraftService } from '../services/draft.service';
@@ -25,8 +26,13 @@ interface Draft {
   createdAt: Date;
   updatedAt: Date;
   sentAt?: Date | null;
-  /** Who the reply goes to and the subject it answers (from the API). */
+  /** The sender and subject of the email being answered (from the API). */
   replyTo?: { from: string; subject: string } | null;
+  /** Exactly who the reply goes to (Reply-To aware; Cc only with reply all). */
+  recipients?: { to: string[]; cc: string[] } | null;
+  replyAll?: boolean;
+  /** The original email has other recipients that reply all would copy. */
+  canReplyAll?: boolean;
 }
 
 @Component({
@@ -41,6 +47,7 @@ interface Draft {
     MatFormFieldModule,
     MatInputModule,
     MatProgressSpinnerModule,
+    MatSlideToggleModule,
     TopBarComponent,
   ],
   templateUrl: './draft-detail.component.html',
@@ -54,8 +61,11 @@ export class DraftDetailComponent implements OnInit {
   readonly isApproving = signal(false);
   readonly isRejecting = signal(false);
   readonly isSending = signal(false);
+  readonly isUpdatingRecipients = signal(false);
   /** Any action in flight: all action buttons and the editor are disabled. */
-  readonly isBusy = computed(() => this.isSaving() || this.isApproving() || this.isRejecting() || this.isSending());
+  readonly isBusy = computed(
+    () => this.isSaving() || this.isApproving() || this.isRejecting() || this.isSending() || this.isUpdatingRecipients()
+  );
   /** Failure to load the draft (replaces the page content). */
   error: string | null = null;
   /** Failure of an action (save/approve/reject/send); the editor stays visible. */
@@ -72,6 +82,15 @@ export class DraftDetailComponent implements OnInit {
     private snackBar: MatSnackBar,
     private authService: AuthService
   ) {}
+
+  /** The To line: the API's recipients, or the original sender for older responses. */
+  get toLine(): string {
+    return this.draft?.recipients?.to.join(', ') || this.draft?.replyTo?.from || '';
+  }
+
+  get ccList(): string[] {
+    return this.draft?.recipients?.cc ?? [];
+  }
 
   /** Only PENDING and APPROVED drafts can still be edited or acted on. */
   get isEditable(): boolean {
@@ -147,6 +166,37 @@ export class DraftDetailComponent implements OnInit {
     );
   }
 
+  /**
+   * Switch between replying to the sender and reply all. Unsaved body edits
+   * stay in the editor. On failure the toggle flips back.
+   */
+  toggleReplyAll(replyAll: boolean, toggle?: { checked: boolean }): void {
+    if (!this.draft) {
+      return;
+    }
+
+    this.isUpdatingRecipients.set(true);
+    this.actionError = null;
+
+    this.draftService.setReplyAll(this.draft._id, replyAll).subscribe({
+      next: (updated: Draft) => {
+        this.draft = updated;
+        this.onContentChange();
+        this.isUpdatingRecipients.set(false);
+        this.notify(replyAll ? 'Reply all: everyone on the email is copied.' : 'Replying to the sender only.');
+      },
+      error: (error) => {
+        console.error('Failed to change recipients:', error);
+        this.noteGmailAccessLost(error);
+        this.actionError = error?.error?.error || 'Failed to change the recipients';
+        if (toggle) {
+          toggle.checked = !replyAll;
+        }
+        this.isUpdatingRecipients.set(false);
+      },
+    });
+  }
+
   approveDraft(): void {
     if (!this.draft) {
       return;
@@ -219,13 +269,14 @@ export class DraftDetailComponent implements OnInit {
       return;
     }
     const draftId = this.draft._id;
-    const recipient = this.draft.replyTo?.from;
+    const recipient = this.toLine;
+    const cc = this.ccList.length ? ` (Cc: ${this.ccList.join(', ')})` : '';
 
     this.confirmService
       .confirm({
         title: 'Send this reply?',
         message: recipient
-          ? `It will be sent to ${recipient} from your Gmail account.`
+          ? `It will be sent to ${recipient}${cc} from your Gmail account.`
           : 'It will be sent from your Gmail account.',
         confirmText: 'Send',
       })

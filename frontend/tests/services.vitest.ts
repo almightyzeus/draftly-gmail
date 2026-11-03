@@ -244,6 +244,9 @@ describe('frontend services', () => {
     service.updateDraft('draft-1', 'body').subscribe();
     expect(http.put).toHaveBeenCalledWith('api/drafts/draft-1', { draftBody: 'body' });
 
+    service.setReplyAll('draft-1', true).subscribe();
+    expect(http.put).toHaveBeenCalledWith('api/drafts/draft-1', { replyAll: true });
+
     service.approveDraft('draft-1').subscribe();
     expect(http.post).toHaveBeenCalledWith('api/drafts/draft-1/approve', {});
 

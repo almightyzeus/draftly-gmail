@@ -110,18 +110,24 @@ export const updateDraft = async (req: any, res: Response) => {
   try {
     const userId = req.userId;
     const id = Array.isArray(req.params.id) ? req.params.id[0] : req.params.id;
-    const { draftBody } = req.body ?? {};
+    const { draftBody, replyAll } = req.body ?? {};
 
-    if (!draftBody) {
-      return res.status(400).json({ error: 'draftBody is required' });
+    if (draftBody === undefined && replyAll === undefined) {
+      return res.status(400).json({ error: 'draftBody or replyAll is required' });
     }
-    if (typeof draftBody !== 'string' || draftBody.length > MAX_DRAFT_BODY_LENGTH) {
+    if (
+      draftBody !== undefined &&
+      (typeof draftBody !== 'string' || !draftBody || draftBody.length > MAX_DRAFT_BODY_LENGTH)
+    ) {
       return res.status(400).json({
-        error: `draftBody must be a string of at most ${MAX_DRAFT_BODY_LENGTH} characters`,
+        error: `draftBody must be a non-empty string of at most ${MAX_DRAFT_BODY_LENGTH} characters`,
       });
     }
+    if (replyAll !== undefined && typeof replyAll !== 'boolean') {
+      return res.status(400).json({ error: 'replyAll must be a boolean' });
+    }
 
-    const draft = await DraftService.updateDraft(userId, id, draftBody);
+    const draft = await DraftService.updateDraft(userId, id, { draftBody, replyAll });
 
     res.json(await DraftService.toResponse(userId, draft));
   } catch (error) {

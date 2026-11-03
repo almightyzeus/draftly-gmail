@@ -59,7 +59,8 @@ Backend:
 - Gmail OAuth connect, callback, and revoke; refreshed Google tokens are persisted; an expired or revoked Google grant marks Gmail as disconnected so the UI can prompt to reconnect
 - Inbox listing with Gmail search (`q`), `label`, `unread`, `limit`, and Gmail page tokens (messages are fetched from Gmail in parallel, 10 at a time)
 - AI draft generation using tone, thread context, signature, custom context, and recent outbound style examples
-- Draft list/detail/update/approve/reject/send APIs; each draft response includes who the reply goes to (`replyTo`)
+- Draft list/detail/update/approve/reject/send APIs; each draft response includes exactly who the reply goes to (`recipients`)
+- Replies go to the `Reply-To` address when the original email has one; optional reply all copies the email's other recipients
 - Gmail draft creation on approval; edits to an approved draft are synced to Gmail before they are saved
 - Replies use the original message's RFC `Message-ID` for `In-Reply-To`/`References` and keep Gmail's `threadId`
 - Preferences and activity log APIs
@@ -70,7 +71,7 @@ Frontend:
 - Top bar with Gmail connection status (connect / disconnect) and account menu
 - Dashboard with an **Inbox** tab (search, unread filter, pagination) and a **Drafts** tab (filter by status)
 - Email detail with AI draft generation
-- Draft detail with editing, approve, reject, and send (with confirmation dialogs)
+- Draft detail with editing, To/Cc recipients, a **Reply all** switch, approve, reject, and send (with confirmation dialogs)
 - Preferences page (account menu → **Preferences**): default tone, signature, and number of style examples
 
 ## Project Structure
@@ -399,19 +400,26 @@ A thread has at most one `PENDING` draft, enforced by a partial unique index (`o
 - If another generation for the thread saves its draft first, the slower request returns that draft when it matches (same tone, no `customContext`), and otherwise replaces it. After three such collisions it returns 409.
 - At startup, the backend retires duplicate pending drafts left from before the index existed (keeping the newest per thread), then builds the index.
 
-Update draft body (max 50,000 chars):
+Update the draft body (max 50,000 chars) and/or reply all; send at least one field:
 
 ```json
 {
-  "draftBody": "Updated draft text"
+  "draftBody": "Updated draft text",
+  "replyAll": true
 }
 ```
 
-For an approved draft, the Gmail draft is updated first; if that fails, the edit is not saved and the API returns 502 (or 403 / 429 if Gmail access expired or Gmail is rate limiting).
+For an approved draft, the Gmail draft is updated first (body and recipients); if that fails, the edit is not saved and the API returns 502 (or 403 / 429 if Gmail access expired or Gmail is rate limiting).
 
 Reject works for `PENDING` drafts and for `APPROVED` drafts that are not being sent; for an approved draft, its Gmail draft is also deleted (best effort — if that fails, the draft is still rejected and the failure is logged).
 
-Every draft response includes `replyTo: { "from": "...", "subject": "..." }` (or `null` if the original email is not cached).
+Every draft response includes (all `null`/`false` if the original email is not cached):
+
+- `replyTo: { "from": "...", "subject": "..." }`: the sender and subject of the email being answered.
+- `recipients: { "to": [...], "cc": [...] }`: exactly who the reply goes to. `to` is the original email's `Reply-To` mailboxes if it has that header, otherwise its sender (one mailbox). With `replyAll`, `cc` holds the email's other recipients (its To and Cc, plus the sender when `Reply-To` redirected the reply). Your own address and duplicates are removed; at most 50 recipients.
+- `replyAll` (default `false`) and `canReplyAll` (whether reply all would copy anyone).
+
+Approve refuses a reply whose only address is your own (409) and an email without a valid address to reply to (422). Recipients come from the incoming email's headers, so the draft page shows To and Cc before you approve or send.
 
 #### Idempotent sending
 
@@ -508,8 +516,8 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 23 | 389 passing | 96.23% | 85.81% | 98.61% | 96.23% |
-| Frontend | 6 | 114 passing | 95.27% | 81.62% | 95.26% | 95.79% |
+| Backend | 23 | 410 passing | 96.36% | 86.54% | 98.65% | 96.36% |
+| Frontend | 6 | 117 passing | 95.27% | 81.20% | 95.42% | 95.77% |
 
 Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
 
@@ -545,7 +553,7 @@ Some backend test output includes logged error stack traces from tests that exer
 
 - Optimized for local Docker Compose deployment and demos rather than production cloud deployment (MongoDB runs without authentication on the internal Docker network).
 - Sending is idempotent but not mathematically exactly-once (see [Idempotent sending](#idempotent-sending)).
-- Replies go to the sender only: there is no reply-all, and a `Reply-To` header is not used.
+- Emails cached before reply all existed have no stored Cc/Reply-To; generating a draft re-fetches the thread, which fills them in.
 - Thread context covers the newest 50 messages of a thread (the prompt uses the latest 20). When Gmail cannot be reached during generation, only cached messages are used.
 - Rate limits are kept in memory per backend process.
 - Refresh tokens are stateless JWTs: logout clears them in the browser, but a copied refresh token stays valid until it expires. Tokens are stored in `localStorage`.
@@ -558,6 +566,5 @@ Some backend test output includes logged error stack traces from tests that exer
 - Cloud deployment (AWS/GCP/Azure) with production-grade secrets management
 - Automated deployment (CI already runs tests and the build)
 - Retry with backoff for transient Gmail failures
-- Reply-all and `Reply-To` support
 - Activity log screen
 - Server-side refresh-token revocation

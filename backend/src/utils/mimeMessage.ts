@@ -1,8 +1,15 @@
 import crypto from 'crypto';
 
+export interface ReplyRecipients {
+  to: string[];
+  cc: string[];
+}
+
 export interface ReplyMessageInput {
   from?: string | null;
-  to: string;
+  /** One mailbox, or several (Reply-To may list more than one). */
+  to: string | string[];
+  cc?: string[];
   subject: string;
   /** Plain-text body as approved by the user. */
   body: string;
@@ -85,6 +92,87 @@ export function formatMailbox(value: string): string {
   return `${phrase} <${address}>`;
 }
 
+/** Upper bound on the recipients of one reply (To and Cc together). */
+export const MAX_REPLY_RECIPIENTS = 50;
+
+/**
+ * Split an address-list header (To, Cc, Reply-To) into single mailboxes, e.g.
+ * `"Doe, Jane" <jane@x.com>, bob@y.com` → two entries. Commas inside quotes or
+ * angle brackets do not split. Group syntax (`Team: a@x.com, b@y.com;`) is
+ * flattened. Entries without a valid address are dropped. Each entry is a
+ * sanitized single mailbox that formatMailbox accepts.
+ */
+export function parseMailboxList(value: string | null | undefined): string[] {
+  const sanitized = sanitizeHeaderValue(value ?? '');
+  const segments: string[] = [];
+  let current = '';
+  let inQuotes = false;
+  let inAngle = false;
+
+  for (const char of sanitized) {
+    if (char === '"' && !inAngle) inQuotes = !inQuotes;
+    else if (char === '<' && !inQuotes) inAngle = true;
+    else if (char === '>' && !inQuotes) inAngle = false;
+
+    if ((char === ',' || char === ';') && !inQuotes && !inAngle) {
+      segments.push(current);
+      current = '';
+    } else {
+      current += char;
+    }
+  }
+  segments.push(current);
+
+  return segments
+    .map((segment) => segment.trim().replace(/^[^"<>@]*:\s*/, '')) // group label
+    .filter((segment) => segment && mailboxAddress(segment))
+    .slice(0, MAX_REPLY_RECIPIENTS);
+}
+
+/**
+ * Who a reply goes to, as a mail client would address it:
+ * - To: the Reply-To mailboxes when the message has a Reply-To header,
+ *   otherwise its sender (From, one mailbox).
+ * - Cc (reply all only): the message's other recipients (To and Cc, plus the
+ *   sender when Reply-To redirected the reply).
+ * The user's own address and duplicates (case-insensitive) are removed, and
+ * the total is capped at MAX_REPLY_RECIPIENTS.
+ */
+export function replyRecipients(
+  message: { from?: string | null; to?: string | null; cc?: string | null; replyTo?: string | null },
+  ownAddress: string | null | undefined,
+  replyAll: boolean
+): ReplyRecipients {
+  const own = ownAddress?.toLowerCase();
+  const seen = new Set<string>(own ? [own] : []);
+  const take = (mailboxes: string[]) =>
+    mailboxes.filter((mailbox) => {
+      const address = (mailboxAddress(mailbox) as string).toLowerCase();
+      if (seen.has(address)) return false;
+      seen.add(address);
+      return true;
+    });
+
+  const replyToList = parseMailboxList(message.replyTo);
+  const sender = parseMailboxList(message.from).slice(0, 1);
+  const to = take(replyToList.length ? replyToList : sender);
+
+  const cc = replyAll
+    ? take([
+        ...(replyToList.length ? sender : []),
+        ...parseMailboxList(message.to),
+        ...parseMailboxList(message.cc),
+      ])
+    : [];
+
+  return { to, cc: cc.slice(0, Math.max(0, MAX_REPLY_RECIPIENTS - to.length)) };
+}
+
+/** Address-list header value: each mailbox formatted, folded one per line. */
+function formatMailboxList(mailboxes: string[]): string {
+  return mailboxes.map((mailbox) => formatMailbox(mailbox)).join(',\r\n ');
+}
+
 /** Base64 with 76-character lines, as MIME requires. */
 function base64Lines(text: string): string {
   return (Buffer.from(text, 'utf8').toString('base64').match(/.{1,76}/g) ?? []).join('\r\n');
@@ -107,10 +195,15 @@ export function plainTextToHtml(plainText: string): string {
  */
 export function buildRawReply(input: ReplyMessageInput): string {
   const boundary = `draftly-${crypto.randomBytes(16).toString('hex')}`;
+  const to = Array.isArray(input.to) ? input.to : [input.to];
+  if (to.length === 0) {
+    throw new Error('Cannot determine a valid reply address');
+  }
 
   const headers = [
     ...(input.from ? [`From: ${sanitizeHeaderValue(input.from)}`] : []),
-    `To: ${formatMailbox(input.to)}`,
+    `To: ${formatMailboxList(to)}`,
+    ...(input.cc?.length ? [`Cc: ${formatMailboxList(input.cc)}`] : []),
     `Subject: ${encodeHeaderText(sanitizeHeaderValue(input.subject))}`,
     'MIME-Version: 1.0',
     `Content-Type: multipart/alternative; boundary="${boundary}"`,

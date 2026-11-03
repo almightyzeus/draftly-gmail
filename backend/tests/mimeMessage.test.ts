@@ -1,5 +1,13 @@
 import { describe, expect, it } from 'vitest';
-import { buildRawReply, encodeHeaderText, formatMailbox, sanitizeHeaderValue } from '../src/utils/mimeMessage.js';
+import {
+  MAX_REPLY_RECIPIENTS,
+  buildRawReply,
+  encodeHeaderText,
+  formatMailbox,
+  parseMailboxList,
+  replyRecipients,
+  sanitizeHeaderValue,
+} from '../src/utils/mimeMessage.js';
 
 /**
  * Split a raw message into its header lines (up to the first blank line).
@@ -134,5 +142,93 @@ describe('header helpers', () => {
     expect(words.every((w) => /^=\?UTF-8\?B\?[A-Za-z0-9+/=]+\?=$/.test(w) && w.length <= 75)).toBe(true);
     const decoded = words.map((w) => Buffer.from(w.slice(10, -2), 'base64').toString('utf8')).join('');
     expect(decoded).toBe(subject);
+  });
+});
+
+describe('parseMailboxList', () => {
+  it('splits on commas outside quotes and angle brackets', () => {
+    expect(parseMailboxList('"Doe, Jane" <jane@x.com>, bob@y.com,  <odd,ity@z.com>')).toEqual([
+      '"Doe, Jane" <jane@x.com>',
+      'bob@y.com',
+    ]);
+  });
+
+  it('flattens group syntax and drops entries without a valid address', () => {
+    expect(parseMailboxList('Team: a@x.com, B <b@x.com>; undisclosed-recipients:;, not an address')).toEqual([
+      'a@x.com',
+      'B <b@x.com>',
+    ]);
+    expect(parseMailboxList(null)).toEqual([]);
+    expect(parseMailboxList('')).toEqual([]);
+  });
+
+  it('collapses line breaks so a header cannot be injected', () => {
+    const [entry] = parseMailboxList('a@x.com\r\nBcc: evil@x.com');
+    expect(entry).not.toMatch(/[\r\n]/);
+  });
+
+  it(`keeps at most ${MAX_REPLY_RECIPIENTS} entries`, () => {
+    const many = Array.from({ length: MAX_REPLY_RECIPIENTS + 10 }, (_, i) => `u${i}@x.com`).join(', ');
+    expect(parseMailboxList(many)).toHaveLength(MAX_REPLY_RECIPIENTS);
+  });
+});
+
+describe('replyRecipients', () => {
+  const message = {
+    from: 'Alice <alice@x.com>',
+    to: 'Me <me@gmail.com>, Bob <bob@x.com>',
+    cc: 'carol@x.com, BOB@x.com',
+  };
+
+  it('replies to the sender only by default', () => {
+    expect(replyRecipients(message, 'me@gmail.com', false)).toEqual({ to: ['Alice <alice@x.com>'], cc: [] });
+  });
+
+  it('reply all copies the other recipients, without the user or duplicates (case-insensitive)', () => {
+    expect(replyRecipients(message, 'ME@gmail.com', true)).toEqual({
+      to: ['Alice <alice@x.com>'],
+      cc: ['Bob <bob@x.com>', 'carol@x.com'],
+    });
+  });
+
+  it('uses Reply-To instead of From, and Cc-s the sender on reply all', () => {
+    const withReplyTo = { ...message, replyTo: 'List <list@x.com>, alice@x.com' };
+    expect(replyRecipients(withReplyTo, 'me@gmail.com', false)).toEqual({
+      to: ['List <list@x.com>', 'alice@x.com'],
+      cc: [],
+    });
+    expect(replyRecipients({ ...message, replyTo: 'List <list@x.com>' }, 'me@gmail.com', true)).toEqual({
+      to: ['List <list@x.com>'],
+      cc: ['Alice <alice@x.com>', 'Bob <bob@x.com>', 'carol@x.com'],
+    });
+  });
+
+  it('only takes the first mailbox of a From header', () => {
+    expect(replyRecipients({ from: 'a@x.com, b@x.com' }, null, false).to).toEqual(['a@x.com']);
+  });
+
+  it(`caps To and Cc together at ${MAX_REPLY_RECIPIENTS}`, () => {
+    const to = Array.from({ length: 40 }, (_, i) => `t${i}@x.com`).join(', ');
+    const cc = Array.from({ length: 40 }, (_, i) => `c${i}@x.com`).join(', ');
+    const result = replyRecipients({ from: 'a@x.com', to, cc }, null, true);
+    expect(result.to.length + result.cc.length).toBe(MAX_REPLY_RECIPIENTS);
+  });
+});
+
+describe('buildRawReply with several recipients', () => {
+  it('writes To and Cc as folded address lists of formatted mailboxes', () => {
+    const raw = buildRawReply({
+      ...baseInput,
+      to: ['List <list@x.com>', 'alice@x.com'],
+      cc: ['"Doe, Jane" <jane@x.com>', 'José <jose@x.com>'],
+    });
+
+    expect(raw).toContain('To: "List" <list@x.com>,\r\n alice@x.com\r\n');
+    expect(raw).toMatch(/Cc: "Doe, Jane" <jane@x\.com>,\r\n =\?UTF-8\?B\?[^?]+\?= <jose@x\.com>\r\n/);
+  });
+
+  it('omits Cc when there is none, and refuses an empty To', () => {
+    expect(buildRawReply({ ...baseInput, cc: [] })).not.toContain('Cc:');
+    expect(() => buildRawReply({ ...baseInput, to: [] })).toThrow('Cannot determine a valid reply address');
   });
 });

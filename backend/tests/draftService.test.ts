@@ -137,6 +137,35 @@ describe('DraftService', () => {
         replyToGmailMessageId: 'msg-1',
         draftBody: 'x',
         replyTo: { from: 'a@example.com', subject: 'Hi' },
+        recipients: { to: ['a@example.com'], cc: [] },
+        canReplyAll: false,
+      });
+    });
+
+    it('lists the exact recipients: Reply-To over From, and Cc only with reply all', async () => {
+      arrangeTargets([
+        {
+          gmailMessageId: 'msg-1',
+          from: 'Alice <alice@example.com>',
+          replyTo: 'Support <support@example.com>',
+          to: 'User <user@gmail.com>, Bob <bob@example.com>',
+          cc: 'carol@example.com, USER@gmail.com',
+          subject: 'Ticket',
+        },
+      ]);
+
+      const [single, all] = await DraftService.toResponse(userId, [
+        { _id: 'd1', replyToGmailMessageId: 'msg-1', replyAll: false },
+        { _id: 'd2', replyToGmailMessageId: 'msg-1', replyAll: true },
+      ]);
+
+      expect(GmailService.getSenderAddress).toHaveBeenCalledTimes(1);
+      expect(single.recipients).toEqual({ to: ['Support <support@example.com>'], cc: [] });
+      expect(single.canReplyAll).toBe(true);
+      // The user's own address is never a recipient; Alice is Cc'd because Reply-To redirected the reply.
+      expect(all.recipients).toEqual({
+        to: ['Support <support@example.com>'],
+        cc: ['Alice <alice@example.com>', 'Bob <bob@example.com>', 'carol@example.com'],
       });
     });
 
@@ -513,13 +542,26 @@ describe('DraftService', () => {
         await expect(DraftService.approveDraft(userId, draftId)).resolves.toMatchObject({ status: 'APPROVED' });
         expect(GmailService.createDraft).toHaveBeenCalledWith(
           userId,
-          'Alice <alice@example.com>',
+          { to: ['Alice <alice@example.com>'], cc: [] },
           expect.any(String),
           expect.any(String),
           expect.any(String),
           expect.any(String),
           expect.any(String)
         );
+      });
+
+      it('approve with reply all copies the other recipients, but never the user', async () => {
+        (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ replyToGmailMessageId: 'group-1', replyAll: true }));
+        (EmailMessage.findOne as unknown as Mock).mockResolvedValue(groupMail);
+        (GmailService.createDraft as unknown as Mock).mockResolvedValue('gmail-draft-1');
+
+        await DraftService.approveDraft(userId, draftId);
+
+        expect((GmailService.createDraft as unknown as Mock).mock.calls[0][1]).toEqual({
+          to: ['Alice <alice@example.com>'],
+          cc: ['Bob <bob@example.com>'],
+        });
       });
 
       it('send goes ahead', async () => {
@@ -583,11 +625,11 @@ describe('DraftService', () => {
     const pending = buildDraft();
     (Draft.findOne as unknown as Mock).mockResolvedValue(pending);
     (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce({ ...pending, draftBody: 'Updated' });
-    const result = await DraftService.updateDraft(userId, draftId, 'Updated');
+    const result = await DraftService.updateDraft(userId, draftId, { draftBody: 'Updated' });
     expect(result.draftBody).toBe('Updated');
     expect(Draft.findOneAndUpdate).toHaveBeenCalledWith(
       expect.objectContaining({ status: 'PENDING', sendIdempotencyKey: null }),
-      expect.objectContaining({ $set: { draftBody: 'Updated' } }),
+      expect.objectContaining({ $set: { draftBody: 'Updated', replyAll: false } }),
       { returnDocument: 'after' }
     );
     expect(GmailService.updateDraft).not.toHaveBeenCalled();
@@ -596,17 +638,53 @@ describe('DraftService', () => {
     (Draft.findOne as unknown as Mock).mockResolvedValueOnce(approved);
     (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce({ ...approved, draftBody: 'Updated approved' });
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
-    await DraftService.updateDraft(userId, draftId, 'Updated approved');
+    await DraftService.updateDraft(userId, draftId, { draftBody: 'Updated approved' });
     expect(GmailService.updateDraft).toHaveBeenCalledWith(
       userId,
       'gmail-draft-1',
       'Updated approved',
-      email.from,
+      { to: [email.from], cc: [] },
       `Re: ${email.subject}`,
       'thread-1',
       '<rfc-message@example.com>',
       '<older@example.com> <rfc-message@example.com>'
     );
+  });
+
+  it('switches reply all on an approved draft: the Gmail draft gets the Cc, the body is kept', async () => {
+    const groupEmail = { ...email, to: 'user@gmail.com, Dana <dana@example.com>', cc: 'eve@example.com' };
+    const approved = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1', draftBody: 'Stored body' });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(approved);
+    (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce({ ...approved, replyAll: true });
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(groupEmail);
+
+    await DraftService.updateDraft(userId, draftId, { replyAll: true });
+
+    expect((GmailService.updateDraft as unknown as Mock).mock.calls[0].slice(2, 4)).toEqual([
+      'Stored body',
+      { to: ['sender@example.com'], cc: ['Dana <dana@example.com>', 'eve@example.com'] },
+    ]);
+    expect(Draft.findOneAndUpdate).toHaveBeenCalledWith(
+      expect.any(Object),
+      expect.objectContaining({ $set: { draftBody: 'Stored body', replyAll: true } }),
+      { returnDocument: 'after' }
+    );
+  });
+
+  it('refuses to approve a reply whose only address is the user (Reply-To set to the user)', async () => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft());
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue({ ...email, replyTo: 'Me <USER@gmail.com>' });
+
+    await expect(DraftService.approveDraft(userId, draftId)).rejects.toMatchObject({ statusCode: 409 });
+    expect(GmailService.createDraft).not.toHaveBeenCalled();
+  });
+
+  it('refuses to approve a reply to an email without a valid address (422)', async () => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft());
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue({ ...email, from: 'undisclosed-recipients:;' });
+
+    await expect(DraftService.approveDraft(userId, draftId)).rejects.toMatchObject({ statusCode: 422 });
+    expect(GmailService.createDraft).not.toHaveBeenCalled();
   });
 
   it.each([
@@ -617,7 +695,7 @@ describe('DraftService', () => {
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
     arrange();
 
-    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toMatchObject({
+    await expect(DraftService.updateDraft(userId, draftId, { draftBody: 'New text' })).rejects.toMatchObject({
       statusCode: 502,
       message: 'Could not update the Gmail draft, so your edit was not saved. Please try again.',
     });
@@ -632,7 +710,7 @@ describe('DraftService', () => {
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
     (GmailService.updateDraft as unknown as Mock).mockRejectedValueOnce(gmailError);
 
-    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toBe(gmailError);
+    await expect(DraftService.updateDraft(userId, draftId, { draftBody: 'New text' })).rejects.toBe(gmailError);
     expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
   });
 
@@ -643,7 +721,7 @@ describe('DraftService', () => {
   ])('refuses to edit a %s draft (409)', async (status, extra, message) => {
     (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status, ...extra }));
 
-    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toMatchObject({ statusCode: 409, message });
+    await expect(DraftService.updateDraft(userId, draftId, { draftBody: 'New text' })).rejects.toMatchObject({ statusCode: 409, message });
     expect(GmailService.updateDraft).not.toHaveBeenCalled();
     expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
   });
@@ -652,7 +730,7 @@ describe('DraftService', () => {
     (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft());
     (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValueOnce(null);
 
-    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toMatchObject({ statusCode: 409 });
+    await expect(DraftService.updateDraft(userId, draftId, { draftBody: 'New text' })).rejects.toMatchObject({ statusCode: 409 });
   });
 
   it('approves only pending drafts and requires Gmail draft creation', async () => {
@@ -666,7 +744,7 @@ describe('DraftService', () => {
     expect(result.gmailDraftId).toBe('gmail-draft-1');
     expect(GmailService.createDraft).toHaveBeenCalledWith(
       userId,
-      email.from,
+      { to: [email.from], cc: [] },
       `Re: ${email.subject}`,
       draft.draftBody,
       draft.threadId,
@@ -726,7 +804,7 @@ describe('DraftService', () => {
 
   it.each([
     ['getDraftById', () => DraftService.getDraftById(userId, draftId)],
-    ['updateDraft', () => DraftService.updateDraft(userId, draftId, 'x')],
+    ['updateDraft', () => DraftService.updateDraft(userId, draftId, { draftBody: 'x' })],
     ['approveDraft', () => DraftService.approveDraft(userId, draftId)],
     ['rejectDraft', () => DraftService.rejectDraft(userId, draftId)],
   ])('%s returns 404 for a missing or other user\'s draft', async (_name, call) => {
@@ -736,7 +814,7 @@ describe('DraftService', () => {
 
   it.each([
     ['getDraftById', () => DraftService.getDraftById(userId, 'not-an-id')],
-    ['updateDraft', () => DraftService.updateDraft(userId, 'not-an-id', 'x')],
+    ['updateDraft', () => DraftService.updateDraft(userId, 'not-an-id', { draftBody: 'x' })],
     ['approveDraft', () => DraftService.approveDraft(userId, 'not-an-id')],
     ['rejectDraft', () => DraftService.rejectDraft(userId, 'not-an-id')],
   ])('%s returns 404 (not 500) for a malformed draft id', async (_name, call) => {

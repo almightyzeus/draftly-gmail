@@ -351,6 +351,48 @@ describe('Integration workflows', () => {
     expect(draft?.replyToGmailMessageId).toBe('msg-2');
   });
 
+  it('replies to Reply-To, switches to reply all, and approves and sends with the shown recipients', async () => {
+    const { user, token } = await registerUser();
+    const seeded = await seedEmail(user.id);
+    await seeded.updateOne({
+      replyTo: 'Support <support@example.com>',
+      to: 'Test User <test@gmail.com>, Bob <bob@example.com>',
+      cc: 'carol@example.com',
+    });
+    const auth = { Authorization: `Bearer ${token}` };
+    const { GmailService } = await import('../src/services/gmailService.js');
+
+    const generate = await request(app).post('/api/drafts/generate').set(auth).send({ gmailMessageId: 'msg-1', tone: 'formal' });
+    expect(generate.status).toBe(201);
+    expect(generate.body.replyAll).toBe(false);
+    expect(generate.body.recipients).toEqual({ to: ['Support <support@example.com>'], cc: [] });
+    expect(generate.body.canReplyAll).toBe(true);
+
+    const draftId = generate.body._id;
+    const toggle = await request(app).put(`/api/drafts/${draftId}`).set(auth).send({ replyAll: true });
+    expect(toggle.status).toBe(200);
+    expect(toggle.body.draftBody).toBe(generate.body.draftBody);
+    // test@gmail.com is the connected address (getSenderAddress), so it is never copied.
+    const shown = {
+      to: ['Support <support@example.com>'],
+      cc: ['sender@example.com', 'Bob <bob@example.com>', 'carol@example.com'],
+    };
+    expect(toggle.body.recipients).toEqual(shown);
+
+    const approve = await request(app).post(`/api/drafts/${draftId}/approve`).set(auth);
+    expect(approve.status).toBe(200);
+    expect((GmailService.createDraft as any).mock.calls.at(-1)[1]).toEqual(shown);
+
+    const send = await request(app).post(`/api/drafts/${draftId}/send`).set(auth).send({ idempotencyKey: 'reply-all-1' });
+    expect(send.status).toBe(200);
+    const outbound = await EmailMessage.findOne({ userId: user.id, direction: 'OUTBOUND' }).lean();
+    expect(outbound).toMatchObject({
+      from: 'test@gmail.com',
+      to: 'Support <support@example.com>',
+      cc: 'sender@example.com, Bob <bob@example.com>, carol@example.com',
+    });
+  });
+
   describe('one PENDING draft per thread (concurrent generations)', () => {
     const generate = (token: string, tone: string) =>
       request(app).post('/api/drafts/generate').set('Authorization', `Bearer ${token}`).send({ gmailMessageId: 'msg-1', tone });

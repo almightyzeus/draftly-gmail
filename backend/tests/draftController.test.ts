@@ -115,6 +115,7 @@ describe('DraftController', () => {
     it.each([
       ['an object', { a: 1 }],
       ['an over-long string', 'x'.repeat(50_001)],
+      ['an empty string', ''],
     ])('updateDraft returns 400 for %s draftBody', async (_label, draftBody) => {
       mockReq.params = { id: 'draft123' };
       mockReq.body = { draftBody };
@@ -213,11 +214,14 @@ describe('DraftController', () => {
 
       await updateDraft(mockReq, mockRes as Response);
 
-      expect(DraftService.updateDraft).toHaveBeenCalledWith('user123', 'draft123', 'Updated content');
+      expect(DraftService.updateDraft).toHaveBeenCalledWith('user123', 'draft123', {
+        draftBody: 'Updated content',
+        replyAll: undefined,
+      });
       expect(mockRes.json).toHaveBeenCalledWith(mockUpdatedDraft);
     });
 
-    it('should return 400 if draftBody is missing', async () => {
+    it('should return 400 if neither draftBody nor replyAll is given', async () => {
       mockReq.params = { id: 'draft123' };
       mockReq.body = {};
 
@@ -225,8 +229,28 @@ describe('DraftController', () => {
 
       expect(mockRes.status).toHaveBeenCalledWith(400);
       expect(mockRes.json).toHaveBeenCalledWith({
-        error: 'draftBody is required',
+        error: 'draftBody or replyAll is required',
       });
+    });
+
+    it('updates only reply all', async () => {
+      mockReq.params = { id: 'draft123' };
+      mockReq.body = { replyAll: true };
+      (DraftService.updateDraft as unknown as Mock).mockResolvedValue({ id: 'draft123', replyAll: true });
+
+      await updateDraft(mockReq, mockRes as Response);
+
+      expect(DraftService.updateDraft).toHaveBeenCalledWith('user123', 'draft123', { draftBody: undefined, replyAll: true });
+    });
+
+    it.each([['a string', 'yes'], ['a number', 1]])('returns 400 when replyAll is %s', async (_label, replyAll) => {
+      mockReq.params = { id: 'draft123' };
+      mockReq.body = { replyAll };
+
+      await updateDraft(mockReq, mockRes as Response);
+
+      expect(mockRes.status).toHaveBeenCalledWith(400);
+      expect(DraftService.updateDraft).not.toHaveBeenCalled();
     });
   });
 

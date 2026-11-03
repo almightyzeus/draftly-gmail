@@ -24,12 +24,29 @@
         <!-- Who this goes to: visible before anything is approved or sent -->
         <dl class="meta">
           <dt>To</dt>
-          <dd>{{ draft.replyTo?.from || 'Unknown recipient (original email unavailable)' }}</dd>
+          <dd>{{ toLine || 'Unknown recipient (original email unavailable)' }}</dd>
+          @if (ccList.length) {
+            <dt>Cc</dt>
+            <dd>{{ ccList.join(', ') }}</dd>
+          }
           <dt>Subject</dt>
           <dd>{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '—' }}</dd>
           <dt>Tone</dt>
           <dd>{{ draft.tone | titlecase }} · created {{ draft.createdAt | date: 'MMM d, h:mm a' }}</dd>
         </dl>
+
+        @if (draft.canReplyAll && isEditable) {
+          <div class="reply-all">
+            <mat-slide-toggle
+              [checked]="!!draft.replyAll"
+              (change)="toggleReplyAll($event.checked, $event.source)"
+              [disabled]="isBusy()"
+            >
+              Reply all
+            </mat-slide-toggle>
+            <span class="muted hint">Copy everyone else on the original email.</span>
+          </div>
+        }
 
         <mat-form-field appearance="outline" class="full-width">
           <mat-label>Reply</mat-label>

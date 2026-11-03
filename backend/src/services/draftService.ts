@@ -6,7 +6,7 @@ import { OpenAIService } from './openaiService.js';
 import { GmailService } from './gmailService.js';
 import { ActivityLogService } from './activityLogService.js';
 import { UserPreference } from '../models/UserPreference.js';
-import { mailboxAddress, plainTextToHtml } from '../utils/mimeMessage.js';
+import { mailboxAddress, plainTextToHtml, replyRecipients, type ReplyRecipients } from '../utils/mimeMessage.js';
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 
 /**
@@ -24,18 +24,30 @@ export class DraftService {
   }
 
   /**
-   * The reply is addressed to the target message's From. Refuse when that is
-   * the user's own message/address, so a reply can never be sent to the user.
+   * The reply is addressed to the target message's Reply-To, or else its
+   * From. Refuse when that is only the user's own message/address, so a reply
+   * can never be sent to the user, and when there is no valid address at all.
    */
   private static async assertNotReplyingToSelf(userId: string, targetEmail: any): Promise<void> {
-    const recipient = mailboxAddress(targetEmail.from)?.toLowerCase();
+    const primary = replyRecipients(targetEmail, null, false).to;
     const ownAddress = (await GmailService.getSenderAddress(userId))?.toLowerCase();
+    const onlySelf =
+      !!ownAddress && primary.length > 0 && primary.every((mailbox) => mailboxAddress(mailbox)?.toLowerCase() === ownAddress);
 
-    if (targetEmail.direction === 'OUTBOUND' || (recipient && ownAddress && recipient === ownAddress)) {
+    if (targetEmail.direction === 'OUTBOUND' || onlySelf) {
       throw new ConflictError(
         'This reply would be sent to your own address. Reject it and generate a new draft from the message you received.'
       );
     }
+    if (primary.length === 0) {
+      throw new AppError('The original email has no valid address to reply to.', 422);
+    }
+  }
+
+  /** The To/Cc of a draft's reply (Reply-To aware; Cc only with reply all). */
+  private static async recipientsFor(userId: string, draft: any, targetEmail: any): Promise<ReplyRecipients> {
+    const ownAddress = await GmailService.getSenderAddress(userId);
+    return replyRecipients(targetEmail, ownAddress, !!draft.replyAll);
   }
 
   /** Parse a draft id from the URL; a malformed id is simply "not found". */
@@ -463,14 +475,24 @@ export class DraftService {
 
     const targets = targetIds.length
       ? await EmailMessage.find({ userId: new Types.ObjectId(userId), gmailMessageId: { $in: targetIds } })
-          .select('gmailMessageId from subject')
+          .select('gmailMessageId from to cc replyTo subject')
           .lean()
       : [];
     const byId = new Map(targets.map((email: any) => [email.gmailMessageId, email]));
+    const ownAddress = targets.length ? await GmailService.getSenderAddress(userId) : undefined;
 
     const shaped = list.map((draft) => {
       const target: any = byId.get(this.replyTargetId(draft));
-      return { ...draft, replyTo: target ? { from: target.from, subject: target.subject } : null };
+      if (!target) {
+        return { ...draft, replyTo: null, recipients: null, canReplyAll: false };
+      }
+      return {
+        ...draft,
+        replyTo: { from: target.from, subject: target.subject },
+        // Exactly who the reply goes to, shown before approving or sending.
+        recipients: replyRecipients(target, ownAddress, !!draft.replyAll),
+        canReplyAll: replyRecipients(target, ownAddress, true).cc.length > 0,
+      };
     });
     return Array.isArray(input) ? shaped : shaped[0];
   }
@@ -542,7 +564,11 @@ export class DraftService {
    * write is conditional, so an edit cannot land on a draft whose status
    * changed meanwhile or that is being (or has been) sent.
    */
-  static async updateDraft(userId: string, draftId: string, draftBody: string): Promise<any> {
+  static async updateDraft(
+    userId: string,
+    draftId: string,
+    changes: { draftBody?: string; replyAll?: boolean }
+  ): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
       const draftObjectId = this.toDraftObjectId(draftId);
@@ -564,8 +590,11 @@ export class DraftService {
         throw new ConflictError('This draft is being sent and can no longer be edited');
       }
 
+      const draftBody = changes.draftBody ?? draft.draftBody;
+      const replyAll = changes.replyAll ?? !!draft.replyAll;
+
       if (draft.status === 'APPROVED' && draft.gmailDraftId) {
-        await this.syncApprovedGmailDraft(userId, userObjectId, draft, draftBody);
+        await this.syncApprovedGmailDraft(userId, userObjectId, draft, draftBody, replyAll);
       }
 
       const updated = await Draft.findOneAndUpdate(
@@ -576,13 +605,13 @@ export class DraftService {
           sendIdempotencyKey: null,
         },
         {
-          $set: { draftBody },
+          $set: { draftBody, replyAll },
           $push: {
             auditTrail: {
               at: new Date(),
               action: 'EDITED',
               by: 'user',
-              meta: { bodyLength: draftBody.length },
+              meta: { bodyLength: draftBody.length, replyAll },
             },
           },
         },
@@ -596,6 +625,7 @@ export class DraftService {
       await this.logActivity(userId, 'DRAFT_EDITED', updated._id.toString(), {
         status: updated.status,
         bodyLength: draftBody.length,
+        replyAll,
       });
 
       logger.info({ userId, draftId }, 'Draft updated');
@@ -611,13 +641,15 @@ export class DraftService {
   }
 
   /**
-   * Push an edited body to the Gmail draft of an APPROVED draft, or fail.
+   * Push an edited body or recipients to the Gmail draft of an APPROVED draft,
+   * or fail.
    */
   private static async syncApprovedGmailDraft(
     userId: string,
     userObjectId: Types.ObjectId,
     draft: any,
-    draftBody: string
+    draftBody: string,
+    replyAll: boolean
   ): Promise<void> {
     const originalEmail = await EmailMessage.findOne({
       userId: userObjectId,
@@ -639,7 +671,7 @@ export class DraftService {
         userId,
         draft.gmailDraftId,
         draftBody,
-        originalEmail.from,
+        await this.recipientsFor(userId, { replyAll }, originalEmail),
         `Re: ${originalEmail.subject}`,
         draft.threadId,
         replyMetadata.inReplyTo,
@@ -702,7 +734,7 @@ export class DraftService {
 
       const gmailDraftId = await GmailService.createDraft(
         userId,
-        originalEmail.from,
+        await this.recipientsFor(userId, draft, originalEmail),
         `Re: ${originalEmail.subject}`,
         draft.draftBody,
         draft.threadId,
@@ -987,12 +1019,16 @@ export class DraftService {
         return;
       }
 
+      const ownAddress = await GmailService.getSenderAddress(userId);
+      const recipients = replyRecipients(originalEmail, ownAddress, !!draft.replyAll);
+
       await EmailMessage.create({
         userId: userObjectId,
         gmailMessageId: sentMessageId,
         threadId: draft.threadId,
-        from: originalEmail.to, // We sent to the original sender
-        to: originalEmail.from,
+        from: ownAddress || originalEmail.to,
+        to: recipients.to.join(', ') || originalEmail.from,
+        cc: recipients.cc.length ? recipients.cc.join(', ') : null,
         subject: `Re: ${originalEmail.subject}`,
         snippet: draft.draftBody.substring(0, 255),
         bodyPlain: draft.draftBody,

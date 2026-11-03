@@ -248,6 +248,73 @@ describe('DraftDetailComponent dialogs and navigation', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard'], { queryParams: { tab: 'drafts' } });
   });
 
+  describe('recipients and reply all', () => {
+    const groupDraft = {
+      ...approved,
+      status: 'PENDING',
+      replyAll: false,
+      canReplyAll: true,
+      recipients: { to: ['Support <support@example.com>'], cc: [] },
+    };
+    const allRecipients = { to: ['Support <support@example.com>'], cc: ['Bob <bob@example.com>', 'carol@example.com'] };
+
+    it('shows the API recipients, falling back to the original sender for older responses', () => {
+      const component = create({ getDraftDetail: vi.fn(() => of(groupDraft)) });
+      expect(component.toLine).toBe('Support <support@example.com>');
+      expect(component.ccList).toEqual([]);
+
+      const older = create({ getDraftDetail: vi.fn(() => of(approved)) });
+      expect(older.toLine).toBe('Alice <alice@example.com>');
+    });
+
+    it('switches to reply all, keeping unsaved edits, and lists the Cc in the send confirmation', () => {
+      const api = {
+        getDraftDetail: vi.fn(() => of(groupDraft)),
+        setReplyAll: vi.fn(() => of({ ...groupDraft, replyAll: true, recipients: allRecipients })),
+        sendDraft: vi.fn(() => of({ ...groupDraft, status: 'SENT' })),
+        updateDraft: vi.fn(() => of({ ...groupDraft, draftBody: 'Edited' })),
+      };
+      const component = create(api);
+      component.editedContent = 'Edited';
+      component.onContentChange();
+
+      component.toggleReplyAll(true);
+
+      expect(api.setReplyAll).toHaveBeenCalledWith('d1', true);
+      expect(component.ccList).toEqual(allRecipients.cc);
+      expect(component.editedContent).toBe('Edited');
+      expect(component.hasChanges).toBe(true);
+      expect(component.isBusy()).toBe(false);
+      expect(snackBar.open).toHaveBeenCalledWith('Reply all: everyone on the email is copied.', 'Close', expect.any(Object));
+
+      component.sendDraft();
+      expect(confirm.confirm).toHaveBeenCalledWith(
+        expect.objectContaining({
+          message: 'It will be sent to Support <support@example.com> (Cc: Bob <bob@example.com>, carol@example.com) from your Gmail account.',
+        })
+      );
+    });
+
+    it('flips the toggle back and shows the error when the change fails', () => {
+      const setGoogleConnected = vi.fn();
+      const api = {
+        getDraftDetail: vi.fn(() => of(groupDraft)),
+        setReplyAll: vi.fn(() => throwError(() => ({ status: 403, error: { error: 'Gmail access has expired' } }))),
+      };
+      const component = new DraftDetailComponent({ params: of({ id: 'd1' }) } as any, router, api as any, confirm, snackBar, { setGoogleConnected } as any);
+      component.ngOnInit();
+      const toggle = { checked: true };
+
+      component.toggleReplyAll(true, toggle);
+
+      expect(toggle.checked).toBe(false);
+      expect(component.actionError).toBe('Gmail access has expired');
+      expect(component.draft?.replyAll).toBe(false);
+      expect(setGoogleConnected).toHaveBeenCalledWith(false);
+      expect(component.isBusy()).toBe(false);
+    });
+  });
+
   it('rejects only after confirmation; withdrawing an approved draft says so', () => {
     const api = { getDraftDetail: vi.fn(() => of(approved)), rejectDraft: vi.fn(() => of({ ...approved, status: 'REJECTED' })) };
     confirm.confirm = vi.fn(() => of(false));

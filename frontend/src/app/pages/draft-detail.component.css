@@ -25,6 +25,13 @@
   overflow-wrap: anywhere;
 }
 
+.reply-all {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px 12px;
+}
+
 .actions {
   display: flex;
   flex-wrap: wrap;

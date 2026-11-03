@@ -68,6 +68,14 @@ export class DraftService {
   }
 
   /**
+   * Reply to the sender only, or to everyone on the original email (reply all).
+   * For an approved draft the backend updates the Gmail draft too.
+   */
+  setReplyAll(draftId: string, replyAll: boolean): Observable<any> {
+    return this.http.put<any>(`${this.draftsApiUrl}/${draftId}`, { replyAll });
+  }
+
+  /**
    * Approve a draft
    */
   approveDraft(draftId: string): Observable<any> {

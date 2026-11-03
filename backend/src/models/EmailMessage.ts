@@ -12,6 +12,10 @@ export interface IEmailMessage extends Document {
   threadId: string;
   from: string;
   to: string;
+  /** Cc header (reply all). Null when absent or cached before it was stored. */
+  cc?: string | null;
+  /** Reply-To header: where replies go instead of From. */
+  replyTo?: string | null;
   subject: string;
   snippet: string;
   bodyPlain: string;
@@ -40,6 +44,14 @@ const emailMessageSchema = new Schema<IEmailMessage>(
       default: null,
     },
     references: {
+      type: String,
+      default: null,
+    },
+    cc: {
+      type: String,
+      default: null,
+    },
+    replyTo: {
       type: String,
       default: null,
     },

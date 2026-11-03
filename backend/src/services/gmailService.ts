@@ -7,7 +7,7 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
-import { buildRawReply } from '../utils/mimeMessage.js';
+import { buildRawReply, type ReplyRecipients } from '../utils/mimeMessage.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 import { looksLikeHtml } from '../utils/htmlToText.js';
 
@@ -540,6 +540,8 @@ export class GmailService {
         subject: this.getHeader(headers, 'Subject') || '(No Subject)',
         from: this.getHeader(headers, 'From') || '',
         to: this.getHeader(headers, 'To') || '',
+        cc: this.getHeader(headers, 'Cc') || null,
+        replyTo: this.getHeader(headers, 'Reply-To') || null,
         snippet: message.snippet || '',
         bodyPlain,
         bodyHtml,
@@ -623,7 +625,7 @@ export class GmailService {
    */
   static async createDraft(
     userId: string,
-    to: string,
+    recipients: ReplyRecipients,
     subject: string,
     bodyHtml: string,
     threadId: string,
@@ -635,7 +637,8 @@ export class GmailService {
 
       const rawMessage = buildRawReply({
         from: account.gmailEmail,
-        to,
+        to: recipients.to,
+        cc: recipients.cc,
         subject,
         body: bodyHtml,
         inReplyTo,
@@ -674,7 +677,7 @@ export class GmailService {
     userId: string,
     gmailDraftId: string,
     bodyHtml: string,
-    to: string,
+    recipients: ReplyRecipients,
     subject: string,
     threadId: string,
     inReplyTo?: string,
@@ -685,7 +688,8 @@ export class GmailService {
 
       const rawMessage = buildRawReply({
         from: account.gmailEmail,
-        to,
+        to: recipients.to,
+        cc: recipients.cc,
         subject,
         body: bodyHtml,
         inReplyTo,
