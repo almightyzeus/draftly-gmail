@@ -3,18 +3,34 @@ import { ActivityLogService } from '../services/activityLogService.js';
 import { sendError } from '../utils/errors.js';
 import { logger } from '../utils/logger.js';
 
+/** Actions the activity screen can filter by (the ones the backend records). */
+export const LOG_ACTIONS = [
+  'DRAFT_GENERATED',
+  'DRAFT_EDITED',
+  'DRAFT_APPROVED',
+  'DRAFT_REJECTED',
+  'DRAFT_SUPERSEDED',
+  'DRAFT_SENT',
+];
+
 /**
- * Get activity logs for the current user
+ * Get activity logs for the current user, newest first. Optional `action`
+ * filter (one of LOG_ACTIONS); `total` counts the matching logs.
  */
 export const getUserLogs = async (req: any, res: Response) => {
   try {
     const userId = req.userId;
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 200);
     const skip = Math.max(parseInt(req.query.skip as string) || 0, 0);
+    const action = req.query.action;
+
+    if (action !== undefined && (typeof action !== 'string' || !LOG_ACTIONS.includes(action))) {
+      return res.status(400).json({ error: `action must be one of: ${LOG_ACTIONS.join(', ')}` });
+    }
 
     const [logs, total] = await Promise.all([
-      ActivityLogService.getUserActivityLogs(userId, limit, skip),
-      ActivityLogService.countUserActivityLogs(userId),
+      ActivityLogService.getUserActivityLogs(userId, limit, skip, action),
+      ActivityLogService.countUserActivityLogs(userId, action),
     ]);
 
     // total counts all of the user's logs, not just this page.

@@ -74,6 +74,10 @@ import { ConfirmService } from './confirm.service';
             <mat-icon>tune</mat-icon>
             <span>Preferences</span>
           </a>
+          <a mat-menu-item routerLink="/activity">
+            <mat-icon>history</mat-icon>
+            <span>Activity</span>
+          </a>
           <button mat-menu-item (click)="logout()">
             <mat-icon>logout</mat-icon>
             <span>Log out</span>

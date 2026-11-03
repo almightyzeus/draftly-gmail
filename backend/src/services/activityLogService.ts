@@ -36,15 +36,16 @@ export class ActivityLogService {
   }
 
   /**
-   * Get user's activity logs
+   * Get user's activity logs, newest first, optionally only one action.
    */
   static async getUserActivityLogs(
     userId: string,
     limit: number = 100,
-    skip: number = 0
+    skip: number = 0,
+    action?: string
   ): Promise<IActivityLog[]> {
     try {
-      const logs = await ActivityLog.find({ userId })
+      const logs = await ActivityLog.find({ userId, ...(action && { action }) })
         .sort({ createdAt: -1 })
         .limit(limit)
         .skip(skip)
@@ -58,11 +59,11 @@ export class ActivityLogService {
   }
 
   /**
-   * Count all of a user's activity logs (for pagination totals).
+   * Count a user's activity logs (for pagination totals), optionally only one action.
    */
-  static async countUserActivityLogs(userId: string): Promise<number> {
+  static async countUserActivityLogs(userId: string, action?: string): Promise<number> {
     try {
-      return await ActivityLog.countDocuments({ userId }).exec();
+      return await ActivityLog.countDocuments({ userId, ...(action && { action }) }).exec();
     } catch (error) {
       logger.error({ error, userId }, 'Failed to count activity logs');
       throw new InternalServerError('Failed to fetch activity logs');

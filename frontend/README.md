@@ -39,7 +39,7 @@ src/
   styles.css      # global design tokens and shared layout/state styles
   app/
     app.routes.ts # lazy-loaded routes
-    pages/        # login, register, dashboard (Inbox/Drafts), email detail, draft detail, preferences
+    pages/        # login, register, dashboard (Inbox/Drafts), email detail, draft detail, preferences, activity
     services/     # API clients, auth service, interceptor, guard
     shared/       # top bar, confirm dialog, formatting helpers
 ```

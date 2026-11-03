@@ -41,8 +41,8 @@ describe('LogController', () => {
 
       await getUserLogs(mockReq, mockRes as Response);
 
-      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 100, 0);
-      expect(ActivityLogService.countUserActivityLogs).toHaveBeenCalledWith('user123');
+      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 100, 0, undefined);
+      expect(ActivityLogService.countUserActivityLogs).toHaveBeenCalledWith('user123', undefined);
       // total is every log of the user, not the size of this page
       expect(mockRes.json).toHaveBeenCalledWith({ logs: mockLogs, total: 42 });
     });
@@ -56,7 +56,7 @@ describe('LogController', () => {
 
       await getUserLogs(mockReq, mockRes as Response);
 
-      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 50, 0);
+      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 50, 0, undefined);
     });
 
     it('should cap limit at 200', async () => {
@@ -68,7 +68,7 @@ describe('LogController', () => {
 
       await getUserLogs(mockReq, mockRes as Response);
 
-      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 200, 0);
+      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 200, 0, undefined);
     });
 
     it('should use skip parameter for pagination', async () => {
@@ -80,8 +80,32 @@ describe('LogController', () => {
 
       await getUserLogs(mockReq, mockRes as Response);
 
-      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 20, 40);
+      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 20, 40, undefined);
     });
+
+    it('filters by action, counting only the matching logs', async () => {
+      mockReq.query = { action: 'DRAFT_SENT', limit: '25', skip: '25' };
+      (ActivityLogService.getUserActivityLogs as unknown as Mock).mockResolvedValue([]);
+      (ActivityLogService.countUserActivityLogs as unknown as Mock).mockResolvedValue(3);
+
+      await getUserLogs(mockReq, mockRes as Response);
+
+      expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 25, 25, 'DRAFT_SENT');
+      expect(ActivityLogService.countUserActivityLogs).toHaveBeenCalledWith('user123', 'DRAFT_SENT');
+      expect(mockRes.json).toHaveBeenCalledWith({ logs: [], total: 3 });
+    });
+
+    it.each([['an unknown action', 'DROP_TABLE'], ['an operator object', { $ne: null }], ['a repeated parameter', ['DRAFT_SENT', 'DRAFT_EDITED']]])(
+      'returns 400 for %s',
+      async (_label, action) => {
+        mockReq.query = { action };
+
+        await getUserLogs(mockReq, mockRes as Response);
+
+        expect(mockRes.status).toHaveBeenCalledWith(400);
+        expect(ActivityLogService.getUserActivityLogs).not.toHaveBeenCalled();
+      }
+    );
 
     it('should handle errors during retrieval', async () => {
       mockReq.query = {};

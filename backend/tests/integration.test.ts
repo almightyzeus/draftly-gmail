@@ -168,6 +168,13 @@ describe('Integration workflows', () => {
     const logs = await request(app).get('/api/logs').set('Authorization', `Bearer ${token}`);
     expect(logs.status).toBe(200);
     expect(logs.body.logs.length).toBeGreaterThan(0);
+    // Newest first: sending was the last action.
+    expect(logs.body.logs[0]).toMatchObject({ action: 'DRAFT_SENT', entityType: 'Draft', entityId: draftId });
+
+    const sentOnly = await request(app).get('/api/logs?action=DRAFT_SENT').set('Authorization', `Bearer ${token}`);
+    expect(sentOnly.status).toBe(200);
+    expect(sentOnly.body.total).toBe(1);
+    expect(sentOnly.body.logs.map((log: any) => log.action)).toEqual(['DRAFT_SENT']);
   });
 
   it('rejects drafts and prevents cross-user access', async () => {

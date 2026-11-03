@@ -73,6 +73,7 @@ Frontend:
 - Email detail with AI draft generation
 - Draft detail with editing, To/Cc recipients, a **Reply all** switch, approve, reject, and send (with confirmation dialogs)
 - Preferences page (account menu → **Preferences**): default tone, signature, and number of style examples
+- Activity page (account menu → **Activity**): drafts generated, edited, approved, rejected, replaced and sent, newest first, with a filter by action, paging, and links to each draft
 
 ## Project Structure
 
@@ -467,9 +468,11 @@ Both endpoints return `{ "defaultTone", "signature", "learningEmailCount" }`. A 
 ### Logs
 
 ```http
-GET /api/logs?limit=100&skip=0
+GET /api/logs?limit=100&skip=0&action=DRAFT_SENT
 GET /api/logs/:entityType/:entityId
 ```
+
+`action` is optional: one of `DRAFT_GENERATED`, `DRAFT_EDITED`, `DRAFT_APPROVED`, `DRAFT_REJECTED`, `DRAFT_SUPERSEDED`, `DRAFT_SENT` (anything else returns 400). `limit` is 1–200 (default 100).
 
 Both return `{ "logs": [...], "total": <number> }`, newest first. `total` counts all matching logs, not just the returned page.
 
@@ -517,8 +520,8 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 23 | 410 passing | 96.36% | 86.54% | 98.65% | 96.36% |
-| Frontend | 6 | 117 passing | 95.27% | 81.20% | 95.42% | 95.77% |
+| Backend | 24 | 447 passing | 96.46% | 87.39% | 97.51% | 96.46% |
+| Frontend | 7 | 135 passing | 95.60% | 82.45% | 95.83% | 96.18% |
 
 Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
 
@@ -561,11 +564,10 @@ Some backend test output includes logged error stack traces from tests that exer
 - Refresh tokens are stateless JWTs: logout clears them in the browser, but a copied refresh token stays valid until it expires. Tokens are stored in `localStorage`.
 - Email HTML is sanitized and shown inline (not in a sandboxed iframe). Remote images are hidden until the user clicks **Show images**.
 - The OAuth `state` is signed and expiring but not tied to the browser that started the flow.
-- The Drafts tab shows the latest 50 drafts. Activity logs have an API but no frontend screen yet.
+- The Drafts tab shows the latest 50 drafts. Only draft actions are recorded in the activity log (not logins or Gmail connect/disconnect).
 
 ## Future Improvements
 
 - Cloud deployment (AWS/GCP/Azure) with production-grade secrets management
 - Automated deployment (CI already runs tests and the build)
-- Activity log screen
 - Server-side refresh-token revocation

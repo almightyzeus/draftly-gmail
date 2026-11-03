@@ -1,0 +1,82 @@
+<app-top-bar title="Activity" [showBack]="true" (back)="goBack()" />
+
+<main class="page-content page-content--narrow">
+  <mat-card appearance="outlined">
+    <mat-card-header>
+      <mat-card-title>Your activity</mat-card-title>
+      <mat-card-subtitle>Drafts generated, edited, approved and sent, newest first.</mat-card-subtitle>
+    </mat-card-header>
+
+    <mat-card-content>
+      <mat-chip-listbox
+        class="filters"
+        aria-label="Filter activity"
+        [value]="action"
+        (change)="setFilter($event.value)"
+        hideSingleSelectionIndicator
+      >
+        @for (filter of filters; track filter.value) {
+          <mat-chip-option [value]="filter.value" [selected]="filter.value === action">{{ filter.label }}</mat-chip-option>
+        }
+      </mat-chip-listbox>
+
+      @if (isLoading) {
+        <div class="state">
+          <mat-spinner diameter="40"></mat-spinner>
+          <p>Loading activity…</p>
+        </div>
+      } @else if (error) {
+        <div class="state state--error" role="alert">
+          <mat-icon>error_outline</mat-icon>
+          <p>{{ error }}</p>
+          <button mat-stroked-button (click)="load()">Try again</button>
+        </div>
+      } @else if (items.length === 0) {
+        <div class="state">
+          <mat-icon>history</mat-icon>
+          <p>
+            @if (action) {
+              No “{{ filterLabel }}” activity yet.
+            } @else {
+              No activity yet. Generate a draft from an email to get started.
+            }
+          </p>
+        </div>
+      } @else {
+        <ul class="activity-list">
+          @for (item of items; track item.log._id) {
+            <li class="activity" [class.activity--warn]="item.log.level !== 'info'">
+              <mat-icon class="activity-icon" aria-hidden="true">{{ item.icon }}</mat-icon>
+              <div class="activity-body">
+                <span>{{ item.title }}</span>
+                @if (item.detail) {
+                  <span class="muted activity-detail">{{ item.detail }}</span>
+                }
+              </div>
+              <time class="muted activity-detail" [attr.datetime]="item.log.createdAt">
+                {{ item.log.createdAt | date: 'MMM d, h:mm a' }}
+              </time>
+              @if (item.draftLink) {
+                <a mat-button [routerLink]="item.draftLink">Open draft</a>
+              }
+            </li>
+          }
+        </ul>
+
+        @if (total > pageSize) {
+          <nav class="pager" aria-label="Activity pages">
+            <button mat-stroked-button (click)="goToPage(pageIndex - 1)" [disabled]="pageIndex === 0">
+              <mat-icon>chevron_left</mat-icon>
+              Newer
+            </button>
+            <span class="muted">{{ rangeLabel }}</span>
+            <button mat-stroked-button (click)="goToPage(pageIndex + 1)" [disabled]="isLastPage">
+              Older
+              <mat-icon iconPositionEnd>chevron_right</mat-icon>
+            </button>
+          </nav>
+        }
+      }
+    </mat-card-content>
+  </mat-card>
+</main>

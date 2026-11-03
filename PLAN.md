@@ -14,19 +14,19 @@ No dependency upgrades and no commits unless explicitly approved.
 
 All six hardening stages (section 3) are complete. From the 2026-11-03 reconciliation, the P1
 items (section 5.1), quick-win Batch 1 (section 5.2), verification (5.3), F1 (the Preferences
-page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread context), F6 (reply all, `Reply-To`) and
-F7 (Gmail retries) (5.4) are done.
+page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread context), F5 (activity page), F6 (reply all,
+`Reply-To`) and F7 (Gmail retries) (5.4) are done: the feature backlog is complete.
 
 | Check | Result |
 |---|---|
 | Backend typecheck | `npx tsc --noEmit` clean |
-| Backend tests | 23 files, **410 passing** (`npm run test:ci`) |
-| Backend coverage | 96.36% statements, 86.54% branches, 98.65% functions, 96.36% lines |
+| Backend tests | 24 files, **447 passing** (`npm run test:ci`) |
+| Backend coverage | 96.46% statements, 87.39% branches, 97.51% functions, 96.46% lines |
 | Frontend dependencies | Clean `npm ci` from the lockfile: Angular 21.2.22, Material 21.2.14 (the local install had been a stale Angular 17) |
-| Frontend tests | 6 files, **117 passing** |
-| Frontend coverage | 95.27% statements, 81.20% branches, 95.42% functions, 95.77% lines |
+| Frontend tests | 7 files, **135 passing** |
+| Frontend coverage | 95.60% statements, 82.45% branches, 95.83% functions, 96.18% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
-| Production build | `ng build` passes; initial bundle 527.12 kB (only the 500 kB warning budget exceeded); Preferences page is a 7.39 kB lazy chunk |
+| Production build | `ng build` passes; initial bundle 527.41 kB (only the 500 kB warning budget exceeded); Preferences (7.39 kB) and Activity (74 kB, 10.4 kB gzipped) are lazy chunks |
 | CI | `.github/workflows/ci.yml` (GitHub Actions, Node from `.nvmrc`): every step passed in a clean checkout (fresh `npm ci`, no `.env`, placeholder env values) |
 | Docker | `docker compose up --build` run by the user on 2026-11-03 (images build on `node:20-alpine`); browser smoke test confirmed by the user |
 
@@ -177,7 +177,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | F2 | ~~**CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5.~~ | **Done** 2026-11-03: `.github/workflows/ci.yml` runs on pushes to `master`, pull requests and manual dispatch. Two parallel jobs on Node from `.nvmrc`: backend (`npm ci`, `tsc --noEmit`, `test:ci` with coverage thresholds, placeholder env values, cached MongoDB binary) and frontend (`npm ci`, app typecheck, `test:coverage`, `npm run build`). Coverage reports are uploaded as artifacts. Simulated locally in a clean worktree (Node 24.15); the first run on GitHub happens on the next push. | M |
 | F3 | ~~**Concurrent generation race**: two generations for the same thread can both create PENDING drafts.~~ | **Done** 2026-11-03: partial unique index `one_pending_draft_per_thread` (`{userId, threadId}` where `status: PENDING`). `DraftService.savePendingDraft` retires the current pending draft, inserts the new one, and restores the old one if the insert fails; on a duplicate key it reuses the winning draft when it matches the request (same tone, no context), otherwise replaces it (at most 3 attempts, then 409). Startup (`server.ts`) runs `enforceSinglePendingDraftPerThread()`: retires older duplicate PENDING drafts (newest kept, audit `SUPERSEDED` with `reason: duplicate_pending`), then builds the index. Integration tests send simultaneous requests; against the old code they returned 500s. | M |
 | F4 | ~~**Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`).~~ | **Done** 2026-11-03: `GmailService.syncThread` fetches the thread (`threads.get`, `format: full`, newest 50 messages) and caches it through `cacheMessage`, the same parsing/upsert the inbox listing now uses. `DraftService.generateDraft` syncs before choosing the reply target (thread requests) and before generating (single-message requests), so `OpenAIService` sees the whole thread without changes. A failed sync (not connected, 403, 429, 5xx) is logged and generation falls back to the cache; `invalid_grant` still marks Gmail disconnected. | M |
-| F5 | Activity-log screen. Low demo value. | `logRoutes.ts` | M |
+| F5 | ~~Activity-log screen.~~ | **Done** 2026-11-03: lazy, guarded `/activity` page (account menu → Activity): entries described in plain language (`shared/activity-format.ts`), filter chips by action, Newer/Older paging (25 per page, from the real `total`), links to each draft, loading/error/empty states; stale responses are ignored when filters change quickly. `GET /api/logs` accepts an optional `action` filter (whitelisted; `total` counts matching logs). A Material paginator was replaced by two buttons, shrinking the page chunk from 122 kB to 74 kB. | M |
 | F6 | ~~Reply-all and `Reply-To` support.~~ | **Done** 2026-11-03: `cacheMessage` stores `Cc` and `Reply-To`; `replyRecipients()` (`utils/mimeMessage.ts`) addresses To to `Reply-To` (else the sender) and, with the draft's `replyAll` flag, Cc to the other recipients, removing the user's address and duplicates (max 50). `buildRawReply` writes folded To/Cc lists; `PUT /api/drafts/:id` accepts `replyAll` (synced to the Gmail draft when approved); responses include `recipients` and `canReplyAll`; approve returns 409 when the only address is the user's and 422 without a valid address. The draft page shows To/Cc, a **Reply all** switch, and the Cc in the send confirmation. | M |
 | F7 | ~~Retry with backoff for transient Gmail failures.~~ | **Done** 2026-11-03: `utils/retry.ts` (`withRetry`, `parseRetryAfter`) and `GmailService.gmailCall` wrap all eight Gmail API calls: 3 attempts, 0.5 s/1 s backoff with jitter, `Retry-After` honoured up to 4 s (longer waits fail fast as 429). Rate limits (429, 403 `rateLimitExceeded`/`userRateLimitExceeded`) retry on every call; 408/5xx/network errors only on idempotent calls (`messages.list/get`, `threads.get`, `drafts.update/delete`), never on `drafts.create`/`drafts.send` (a repeat could duplicate a draft or a send). Before this, googleapis retried GET/PUT/DELETE silently, never POSTs or 403 rate limits; its retry is now off (`retry: false`) so attempts never multiply. Lasting 403 rate limits map to 429, lasting 5xx/network errors to 503. | M |
 

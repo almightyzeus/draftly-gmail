@@ -33,5 +33,10 @@ export const routes: Routes = [
     loadComponent: () => import('./pages/preferences.component').then((m) => m.PreferencesComponent),
     canActivate: [authGuard],
   },
+  {
+    path: 'activity',
+    loadComponent: () => import('./pages/activity.component').then((m) => m.ActivityComponent),
+    canActivate: [authGuard],
+  },
   { path: '**', redirectTo: 'dashboard' },
 ];
