@@ -8,6 +8,7 @@ import { CryptoService } from './cryptoService.js';
 import { logger } from '../utils/logger.js';
 import { AppError, ConflictError, ForbiddenError, NotFoundError, ValidationError } from '../utils/errors.js';
 import { buildRawReply, type ReplyRecipients } from '../utils/mimeMessage.js';
+import { parseRetryAfter, withRetry } from '../utils/retry.js';
 import { mapWithConcurrency } from '../utils/concurrency.js';
 import { looksLikeHtml } from '../utils/htmlToText.js';
 
@@ -147,7 +148,8 @@ export class GmailService {
       expiry_date: account.tokenExpiry.getTime(),
     });
 
-    return { gmail: google.gmail({ version: 'v1', auth: userClient }), account };
+    // retry: false — gmailCall owns retries, so attempts never multiply.
+    return { gmail: google.gmail({ version: 'v1', auth: userClient, retry: false }), account };
   }
 
   /**
@@ -263,12 +265,14 @@ export class GmailService {
 
       let listResponse;
       try {
-        listResponse = await gmail.users.messages.list({
-          userId: 'me',
-          q: query,
-          maxResults: options?.limit || 20,
-          ...(options?.pageToken && { pageToken: options.pageToken }),
-        });
+        listResponse = await this.gmailCall(userId, 'messages.list', true, () =>
+          gmail.users.messages.list({
+            userId: 'me',
+            q: query,
+            maxResults: options?.limit || 20,
+            ...(options?.pageToken && { pageToken: options.pageToken }),
+          })
+        );
       } catch (error) {
         throw await this.toListError(userId, error, !!(options?.q || options?.pageToken));
       }
@@ -284,11 +288,13 @@ export class GmailService {
       // (bounded, well within Gmail's per-user quota); results keep Gmail's order.
       const fetched = await mapWithConcurrency(messageIds, this.MESSAGE_FETCH_CONCURRENCY, async (msg) => {
         try {
-          const messageResponse = await gmail.users.messages.get({
-            userId: 'me',
-            id: msg.id!,
-            format: 'full',
-          });
+          const messageResponse = await this.gmailCall(userId, 'messages.get', true, () =>
+            gmail.users.messages.get({
+              userId: 'me',
+              id: msg.id!,
+              format: 'full',
+            })
+          );
 
           const emailDoc = await this.cacheMessage(userId, messageResponse.data, gmailEmail);
 
@@ -385,7 +391,8 @@ export class GmailService {
    * - invalid_grant: the refresh token is dead (expired in a "Testing" OAuth
    *   app, or revoked by the user). Gmail is marked disconnected and 403 is
    *   returned, so the UI prompts to reconnect instead of failing with a 500.
-   * - 429: Gmail rate limit.
+   * - Rate limits (429, or 403 rateLimitExceeded/userRateLimitExceeded): 429.
+   * - Gmail server errors and network failures (after retries): 503.
    * Anything else is returned unchanged.
    */
   private static async toGmailError(userId: string, error: any): Promise<unknown> {
@@ -396,10 +403,78 @@ export class GmailService {
       await this.markGmailDisconnected(userId);
       return new ForbiddenError('Gmail access has expired or was revoked. Please reconnect Gmail.');
     }
-    if (this.httpStatus(error) === 429) {
+    if (this.isRateLimited(error)) {
       return new AppError('Gmail rate limit exceeded. Please try again shortly.', 429);
     }
+    if (this.isServerOrNetworkError(error)) {
+      return new AppError('Gmail is temporarily unavailable. Please try again.', 503);
+    }
     return error;
+  }
+
+  /** Retry policy for Gmail API calls: 3 attempts, 0.5 s then 1 s backoff (with jitter), waits up to 4 s. */
+  static readonly RETRY = { attempts: 3, baseDelayMs: 500, maxDelayMs: 4_000 };
+  /** Wait between attempts (replaced in tests). */
+  static sleep = (ms: number) => new Promise<void>((resolve) => setTimeout(resolve, ms));
+
+  private static readonly RATE_LIMIT_REASONS = ['rateLimitExceeded', 'userRateLimitExceeded'];
+  private static readonly TRANSIENT_STATUSES = [408, 500, 502, 503, 504];
+  private static readonly NETWORK_ERROR_CODES = ['ECONNRESET', 'ETIMEDOUT', 'ECONNABORTED', 'EPIPE', 'EAI_AGAIN', 'ENETUNREACH', 'ESOCKETTIMEDOUT'];
+
+  /**
+   * Run one Gmail API request with retries for transient failures:
+   * - rate limits are retried for every call (Gmail rejected the request
+   *   without acting on it), honouring Retry-After up to RETRY.maxDelayMs;
+   * - server errors (408/5xx) and network failures are retried only for
+   *   `idempotent` calls. Creating or sending a draft is never repeated after
+   *   such a failure, because Gmail may already have done it.
+   * invalid_grant and other client errors are never retried.
+   */
+  private static gmailCall<T>(
+    userId: string,
+    operation: string,
+    idempotent: boolean,
+    request: () => Promise<T>
+  ): Promise<T> {
+    return withRetry(request, {
+      ...this.RETRY,
+      shouldRetry: (error) =>
+        !this.isInvalidGrant(error) &&
+        (this.isRateLimited(error) || (idempotent && this.isServerOrNetworkError(error))),
+      retryAfterMs: (error) => parseRetryAfter(this.responseHeader(error, 'retry-after')),
+      sleep: (ms) => this.sleep(ms),
+      onRetry: (error: any, attempt, delayMs) =>
+        logger.warn(
+          { userId, operation, attempt, delayMs, status: this.httpStatus(error) || error?.code },
+          'Transient Gmail error; retrying'
+        ),
+    });
+  }
+
+  private static isRateLimited(error: any): boolean {
+    const status = this.httpStatus(error);
+    if (status === 429) {
+      return true;
+    }
+    const reasons = [
+      ...(error?.response?.data?.error?.errors ?? []),
+      ...(Array.isArray(error?.errors) ? error.errors : []),
+    ].map((entry: any) => entry?.reason);
+    return status === 403 && reasons.some((reason) => this.RATE_LIMIT_REASONS.includes(reason));
+  }
+
+  private static isServerOrNetworkError(error: any): boolean {
+    return (
+      this.TRANSIENT_STATUSES.includes(this.httpStatus(error)) ||
+      this.NETWORK_ERROR_CODES.includes(String(error?.code ?? error?.cause?.code ?? ''))
+    );
+  }
+
+  /** A response header from a googleapis error (fetch Headers or a plain object). */
+  private static responseHeader(error: any, name: string): unknown {
+    const headers = error?.response?.headers;
+    if (!headers) return undefined;
+    return typeof headers.get === 'function' ? headers.get(name) : headers[name];
   }
 
   private static httpStatus(error: any): number {
@@ -492,12 +567,14 @@ export class GmailService {
     const gmail = await this.getGmailClient(userId);
     let response;
     try {
-      response = await gmail.users.messages.get({
-        userId: 'me',
-        id: gmailMessageId,
-        format: 'metadata',
-        metadataHeaders: ['Message-ID', 'References'],
-      });
+      response = await this.gmailCall(userId, 'messages.get', true, () =>
+        gmail.users.messages.get({
+          userId: 'me',
+          id: gmailMessageId,
+          format: 'metadata',
+          metadataHeaders: ['Message-ID', 'References'],
+        })
+      );
     } catch (error) {
       throw await this.toGmailError(userId, error);
     }
@@ -567,7 +644,9 @@ export class GmailService {
 
     let response;
     try {
-      response = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' });
+      response = await this.gmailCall(userId, 'threads.get', true, () =>
+        gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' })
+      );
     } catch (error) {
       throw await this.toGmailError(userId, error);
     }
@@ -647,15 +726,17 @@ export class GmailService {
       const encodedMessage = Buffer.from(rawMessage).toString('base64');
 
       // Create draft in Gmail
-      const response = await gmail.users.drafts.create({
-        userId: 'me',
-        requestBody: {
-          message: {
-            raw: encodedMessage,
-            threadId: threadId,
+      const response = await this.gmailCall(userId, 'drafts.create', false, () =>
+        gmail.users.drafts.create({
+          userId: 'me',
+          requestBody: {
+            message: {
+              raw: encodedMessage,
+              threadId: threadId,
+            },
           },
-        },
-      });
+        })
+      );
 
       const gmailDraftId = response.data.id;
       logger.info({ userId, gmailDraftId, threadId }, 'Draft created in Gmail');
@@ -698,16 +779,18 @@ export class GmailService {
       const encodedMessage = Buffer.from(rawMessage).toString('base64');
 
       // Update draft
-      await gmail.users.drafts.update({
-        userId: 'me',
-        id: gmailDraftId,
-        requestBody: {
-          message: {
-            raw: encodedMessage,
-            threadId: threadId,
+      await this.gmailCall(userId, 'drafts.update', true, () =>
+        gmail.users.drafts.update({
+          userId: 'me',
+          id: gmailDraftId,
+          requestBody: {
+            message: {
+              raw: encodedMessage,
+              threadId: threadId,
+            },
           },
-        },
-      });
+        })
+      );
 
       logger.info({ userId, gmailDraftId }, 'Draft updated in Gmail');
     } catch (error) {
@@ -732,12 +815,14 @@ export class GmailService {
       const gmail = await this.getGmailClient(userId);
 
       // Send the draft
-      const response = await gmail.users.drafts.send({
-        userId: 'me',
-        requestBody: {
-          id: gmailDraftId,
-        },
-      });
+      const response = await this.gmailCall(userId, 'drafts.send', false, () =>
+        gmail.users.drafts.send({
+          userId: 'me',
+          requestBody: {
+            id: gmailDraftId,
+          },
+        })
+      );
 
       const sentMessageId = response.data.id;
       logger.info({ userId, gmailDraftId, sentMessageId }, 'Draft sent via Gmail');
@@ -759,10 +844,12 @@ export class GmailService {
     try {
       const gmail = await this.getGmailClient(userId);
 
-      await gmail.users.drafts.delete({
-        userId: 'me',
-        id: gmailDraftId,
-      });
+      await this.gmailCall(userId, 'drafts.delete', true, () =>
+        gmail.users.drafts.delete({
+          userId: 'me',
+          id: gmailDraftId,
+        })
+      );
 
       logger.info({ userId, gmailDraftId }, 'Draft deleted from Gmail');
     } catch (error) {

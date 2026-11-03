@@ -301,8 +301,9 @@ Errors are JSON: `{ "error": "message" }`.
 | 409 | Invalid state: e.g. approving a non-pending draft, editing/sending a sent draft, a send already in progress, Gmail not connected, or a reply that would go to your own address |
 | 413 | Request body too large |
 | 422 | Nothing valid to reply to (e.g. a thread with no message from someone else) |
-| 429 | Rate limit (failed logins, draft generation, or Gmail on any call) |
+| 429 | Rate limit (failed logins, draft generation, or Gmail on any call, after retries) |
 | 502 | An upstream step failed: the Gmail draft could not be updated (edit not saved) or the AI returned an empty draft |
+| 503 | Gmail is temporarily unavailable (server or network errors that persisted through retries) |
 
 ### Auth
 
@@ -541,6 +542,7 @@ Some backend test output includes logged error stack traces from tests that exer
 - The backend separates routes, controllers (validation and status codes), services (business logic), models, middleware, and config. Services throw typed errors; one shared helper turns them into responses.
 - Drafts use explicit statuses: `PENDING`, `APPROVED`, `REJECTED`, and `SENT`. Sending is only allowed after approval.
 - Approval creates a Gmail draft, so the user can also inspect it in Gmail before sending. Unsaved edits are saved (and synced to Gmail) before approve or send, so what is sent is what is on screen.
+- Gmail calls retry transient failures (`gmailCall` in `GmailService`, `utils/retry.ts`): 3 attempts with exponential backoff and jitter (0.5 s, then 1 s), honouring `Retry-After` up to 4 s. Rate limits (429, or 403 `rateLimitExceeded`/`userRateLimitExceeded`) are retried for every call; server errors (408/5xx) and network errors only for calls that are safe to repeat (reads, draft update and delete). Creating or sending a draft is never repeated after such a failure, because Gmail may already have done it. The googleapis client's own retry is turned off so attempts never multiply.
 - Reply messages are built in one place: header values are stripped of line breaks, the recipient is reduced to a single parsed address, non-ASCII subjects are encoded, and bodies are base64-encoded.
 - A reply is never addressed to the user: reply targets are always messages from someone else, and approve/send refuse a draft whose recipient is the user's own address.
 - User style learning retrieves recent outbound emails and includes them (truncated) as examples in the OpenAI prompt.
@@ -565,6 +567,5 @@ Some backend test output includes logged error stack traces from tests that exer
 
 - Cloud deployment (AWS/GCP/Azure) with production-grade secrets management
 - Automated deployment (CI already runs tests and the build)
-- Retry with backoff for transient Gmail failures
 - Activity log screen
 - Server-side refresh-token revocation

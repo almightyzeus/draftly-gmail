@@ -14,8 +14,8 @@ No dependency upgrades and no commits unless explicitly approved.
 
 All six hardening stages (section 3) are complete. From the 2026-11-03 reconciliation, the P1
 items (section 5.1), quick-win Batch 1 (section 5.2), verification (5.3), F1 (the Preferences
-page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread context) and F6 (reply all, `Reply-To`)
-(5.4) are done.
+page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread context), F6 (reply all, `Reply-To`) and
+F7 (Gmail retries) (5.4) are done.
 
 | Check | Result |
 |---|---|
@@ -179,7 +179,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | F4 | ~~**Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`).~~ | **Done** 2026-11-03: `GmailService.syncThread` fetches the thread (`threads.get`, `format: full`, newest 50 messages) and caches it through `cacheMessage`, the same parsing/upsert the inbox listing now uses. `DraftService.generateDraft` syncs before choosing the reply target (thread requests) and before generating (single-message requests), so `OpenAIService` sees the whole thread without changes. A failed sync (not connected, 403, 429, 5xx) is logged and generation falls back to the cache; `invalid_grant` still marks Gmail disconnected. | M |
 | F5 | Activity-log screen. Low demo value. | `logRoutes.ts` | M |
 | F6 | ~~Reply-all and `Reply-To` support.~~ | **Done** 2026-11-03: `cacheMessage` stores `Cc` and `Reply-To`; `replyRecipients()` (`utils/mimeMessage.ts`) addresses To to `Reply-To` (else the sender) and, with the draft's `replyAll` flag, Cc to the other recipients, removing the user's address and duplicates (max 50). `buildRawReply` writes folded To/Cc lists; `PUT /api/drafts/:id` accepts `replyAll` (synced to the Gmail draft when approved); responses include `recipients` and `canReplyAll`; approve returns 409 when the only address is the user's and 422 without a valid address. The draft page shows To/Cc, a **Reply all** switch, and the Cc in the send confirmation. | M |
-| F7 | Retry with backoff for transient Gmail failures. | — | M |
+| F7 | ~~Retry with backoff for transient Gmail failures.~~ | **Done** 2026-11-03: `utils/retry.ts` (`withRetry`, `parseRetryAfter`) and `GmailService.gmailCall` wrap all eight Gmail API calls: 3 attempts, 0.5 s/1 s backoff with jitter, `Retry-After` honoured up to 4 s (longer waits fail fast as 429). Rate limits (429, 403 `rateLimitExceeded`/`userRateLimitExceeded`) retry on every call; 408/5xx/network errors only on idempotent calls (`messages.list/get`, `threads.get`, `drafts.update/delete`), never on `drafts.create`/`drafts.send` (a repeat could duplicate a draft or a send). Before this, googleapis retried GET/PUT/DELETE silently, never POSTs or 403 rate limits; its retry is now off (`retry: false`) so attempts never multiply. Lasting 403 rate limits map to 429, lasting 5xx/network errors to 503. | M |
 
 ### 5.5 Needs approval (dependency changes)
 

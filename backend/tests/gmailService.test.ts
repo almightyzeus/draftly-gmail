@@ -58,6 +58,8 @@ describe('GmailService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.spyOn(CryptoService, 'decryptToken').mockReturnValue('token');
+    // Retries wait between attempts; no real waiting in tests.
+    vi.spyOn(GmailService, 'sleep').mockResolvedValue(undefined);
     (GmailAccount.findOne as unknown as Mock).mockResolvedValue(account);
     
     // Default mock for createOAuth2Client - returns a mock client with credentials property and 'on' method
@@ -604,13 +606,16 @@ describe('GmailService', () => {
       expect(GmailAccount.updateMany).not.toHaveBeenCalled();
     });
 
-    it('maps a Gmail 429 to a 429 error and passes other failures through', async () => {
-      list.mockRejectedValueOnce(Object.assign(new Error('Rate limited'), { response: { status: 429 } }));
+    it('maps a lasting Gmail 429 to a 429 error and passes other failures through', async () => {
+      list.mockRejectedValue(Object.assign(new Error('Rate limited'), { response: { status: 429 } }));
       await expect(GmailService.fetchEmails(userId, {})).rejects.toMatchObject({ statusCode: 429 });
+      expect(list).toHaveBeenCalledTimes(GmailService.RETRY.attempts);
 
-      const boom = Object.assign(new Error('Backend error'), { code: 500 });
-      list.mockRejectedValueOnce(boom);
+      list.mockReset();
+      const boom = Object.assign(new Error('Not found'), { response: { status: 404 } });
+      list.mockRejectedValue(boom);
       await expect(GmailService.fetchEmails(userId, {})).rejects.toBe(boom);
+      expect(list).toHaveBeenCalledTimes(1);
     });
   });
 
@@ -664,14 +669,95 @@ describe('GmailService', () => {
       });
     });
 
-    it.each(operations)('%s: a Gmail 429 becomes a 429, other failures pass through', async (_name, run, apiCall) => {
-      apiCall.mockRejectedValueOnce(Object.assign(new Error('Rate limited'), { response: { status: 429 } }));
+    it.each(operations)('%s: a lasting Gmail 429 becomes a 429 after retries; client errors pass through', async (_name, run, apiCall) => {
+      apiCall.mockRejectedValue(Object.assign(new Error('Rate limited'), { response: { status: 429 } }));
       await expect(run()).rejects.toMatchObject({ statusCode: 429 });
+      expect(apiCall).toHaveBeenCalledTimes(GmailService.RETRY.attempts);
 
-      const boom = Object.assign(new Error('Backend error'), { code: 500 });
-      apiCall.mockRejectedValueOnce(boom);
+      apiCall.mockReset();
+      const boom = Object.assign(new Error('Not found'), { response: { status: 404 } });
+      apiCall.mockRejectedValue(boom);
       await expect(run()).rejects.toBe(boom);
+      expect(apiCall).toHaveBeenCalledTimes(1);
       expect(GmailAccount.updateMany).not.toHaveBeenCalled();
+    });
+
+    describe('retries (F7)', () => {
+      const status = (code: number, extra: Record<string, any> = {}) =>
+        Object.assign(new Error(`HTTP ${code}`), { response: { status: code, ...extra } });
+      const rateLimit403 = (reason: string) =>
+        status(403, { data: { error: { code: 403, errors: [{ reason }] } } });
+      const idempotentOps = operations.filter(([name]) => !['createDraft', 'sendDraft'].includes(name));
+      const nonIdempotentOps = operations.filter(([name]) => ['createDraft', 'sendDraft'].includes(name));
+      const ok = (apiCall: Mock) => apiCall.mockResolvedValueOnce({ data: { id: 'ok', payload: { headers: [{ name: 'Message-ID', value: '<m@x>' }] } } });
+
+      it.each(operations)('%s: retries a rate limit and then succeeds', async (_name, run, apiCall) => {
+        apiCall.mockRejectedValueOnce(status(429)).mockRejectedValueOnce(rateLimit403('userRateLimitExceeded'));
+        ok(apiCall);
+
+        await expect(run()).resolves.not.toBeInstanceOf(Error);
+        expect(apiCall).toHaveBeenCalledTimes(3);
+        expect(GmailService.sleep).toHaveBeenCalledTimes(2);
+      });
+
+      it.each(idempotentOps)('%s: retries Gmail server and network errors', async (_name, run, apiCall) => {
+        apiCall.mockRejectedValueOnce(status(503)).mockRejectedValueOnce(Object.assign(new Error('socket hang up'), { code: 'ECONNRESET' }));
+        ok(apiCall);
+
+        await expect(run()).resolves.not.toBeInstanceOf(Error);
+        expect(apiCall).toHaveBeenCalledTimes(3);
+      });
+
+      it.each(idempotentOps)('%s: a lasting server error becomes a 503 after all attempts', async (_name, run, apiCall) => {
+        apiCall.mockRejectedValue(status(500));
+
+        await expect(run()).rejects.toMatchObject({ statusCode: 503, message: 'Gmail is temporarily unavailable. Please try again.' });
+        expect(apiCall).toHaveBeenCalledTimes(GmailService.RETRY.attempts);
+      });
+
+      it.each(nonIdempotentOps)('%s: never repeats the request after a server error (it may already have happened)', async (_name, run, apiCall) => {
+        apiCall.mockRejectedValue(status(500));
+
+        await expect(run()).rejects.toMatchObject({ statusCode: 503 });
+        expect(apiCall).toHaveBeenCalledTimes(1);
+        expect(GmailService.sleep).not.toHaveBeenCalled();
+      });
+
+      it.each(operations)('%s: never retries invalid_grant or other client errors', async (_name, run, apiCall) => {
+        apiCall.mockRejectedValue(invalidGrant());
+        await expect(run()).rejects.toMatchObject({ statusCode: 403 });
+        expect(apiCall).toHaveBeenCalledTimes(1);
+
+        apiCall.mockReset();
+        apiCall.mockRejectedValue(rateLimit403('insufficientPermissions'));
+        await expect(run()).rejects.toThrow('HTTP 403');
+        expect(apiCall).toHaveBeenCalledTimes(1);
+      });
+
+      it('waits as long as Retry-After asks, but gives up when it asks for more than the cap', async () => {
+        const headers = new Headers({ 'retry-after': '2' });
+        drafts.send.mockRejectedValueOnce(status(429, { headers })).mockResolvedValueOnce({ data: { id: 'sent-1' } });
+        await expect(GmailService.sendDraft(userId, 'gd-1', 'thread-1')).resolves.toBe('sent-1');
+        expect(GmailService.sleep).toHaveBeenCalledWith(2000);
+
+        drafts.send.mockReset();
+        drafts.send.mockRejectedValue(status(429, { headers: { 'retry-after': '60' } }));
+        await expect(GmailService.sendDraft(userId, 'gd-1', 'thread-1')).rejects.toMatchObject({ statusCode: 429 });
+        expect(drafts.send).toHaveBeenCalledTimes(1);
+      });
+
+      it('maps a lasting 403 rate limit to 429', async () => {
+        drafts.update.mockRejectedValue(rateLimit403('rateLimitExceeded'));
+        await expect(
+          GmailService.updateDraft(userId, 'gd-1', 'Body', { to: ['a@example.com'], cc: [] }, 'Re: Hi', 'thread-1')
+        ).rejects.toMatchObject({ statusCode: 429 });
+      });
+
+      it('builds the Gmail client with googleapis retries off, so attempts never multiply', async () => {
+        drafts.delete.mockResolvedValue({});
+        await GmailService.deleteDraft(userId, 'gd-1');
+        expect(mocks.gmail).toHaveBeenCalledWith(expect.objectContaining({ version: 'v1', retry: false }));
+      });
     });
 
     it('loads the Gmail account once and sends From the connected address', async () => {
