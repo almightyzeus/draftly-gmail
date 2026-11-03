@@ -25,7 +25,7 @@ items (section 5.1) and quick-win Batch 1 (section 5.2) are fixed.
 | Frontend coverage | 94.84% statements, 82.62% branches, 94.83% functions, 95.4% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
 | Production build | `ng build` passes; initial bundle 527.00 kB (only the 500 kB warning budget exceeded) |
-| Docker | Not re-run since 2026-10-04 |
+| Docker | `docker compose up --build` run by the user on 2026-11-03 (images build on `node:20-alpine`); browser smoke test confirmed by the user |
 
 Verified on Node 24.15 (supported by Angular 21); no Node version manager is installed on this
 machine, so the pinned 20.19.5 was not re-tested.
@@ -158,13 +158,13 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | Q5 | `fetchEmails`, `createDraft` and `updateDraft` loaded the Gmail account twice; the cached copy of a sent reply stored raw text as `bodyHtml`. | One account lookup (`getGmailContext`); sent copy stores the same escaped HTML as the sent message. |
 | Q6 | `.env.example` listed only the `gmail.modify` scope. | Lists `gmail.readonly`, `gmail.modify`, `gmail.send`. |
 
-### 5.3 Verification — pending
+### 5.3 Verification — **done 2026-11-03**
 
 | # | Item | Size |
 |---|---|---|
 | V1 | ~~Clean `npm ci` in `frontend/` (stale Angular 17 install).~~ | **Done** 2026-11-03 |
-| V2 | Re-run everything on the pinned Node 20.19.5 (no Node version manager on the dev machine; verified on Node 24.15 only) and `docker compose up --build`. | S |
-| V3 | Browser smoke test: connect Gmail, cancel on Google's screen (expect the dashboard message), then generate (default tone preselected), approve and send one real reply. | S |
+| V2 | ~~`docker compose up --build`, building on Node 20.~~ | **Done** 2026-11-03 (run by the user). Both images build on `node:20-alpine`; the test suites themselves have only run on Node 24.15 (no Node version manager on the dev machine). |
+| V3 | ~~Browser smoke test: connect Gmail, cancel on Google's screen, generate, approve and send one real reply.~~ | **Done** 2026-11-03 (confirmed by the user). |
 
 ### 5.4 Features — not started
 
