@@ -58,6 +58,30 @@ export class ActivityLogService {
   }
 
   /**
+   * Count all of a user's activity logs (for pagination totals).
+   */
+  static async countUserActivityLogs(userId: string): Promise<number> {
+    try {
+      return await ActivityLog.countDocuments({ userId }).exec();
+    } catch (error) {
+      logger.error({ error, userId }, 'Failed to count activity logs');
+      throw new InternalServerError('Failed to fetch activity logs');
+    }
+  }
+
+  /**
+   * Count the activity logs of one entity.
+   */
+  static async countEntityLogs(userId: string, entityType: string, entityId: string): Promise<number> {
+    try {
+      return await ActivityLog.countDocuments({ userId, entityType, entityId }).exec();
+    } catch (error) {
+      logger.error({ error, userId, entityType, entityId }, 'Failed to count entity logs');
+      throw new InternalServerError('Failed to fetch entity logs');
+    }
+  }
+
+  /**
    * Get logs for specific entity
    */
   static async getEntityLogs(

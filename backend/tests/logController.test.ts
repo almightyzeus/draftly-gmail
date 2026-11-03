@@ -37,11 +37,14 @@ describe('LogController', () => {
       ];
 
       (ActivityLogService.getUserActivityLogs as unknown as Mock).mockResolvedValue(mockLogs);
+      (ActivityLogService.countUserActivityLogs as unknown as Mock).mockResolvedValue(42);
 
       await getUserLogs(mockReq, mockRes as Response);
 
       expect(ActivityLogService.getUserActivityLogs).toHaveBeenCalledWith('user123', 100, 0);
-      expect(mockRes.json).toHaveBeenCalledWith({ logs: mockLogs, total: mockLogs.length });
+      expect(ActivityLogService.countUserActivityLogs).toHaveBeenCalledWith('user123');
+      // total is every log of the user, not the size of this page
+      expect(mockRes.json).toHaveBeenCalledWith({ logs: mockLogs, total: 42 });
     });
 
     it('should get user logs with custom limit', async () => {
@@ -104,11 +107,13 @@ describe('LogController', () => {
       ];
 
       (ActivityLogService.getEntityLogs as unknown as Mock).mockResolvedValue(mockLogs);
+      (ActivityLogService.countEntityLogs as unknown as Mock).mockResolvedValue(7);
 
       await getEntityLogs(mockReq, mockRes as Response);
 
       expect(ActivityLogService.getEntityLogs).toHaveBeenCalledWith('user123', 'draft', 'draft123', 50);
-      expect(mockRes.json).toHaveBeenCalledWith({ logs: mockLogs, total: mockLogs.length });
+      expect(ActivityLogService.countEntityLogs).toHaveBeenCalledWith('user123', 'draft', 'draft123');
+      expect(mockRes.json).toHaveBeenCalledWith({ logs: mockLogs, total: 7 });
     });
 
     it('should get entity logs with custom limit', async () => {

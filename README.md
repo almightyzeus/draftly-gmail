@@ -384,6 +384,8 @@ Generate draft body (send `threadId` for a consolidated reply, or `gmailMessageI
 }
 ```
 
+`tone` is optional (`formal`, `concise` or `friendly`). Without it, the user's `defaultTone` preference is used (`formal` if none is stored), and the email page preselects that tone.
+
 The reply always targets a message from someone else: the unread incoming messages in the thread, or otherwise the latest incoming message — never your own messages. Generation is limited to 10 requests per minute per user.
 
 A thread has at most one `PENDING` draft:
@@ -443,7 +445,7 @@ Update preferences body:
 }
 ```
 
-`signature` is at most 1000 characters; `learningEmailCount` is an integer from 1 to 20.
+`signature` is at most 1000 characters; `learningEmailCount` is an integer from 1 to 20. `defaultTone` is used whenever a draft is generated without a tone.
 
 ### Logs
 
@@ -451,6 +453,8 @@ Update preferences body:
 GET /api/logs?limit=100&skip=0
 GET /api/logs/:entityType/:entityId
 ```
+
+Both return `{ "logs": [...], "total": <number> }`, newest first. `total` counts all matching logs, not just the returned page.
 
 ## Data Models
 
@@ -494,8 +498,8 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 23 | 366 passing | 96.23% | 85.42% | 99.24% | 96.23% |
-| Frontend | 5 | 91 passing | 94.05% | 81.64% | 93.91% | 94.6% |
+| Backend | 23 | 374 passing | 96.24% | 85.67% | 98.52% | 96.24% |
+| Frontend | 5 | 100 passing | 94.84% | 82.62% | 94.83% | 95.4% |
 
 Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
 
@@ -538,8 +542,6 @@ Some backend test output includes logged error stack traces from tests that exer
 - Email HTML is sanitized and shown inline (not in a sandboxed iframe). Remote images are hidden until the user clicks **Show images**.
 - The OAuth `state` is signed and expiring but not tied to the browser that started the flow.
 - The Drafts tab shows the latest 50 drafts. Preferences and activity logs have APIs but no frontend screens yet.
-- The `defaultTone` preference is stored but not yet applied: generation defaults to `formal` unless a tone is sent.
-- When an approve, edit or send finds that Gmail access has expired, the page shows the reconnect message, but the top bar only switches to **Connect Gmail** after the next inbox load or page reload.
 
 ## Future Improvements
 

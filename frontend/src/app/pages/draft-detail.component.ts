@@ -11,6 +11,7 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable, filter, of, switchMap, tap } from 'rxjs';
 import { DraftService } from '../services/draft.service';
+import { AuthService } from '../services/auth.service';
 import { ConfirmService } from '../shared/confirm.service';
 import { TopBarComponent } from '../shared/top-bar.component';
 
@@ -68,7 +69,8 @@ export class DraftDetailComponent implements OnInit {
     private router: Router,
     private draftService: DraftService,
     private confirmService: ConfirmService,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private authService: AuthService
   ) {}
 
   /** Only PENDING and APPROVED drafts can still be edited or acted on. */
@@ -122,6 +124,7 @@ export class DraftDetailComponent implements OnInit {
       },
       error: (error) => {
         console.error('Failed to save draft:', error);
+        this.noteGmailAccessLost(error);
         this.actionError = error?.error?.error || 'Failed to save draft';
         this.isSaving.set(false);
       },
@@ -163,6 +166,7 @@ export class DraftDetailComponent implements OnInit {
         },
         error: (error) => {
           console.error('Failed to approve draft:', error);
+          this.noteGmailAccessLost(error);
           this.actionError =
             error?.error?.error || 'Failed to approve draft. Please confirm Gmail is connected and try again.';
           this.isApproving.set(false);
@@ -203,6 +207,7 @@ export class DraftDetailComponent implements OnInit {
         },
         error: (error) => {
           console.error('Failed to reject draft:', error);
+          this.noteGmailAccessLost(error);
           this.actionError = error?.error?.error || 'Failed to reject draft';
           this.isRejecting.set(false);
         },
@@ -246,6 +251,7 @@ export class DraftDetailComponent implements OnInit {
             },
             error: (error) => {
               console.error('Failed to send draft:', error);
+              this.noteGmailAccessLost(error);
               this.actionError = 'Failed to send draft: ' + (error?.error?.error || error.message);
               this.isSending.set(false);
             },
@@ -279,6 +285,17 @@ export class DraftDetailComponent implements OnInit {
 
   private backToDrafts(): void {
     this.router.navigate(['/dashboard'], { queryParams: { tab: 'drafts' } });
+  }
+
+  /**
+   * A 403 from a draft action means the backend found the Gmail grant expired
+   * or revoked and disconnected it. Update the shared user state so the top
+   * bar (and the dashboard) switch to "Connect Gmail" right away.
+   */
+  private noteGmailAccessLost(error: any): void {
+    if (error?.status === 403) {
+      this.authService.setGoogleConnected(false);
+    }
   }
 
   private notify(message: string): void {

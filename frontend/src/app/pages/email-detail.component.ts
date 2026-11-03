@@ -13,6 +13,7 @@ import { MatDividerModule } from '@angular/material/divider';
 import { DomSanitizer } from '@angular/platform-browser';
 import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
+import { PreferenceService } from '../services/preference.service';
 import { TopBarComponent } from '../shared/top-bar.component';
 import { blockRemoteImages } from '../shared/email-html';
 
@@ -54,6 +55,8 @@ export class EmailDetailComponent implements OnInit {
   isLoading = true;
   isGenerating = false;
   selectedTone = 'formal';
+  /** Set once the user picks a tone, so a late preference load never overrides it. */
+  private toneChosen = false;
   customContext = '';
   toneOptions = ['formal', 'concise', 'friendly'];
   /** Failure to load the email (replaces the page content). */
@@ -72,10 +75,12 @@ export class EmailDetailComponent implements OnInit {
     private router: Router,
     private gmailService: GmailService,
     private draftService: DraftService,
-    private sanitizer: DomSanitizer
+    private sanitizer: DomSanitizer,
+    private preferenceService: PreferenceService
   ) {}
 
   ngOnInit(): void {
+    this.loadDefaultTone();
     this.route.params.subscribe((params) => {
       const gmailMessageId = params['gmailMessageId'];
       if (gmailMessageId) {
@@ -133,6 +138,23 @@ export class EmailDetailComponent implements OnInit {
           this.isGenerating = false;
         },
       });
+  }
+
+  /** Preselect the user's default tone (from preferences); 'formal' if unavailable. */
+  private loadDefaultTone(): void {
+    this.preferenceService.getPreferences().subscribe({
+      next: (preferences) => {
+        if (!this.toneChosen && this.toneOptions.includes(preferences?.defaultTone)) {
+          this.selectedTone = preferences.defaultTone;
+        }
+      },
+      // Not critical: keep the 'formal' default.
+      error: () => undefined,
+    });
+  }
+
+  onToneChange(): void {
+    this.toneChosen = true;
   }
 
   /** Load the remote images of this email (the sender may learn it was opened). */

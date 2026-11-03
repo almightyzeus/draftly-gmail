@@ -96,9 +96,17 @@ export class GmailService {
 
   /**
    * Get Gmail client with user's credentials
-   * Sets up a token refresh listener that persists refreshed credentials after Google's API call
    */
   private static async getGmailClient(userId: string) {
+    return (await this.getGmailContext(userId)).gmail;
+  }
+
+  /**
+   * Gmail client plus the active account it was built from, so callers that
+   * also need the account (e.g. its address) don't load it a second time.
+   * Sets up a token refresh listener that persists refreshed credentials after Google's API call
+   */
+  private static async getGmailContext(userId: string) {
     const userObjectId = new Types.ObjectId(userId);
     const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
     if (!account) {
@@ -139,7 +147,7 @@ export class GmailService {
       expiry_date: account.tokenExpiry.getTime(),
     });
 
-    return google.gmail({ version: 'v1', auth: userClient });
+    return { gmail: google.gmail({ version: 'v1', auth: userClient }), account };
   }
 
   /**
@@ -248,14 +256,7 @@ export class GmailService {
     }
   ): Promise<{ emails: any[]; nextPageToken: string | null }> {
     try {
-      const gmail = await this.getGmailClient(userId);
-      const userObjectId = new Types.ObjectId(userId);
-      const account = await GmailAccount.findOne({ userId: userObjectId, revokedAt: null });
-
-      if (!account) {
-        throw new ConflictError('Gmail account not connected');
-      }
-
+      const { gmail, account } = await this.getGmailContext(userId);
       const gmailEmail = account.gmailEmail;
 
       const query = this.buildListQuery(options);
@@ -604,10 +605,10 @@ export class GmailService {
     references?: string
   ): Promise<string> {
     try {
-      const gmail = await this.getGmailClient(userId);
+      const { gmail, account } = await this.getGmailContext(userId);
 
       const rawMessage = buildRawReply({
-        from: await this.getSenderAddress(userId),
+        from: account.gmailEmail,
         to,
         subject,
         body: bodyHtml,
@@ -654,10 +655,10 @@ export class GmailService {
     references?: string
   ): Promise<void> {
     try {
-      const gmail = await this.getGmailClient(userId);
+      const { gmail, account } = await this.getGmailContext(userId);
 
       const rawMessage = buildRawReply({
-        from: await this.getSenderAddress(userId),
+        from: account.gmailEmail,
         to,
         subject,
         body: bodyHtml,

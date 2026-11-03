@@ -41,7 +41,7 @@ export const generateDraft = async (req: any, res: Response) => {
     }
 
     const validTones = ['formal', 'concise', 'friendly'];
-    if (tone && !validTones.includes(tone)) {
+    if (tone !== undefined && tone !== '' && !validTones.includes(tone)) {
       return res.status(400).json({
         error: `Invalid tone. Must be one of: ${validTones.join(', ')}`,
       });
@@ -50,7 +50,8 @@ export const generateDraft = async (req: any, res: Response) => {
     const draft = await DraftService.generateDraft(
       userId,
       gmailMessageId,
-      tone || 'formal',
+      // No tone: the service uses the user's defaultTone preference.
+      tone || undefined,
       threadId,
       customContext
     );

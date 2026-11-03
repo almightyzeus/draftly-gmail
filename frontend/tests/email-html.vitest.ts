@@ -51,7 +51,8 @@ describe('EmailDetailComponent remote images', () => {
       { navigate: vi.fn() } as any,
       gmail as any,
       {} as any,
-      sanitizer as any
+      sanitizer as any,
+      { getPreferences: vi.fn(() => of({ defaultTone: 'formal' })) } as any
     );
     component.ngOnInit();
     return component;

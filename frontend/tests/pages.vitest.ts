@@ -19,6 +19,10 @@ function queryRoute(params: Record<string, string> = {}) {
   return { snapshot: { queryParamMap: { get: (key: string) => params[key] ?? null } } };
 }
 const draftsApi = { getDrafts: vi.fn(() => of([])) };
+/** AuthService double for DraftDetail (Gmail access lost -> shared state). */
+const draftAuth = { setGoogleConnected: vi.fn() };
+/** PreferenceService double for EmailDetail. */
+const prefsWith = (defaultTone = 'formal') => ({ getPreferences: vi.fn(() => of({ defaultTone, signature: '', learningEmailCount: 5 })) });
 
 describe('frontend page classes', () => {
   beforeEach(() => {
@@ -432,7 +436,7 @@ describe('frontend page classes', () => {
     const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 'thread-1', bodyPlain: 'Hi' })) };
     const draft = { generateThreadDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1' })) };
     const sanitizer = { sanitize: vi.fn() };
-    const component = new EmailDetailComponent(route as any, router as any, gmail as any, draft as any, sanitizer as any);
+    const component = new EmailDetailComponent(route as any, router as any, gmail as any, draft as any, sanitizer as any, prefsWith() as any);
 
     component.ngOnInit();
     expect(component.email?.gmailMessageId).toBe('msg-1');
@@ -454,7 +458,7 @@ describe('frontend page classes', () => {
       getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 't', bodyHtml: '<p onclick="x()">Hi</p><script>bad()</script>' })),
     };
     const sanitizer = { sanitize: vi.fn().mockReturnValue('<p>Hi</p>') };
-    const component = new EmailDetailComponent({ params: of({ gmailMessageId: 'msg-1' }) } as any, router as any, gmail as any, {} as any, sanitizer as any);
+    const component = new EmailDetailComponent({ params: of({ gmailMessageId: 'msg-1' }) } as any, router as any, gmail as any, {} as any, sanitizer as any, prefsWith() as any);
 
     component.ngOnInit();
 
@@ -467,7 +471,7 @@ describe('frontend page classes', () => {
     const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 'thread-1', bodyPlain: 'Hi' })) };
     const reason = 'This thread has no message from someone else to reply to.';
     const draft = { generateThreadDraft: vi.fn().mockReturnValue(throwError(() => ({ status: 422, error: { error: reason } }))) };
-    const component = new EmailDetailComponent({ params: of({ gmailMessageId: 'msg-1' }) } as any, router as any, gmail as any, draft as any, { sanitize: vi.fn() } as any);
+    const component = new EmailDetailComponent({ params: of({ gmailMessageId: 'msg-1' }) } as any, router as any, gmail as any, draft as any, { sanitize: vi.fn() } as any, prefsWith() as any);
     component.ngOnInit();
 
     component.generateDraft();
@@ -488,7 +492,7 @@ describe('frontend page classes', () => {
       rejectDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Updated', status: 'REJECTED' })),
       sendDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1', status: 'SENT', sentGmailMessageId: 'sent-1' })),
     };
-    const component = new DraftDetailComponent(route as any, router as any, draft as any, confirmYes as any, snackBar as any);
+    const component = new DraftDetailComponent(route as any, router as any, draft as any, confirmYes as any, snackBar as any, draftAuth as any);
 
     component.ngOnInit();
     expect(component.draft?._id).toBe('draft-1');
@@ -521,7 +525,7 @@ describe('frontend page classes', () => {
         .mockReturnValueOnce(throwError(() => ({ error: { error: 'A send for this draft is already in progress' } })))
         .mockReturnValue(of({ _id: 'draft-1', status: 'SENT', sentGmailMessageId: 'sent-1' })),
     };
-    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, confirmYes as any, snackBar as any);
+    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, confirmYes as any, snackBar as any, draftAuth as any);
     component.ngOnInit();
 
     component.sendDraft();
@@ -549,7 +553,7 @@ describe('frontend page classes', () => {
       getDraftDetail: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Body', status: 'PENDING' })),
       approveDraft: vi.fn().mockReturnValue(pending),
     };
-    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, confirmYes as any, snackBar as any);
+    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, confirmYes as any, snackBar as any, draftAuth as any);
     component.ngOnInit();
     expect(component.isBusy()).toBe(false);
 
@@ -571,7 +575,7 @@ describe('frontend page classes', () => {
         sendDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1', status: 'SENT', sentGmailMessageId: 'sent-1' })),
         ...overrides,
       };
-      const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft, confirmYes as any, snackBar as any);
+      const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft, confirmYes as any, snackBar as any, draftAuth as any);
       component.ngOnInit();
       component.editedContent = 'Edited';
       component.onContentChange();
@@ -651,11 +655,88 @@ describe('frontend page classes', () => {
       getDraftDetail: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Body', status: 'APPROVED' })),
       sendDraft: vi.fn(),
     };
-    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, confirmYes as any, snackBar as any);
+    const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, confirmYes as any, snackBar as any, draftAuth as any);
     component.ngOnInit();
 
     component.sendDraft();
 
     expect(draft.sendDraft).not.toHaveBeenCalled();
+  });
+
+  describe('EmailDetailComponent default tone (user preference)', () => {
+    const create = (prefs: any) => {
+      const gmail = { getEmailDetail: vi.fn().mockReturnValue(of({ gmailMessageId: 'msg-1', threadId: 'thread-1', bodyPlain: 'Hi' })) };
+      const draft = { generateThreadDraft: vi.fn().mockReturnValue(of({ _id: 'draft-1' })) };
+      const component = new EmailDetailComponent(
+        { params: of({ gmailMessageId: 'msg-1' }) } as any, router as any, gmail as any, draft as any, { sanitize: vi.fn() } as any, prefs as any
+      );
+      return { component, draft };
+    };
+
+    it("preselects the user's default tone and generates with it", () => {
+      const { component, draft } = create(prefsWith('friendly'));
+      component.ngOnInit();
+
+      expect(component.selectedTone).toBe('friendly');
+      component.generateDraft();
+      expect(draft.generateThreadDraft).toHaveBeenCalledWith('thread-1', 'friendly', undefined);
+    });
+
+    it('never overrides a tone the user already picked (late preference response)', () => {
+      const late = new Subject<any>();
+      const { component } = create({ getPreferences: vi.fn(() => late) });
+      component.ngOnInit();
+
+      component.selectedTone = 'concise';
+      component.onToneChange();
+      late.next({ defaultTone: 'friendly' });
+
+      expect(component.selectedTone).toBe('concise');
+    });
+
+    it('keeps formal when preferences fail to load or hold an unknown tone', () => {
+      const failing = create({ getPreferences: vi.fn(() => throwError(() => ({ status: 500 }))) }).component;
+      failing.ngOnInit();
+      expect(failing.selectedTone).toBe('formal');
+      expect(failing.error).toBeNull();
+
+      const unknown = create(prefsWith('shouting' as any)).component;
+      unknown.ngOnInit();
+      expect(unknown.selectedTone).toBe('formal');
+    });
+  });
+
+  describe('DraftDetailComponent when Gmail access has expired (403)', () => {
+    const expired = () => throwError(() => ({ status: 403, error: { error: 'Gmail access has expired or was revoked. Please reconnect Gmail.' } }));
+    const setup = (status: string, api: Record<string, any>) => {
+      const auth = { setGoogleConnected: vi.fn() };
+      const draft = { getDraftDetail: vi.fn().mockReturnValue(of({ _id: 'draft-1', draftBody: 'Body', status })), ...api };
+      const component = new DraftDetailComponent({ params: of({ id: 'draft-1' }) } as any, router as any, draft as any, confirmYes as any, snackBar as any, auth as any);
+      component.ngOnInit();
+      return { component, auth };
+    };
+
+    it.each([
+      ['approve', 'PENDING', { approveDraft: vi.fn(expired) }, (c: DraftDetailComponent) => c.approveDraft()],
+      ['send', 'APPROVED', { sendDraft: vi.fn(expired) }, (c: DraftDetailComponent) => c.sendDraft()],
+      ['reject', 'APPROVED', { rejectDraft: vi.fn(expired) }, (c: DraftDetailComponent) => c.rejectDraft()],
+      ['save', 'APPROVED', { updateDraft: vi.fn(expired) }, (c: DraftDetailComponent) => { c.editedContent = 'Edited'; c.onContentChange(); c.saveDraft(); }],
+    ])('%s marks Gmail disconnected in shared state and shows the reconnect message', (_label, status, api, act) => {
+      const { component, auth } = setup(status, api);
+
+      act(component);
+
+      expect(auth.setGoogleConnected).toHaveBeenCalledWith(false);
+      expect(component.actionError).toContain('Gmail access has expired or was revoked. Please reconnect Gmail.');
+    });
+
+    it('other failures leave the Gmail connection state alone', () => {
+      const { component, auth } = setup('PENDING', { approveDraft: vi.fn(() => throwError(() => ({ status: 502, error: { error: 'Upstream failed' } }))) });
+
+      component.approveDraft();
+
+      expect(auth.setGoogleConnected).not.toHaveBeenCalled();
+      expect(component.actionError).toBe('Upstream failed');
+    });
   });
 });

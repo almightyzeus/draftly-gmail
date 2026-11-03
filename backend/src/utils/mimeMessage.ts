@@ -90,7 +90,8 @@ function base64Lines(text: string): string {
   return (Buffer.from(text, 'utf8').toString('base64').match(/.{1,76}/g) ?? []).join('\r\n');
 }
 
-function plainTextToHtml(plainText: string): string {
+/** Escape plain text and keep its line breaks, as the HTML part of a reply. */
+export function plainTextToHtml(plainText: string): string {
   return plainText
     .replace(/&/g, '&amp;')
     .replace(/</g, '&lt;')

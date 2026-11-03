@@ -24,10 +24,11 @@ if (env.trustProxyHops > 0) {
 app.use(helmet());
 
 // Middleware: CORS
+// No credentials: auth is the Authorization header only (cookies are never
+// accepted), so cross-origin requests have no reason to carry cookies.
 app.use(
   cors({
     origin: env.frontendUrl,
-    credentials: true,
   })
 );
 

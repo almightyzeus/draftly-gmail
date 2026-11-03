@@ -425,4 +425,23 @@ describe('ActivityLogService', () => {
       expect(result).toEqual([]);
     });
   });
+  describe('counts', () => {
+    it('counts all logs of a user and of one entity', async () => {
+      (ActivityLog.countDocuments as unknown as Mock)
+        .mockReturnValueOnce({ exec: vi.fn().mockResolvedValue(12) })
+        .mockReturnValueOnce({ exec: vi.fn().mockResolvedValue(3) });
+
+      await expect(ActivityLogService.countUserActivityLogs('user123')).resolves.toBe(12);
+      await expect(ActivityLogService.countEntityLogs('user123', 'Draft', 'd1')).resolves.toBe(3);
+      expect(ActivityLog.countDocuments).toHaveBeenNthCalledWith(1, { userId: 'user123' });
+      expect(ActivityLog.countDocuments).toHaveBeenNthCalledWith(2, { userId: 'user123', entityType: 'Draft', entityId: 'd1' });
+    });
+
+    it('reports count failures as internal errors', async () => {
+      (ActivityLog.countDocuments as unknown as Mock).mockReturnValue({ exec: vi.fn().mockRejectedValue(new Error('db down')) });
+
+      await expect(ActivityLogService.countUserActivityLogs('user123')).rejects.toBeInstanceOf(InternalServerError);
+      await expect(ActivityLogService.countEntityLogs('user123', 'Draft', 'd1')).rejects.toBeInstanceOf(InternalServerError);
+    });
+  });
 });

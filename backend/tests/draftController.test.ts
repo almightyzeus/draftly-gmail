@@ -58,6 +58,16 @@ describe('DraftController', () => {
       expect(mockRes.json).toHaveBeenCalledWith(mockDraft);
     });
 
+    it("passes no tone when none is sent, so the user's defaultTone applies", async () => {
+      mockReq.body = { threadId: 'thread-1' };
+      (DraftService.generateDraft as unknown as Mock).mockResolvedValue({ id: 'draft123' });
+
+      await generateDraft(mockReq, mockRes as Response);
+
+      expect(DraftService.generateDraft).toHaveBeenCalledWith(mockReq.userId, undefined, undefined, 'thread-1', undefined);
+      expect(mockRes.status).toHaveBeenCalledWith(201);
+    });
+
     it('should return 400 if neither gmailMessageId nor threadId is provided', async () => {
       mockReq.body = {
         tone: 'formal',

@@ -591,6 +591,16 @@ describe('GmailService', () => {
       expect(GmailAccount.updateMany).not.toHaveBeenCalled();
     });
 
+    it('loads the Gmail account once and sends From the connected address', async () => {
+      drafts.create.mockResolvedValue({ data: { id: 'gd-1' } });
+
+      await expect(GmailService.createDraft(userId, 'a@example.com', 'Re: Hi', 'Body', 'thread-1')).resolves.toBe('gd-1');
+
+      expect(GmailAccount.findOne).toHaveBeenCalledTimes(1);
+      const raw = Buffer.from(drafts.create.mock.calls[0][0].requestBody.message.raw, 'base64').toString();
+      expect(raw).toContain('From: user@gmail.com');
+    });
+
     it('keeps "Gmail account not connected" as a 409', async () => {
       (GmailAccount.findOne as unknown as Mock).mockResolvedValue(null);
       await expect(GmailService.sendDraft(userId, 'gd-1', 'thread-1')).rejects.toMatchObject({ statusCode: 409 });

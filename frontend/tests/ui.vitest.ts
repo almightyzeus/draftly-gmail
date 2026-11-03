@@ -222,7 +222,7 @@ describe('DraftDetailComponent dialogs and navigation', () => {
   const approved = { _id: 'd1', draftBody: 'Body', status: 'APPROVED', replyTo: { from: 'Alice <alice@example.com>', subject: 'Budget' } };
 
   const create = (api: any) => {
-    const component = new DraftDetailComponent({ params: of({ id: 'd1' }) } as any, router, api, confirm, snackBar);
+    const component = new DraftDetailComponent({ params: of({ id: 'd1' }) } as any, router, api, confirm, snackBar, { setGoogleConnected: vi.fn() } as any);
     component.ngOnInit();
     return component;
   };

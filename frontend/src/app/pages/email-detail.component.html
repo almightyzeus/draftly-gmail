@@ -61,6 +61,7 @@
           <span class="field-label" id="tone-label">Tone</span>
           <mat-button-toggle-group
             [(ngModel)]="selectedTone"
+            (change)="onToneChange()"
             [disabled]="isGenerating"
             aria-labelledby="tone-label"
             hideSingleSelectionIndicator

@@ -12,9 +12,13 @@ export const getUserLogs = async (req: any, res: Response) => {
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 100, 1), 200);
     const skip = Math.max(parseInt(req.query.skip as string) || 0, 0);
 
-    const logs = await ActivityLogService.getUserActivityLogs(userId, limit, skip);
+    const [logs, total] = await Promise.all([
+      ActivityLogService.getUserActivityLogs(userId, limit, skip),
+      ActivityLogService.countUserActivityLogs(userId),
+    ]);
 
-    res.json({ logs, total: logs.length });
+    // total counts all of the user's logs, not just this page.
+    res.json({ logs, total });
   } catch (error) {
     handleError(error, res);
   }
@@ -34,9 +38,12 @@ export const getEntityLogs = async (req: any, res: Response) => {
       : req.params.entityId;
     const limit = Math.min(Math.max(parseInt(req.query.limit as string) || 50, 1), 100);
 
-    const logs = await ActivityLogService.getEntityLogs(userId, entityType, entityId, limit);
+    const [logs, total] = await Promise.all([
+      ActivityLogService.getEntityLogs(userId, entityType, entityId, limit),
+      ActivityLogService.countEntityLogs(userId, entityType, entityId),
+    ]);
 
-    res.json({ logs, total: logs.length });
+    res.json({ logs, total });
   } catch (error) {
     handleError(error, res);
   }

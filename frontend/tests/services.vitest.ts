@@ -5,6 +5,7 @@ import { AuthService } from '../src/app/services/auth.service';
 import { GmailService } from '../src/app/services/gmail.service';
 import { DraftService } from '../src/app/services/draft.service';
 import { AuthInterceptor } from '../src/app/services/auth.interceptor';
+import { PreferenceService } from '../src/app/services/preference.service';
 
 const authResponse = {
   message: 'ok',
@@ -297,7 +298,8 @@ describe('frontend services', () => {
       handle: vi.fn()
         .mockImplementationOnce((req: HttpRequest<any>) => {
         expect(req.headers.get('Authorization')).toBe('Bearer expired-token');
-        expect(req.withCredentials).toBe(true);
+        // Bearer-only auth: no cookies are sent with API requests.
+        expect(req.withCredentials).toBe(false);
         return throwError(() => new HttpErrorResponse({ status: 401 }));
         })
         .mockImplementationOnce((req: HttpRequest<any>) => {
@@ -312,5 +314,17 @@ describe('frontend services', () => {
         expect(auth.logout).not.toHaveBeenCalled();
       },
     });
+  });
+
+  it('PreferenceService reads the user preferences', () => {
+    const prefs = { defaultTone: 'friendly', signature: 'Regards', learningEmailCount: 5 };
+    const http = { get: vi.fn().mockReturnValue(of(prefs)) };
+    const service = new PreferenceService(http as any);
+    let result: any;
+
+    service.getPreferences().subscribe((value) => (result = value));
+
+    expect(http.get).toHaveBeenCalledWith('api/preferences');
+    expect(result).toEqual(prefs);
   });
 });

@@ -27,10 +27,8 @@ export class AuthInterceptor implements HttpInterceptor {
       });
     }
 
-    // Enable credentials for all requests to allow cookies
-    req = req.clone({
-      withCredentials: true,
-    });
+    // No withCredentials: authentication is the Bearer header only, and the
+    // API is same-origin (dev proxy / nginx), so no cookies are needed.
 
     return next.handle(req).pipe(
       catchError((error: HttpErrorResponse) => {

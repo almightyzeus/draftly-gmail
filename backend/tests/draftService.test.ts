@@ -6,6 +6,7 @@ import { EmailMessage } from '../src/models/EmailMessage.js';
 import { OpenAIService } from '../src/services/openaiService.js';
 import { GmailService } from '../src/services/gmailService.js';
 import { ActivityLogService } from '../src/services/activityLogService.js';
+import { UserPreference } from '../src/models/UserPreference.js';
 import { AppError, ForbiddenError } from '../src/utils/errors.js';
 
 vi.mock('../src/models/Draft.js', () => {
@@ -41,6 +42,10 @@ vi.mock('../src/services/gmailService.js', () => ({
     getReplyMetadata: vi.fn(),
     getSenderAddress: vi.fn(),
   },
+}));
+
+vi.mock('../src/models/UserPreference.js', () => ({
+  UserPreference: { findOne: vi.fn() },
 }));
 
 vi.mock('../src/services/activityLogService.js', () => ({
@@ -151,6 +156,45 @@ describe('DraftService', () => {
     expect(result.draftBody).toBe('Generated reply');
     expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['msg-1'], 'formal', undefined);
     expect(ActivityLogService.logActivity).toHaveBeenCalledWith(userId, 'DRAFT_GENERATED', 'Draft', 'info', draftId, expect.any(Object));
+  });
+
+  describe('tone when none is requested', () => {
+    const arrangePreference = (preference: any) => {
+      (UserPreference.findOne as unknown as Mock).mockReturnValue({
+        select: vi.fn().mockReturnThis(),
+        lean: vi.fn().mockResolvedValue(preference),
+      });
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+      (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+      (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, _id: new Types.ObjectId(draftId) }));
+    };
+
+    it("uses the user's defaultTone preference", async () => {
+      arrangePreference({ defaultTone: 'friendly' });
+
+      const result = await DraftService.generateDraft(userId, 'msg-1');
+
+      expect(UserPreference.findOne).toHaveBeenCalledWith({ userId: new Types.ObjectId(userId) });
+      expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['msg-1'], 'friendly', undefined);
+      expect(result.tone).toBe('friendly');
+    });
+
+    it('falls back to formal without a stored preference', async () => {
+      arrangePreference(null);
+
+      const result = await DraftService.generateDraft(userId, 'msg-1');
+
+      expect(result.tone).toBe('formal');
+    });
+
+    it('does not look up the preference when a tone is requested', async () => {
+      arrangePreference({ defaultTone: 'friendly' });
+
+      await DraftService.generateDraft(userId, 'msg-1', 'concise');
+
+      expect(UserPreference.findOne).not.toHaveBeenCalled();
+      expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['msg-1'], 'concise', undefined);
+    });
   });
 
   describe('an existing PENDING draft for the thread', () => {
@@ -599,6 +643,24 @@ describe('DraftService', () => {
       status: 'APPROVED',
     });
     expect(EmailMessage.create).toHaveBeenCalledWith(expect.objectContaining({ direction: 'OUTBOUND' }));
+  });
+
+  it('caches the sent reply with escaped HTML, not the raw text, as its HTML body', async () => {
+    const draft = buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1', draftBody: 'Hi <team>\nThanks & bye' });
+    (Draft.findOne as unknown as Mock).mockResolvedValue(draft);
+    (Draft.findOneAndUpdate as unknown as Mock)
+      .mockResolvedValueOnce({ ...draft, sendIdempotencyKey: 'key-1' })
+      .mockResolvedValueOnce({ ...draft, status: 'SENT', sentGmailMessageId: 'sent-1' });
+    (GmailService.sendDraft as unknown as Mock).mockResolvedValue('sent-1');
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (EmailMessage.create as unknown as Mock).mockResolvedValue({});
+
+    await DraftService.sendDraft(userId, draftId, 'key-1');
+
+    expect(EmailMessage.create).toHaveBeenCalledWith(expect.objectContaining({
+      bodyPlain: 'Hi <team>\nThanks & bye',
+      bodyHtml: 'Hi &lt;team&gt;<br>\r\nThanks &amp; bye',
+    }));
   });
 
   it('blocks send for non-approved or missing Gmail draft id', async () => {

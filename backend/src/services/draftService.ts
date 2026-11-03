@@ -5,7 +5,8 @@ import { EmailMessage } from '../models/EmailMessage.js';
 import { OpenAIService } from './openaiService.js';
 import { GmailService } from './gmailService.js';
 import { ActivityLogService } from './activityLogService.js';
-import { mailboxAddress } from '../utils/mimeMessage.js';
+import { UserPreference } from '../models/UserPreference.js';
+import { mailboxAddress, plainTextToHtml } from '../utils/mimeMessage.js';
 import { AppError, ConflictError, NotFoundError, ValidationError } from '../utils/errors.js';
 
 /**
@@ -68,12 +69,14 @@ export class DraftService {
   static async generateDraft(
     userId: string,
     gmailMessageId?: string,
-    tone: string = 'formal',
+    tone?: string,
     threadId?: string,
     customContext?: string
   ): Promise<any> {
     try {
       const userObjectId = new Types.ObjectId(userId);
+      // No tone requested: use the user's defaultTone preference.
+      tone = tone || (await this.defaultTone(userObjectId));
 
       let targetThreadId = threadId;
       let gmailMessageIds: string[] = [];
@@ -220,6 +223,12 @@ export class DraftService {
       );
       throw error;
     }
+  }
+
+  /** The user's preferred tone, or 'formal' when no preference is stored. */
+  private static async defaultTone(userObjectId: Types.ObjectId): Promise<string> {
+    const preferences = await UserPreference.findOne({ userId: userObjectId }).select('defaultTone').lean();
+    return preferences?.defaultTone || 'formal';
   }
 
   /**
@@ -805,7 +814,8 @@ export class DraftService {
         subject: `Re: ${originalEmail.subject}`,
         snippet: draft.draftBody.substring(0, 255),
         bodyPlain: draft.draftBody,
-        bodyHtml: draft.draftBody,
+        // Same escaped HTML as the sent message's HTML part (not raw text).
+        bodyHtml: plainTextToHtml(draft.draftBody),
         internalDate: new Date(),
         direction: 'OUTBOUND',
         labels: ['SENT'],

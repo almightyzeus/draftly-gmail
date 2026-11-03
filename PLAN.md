@@ -12,19 +12,19 @@ No dependency upgrades and no commits unless explicitly approved.
 
 ## 0. Current status (verified 2026-11-03)
 
-All six hardening stages (section 3) are complete, and the P1 backlog items from the
-2026-11-03 reconciliation (section 5.1) are fixed.
+All six hardening stages (section 3) are complete. From the 2026-11-03 reconciliation, the P1
+items (section 5.1) and quick-win Batch 1 (section 5.2) are fixed.
 
 | Check | Result |
 |---|---|
 | Backend typecheck | `npx tsc --noEmit` clean |
-| Backend tests | 23 files, **366 passing** (`npm run test:ci`) |
-| Backend coverage | 96.23% statements, 85.42% branches, 99.24% functions, 96.23% lines |
+| Backend tests | 23 files, **374 passing** (`npm run test:ci`) |
+| Backend coverage | 96.24% statements, 85.67% branches, 98.52% functions, 96.24% lines |
 | Frontend dependencies | Clean `npm ci` from the lockfile: Angular 21.2.22, Material 21.2.14 (the local install had been a stale Angular 17) |
-| Frontend tests | 5 files, **91 passing** |
-| Frontend coverage | 94.05% statements, 81.64% branches, 93.91% functions, 94.6% lines |
+| Frontend tests | 5 files, **100 passing** |
+| Frontend coverage | 94.84% statements, 82.62% branches, 94.83% functions, 95.4% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
-| Production build | `ng build` passes; initial bundle 527.28 kB (only the 500 kB warning budget exceeded) |
+| Production build | `ng build` passes; initial bundle 527.00 kB (only the 500 kB warning budget exceeded) |
 | Docker | Not re-run since 2026-10-04 |
 
 Verified on Node 24.15 (supported by Angular 21); no Node version manager is installed on this
@@ -147,37 +147,52 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | P1-3 | Generating again with a different tone or new context silently returned the old PENDING draft. | Same tone and no context → reuse (double-click safe). Otherwise generate a new draft, then mark the old PENDING one `REJECTED` with audit action `SUPERSEDED` (activity `DRAFT_SUPERSEDED`). A failed generation keeps the old draft. |
 | P1-4 | Flaky backend suites (in-memory MongoDB 10 s launch timeout); `npm run test:ci` failed (`--threads` removed in vitest 1.x). | `tests/helpers/mongoMemory.ts` (60 s launch timeout) used by all Mongo suites; `hookTimeout` 90 s; `test:ci` is `vitest run --coverage` (file parallelism is already off in `vitest.config.ts`). |
 
-### 5.2 P2 — functional gaps — not started
+### 5.2 Batch 1 — quick wins — **done 2026-11-03**
 
-| # | Item | Evidence |
+| # | Item | Resolution |
 |---|---|---|
-| P2-1 | `defaultTone` preference is stored but never applied (controller and frontend default to `formal`). | `draftController.generateDraft`; `email-detail.component.ts` `selectedTone` |
-| P2-2 | No Preferences screen (signature, style-example count only via API); no activity-log screen. | `preferenceRoutes.ts`, `logRoutes.ts` have no frontend client |
-| P2-3 | Thread context and consolidation only see cached messages (ones that appeared in a listing). | `GmailService.fetchThreadEmails`, `OpenAIService.generateDraft` |
-| P2-4 | No CI pipeline (no `.github/`). Should run typecheck, `test:ci` and `ng build` on Node 20.19.5. | — |
-| P2-5 | When approve/edit/send gets 403 (Gmail expired), the draft page shows the message but does not update shared state; the top bar shows **Connect Gmail** only after the next inbox load. | `draft-detail.component.ts` (no `AuthService.setGoogleConnected`) |
-| P2-6 | Two concurrent generations for the same thread can still both create PENDING drafts (no unique constraint). | `DraftService.generateDraft` |
+| Q1 | `defaultTone` preference was stored but never applied. | Generation without a tone uses `defaultTone` (`formal` if none); the email page preselects it (frontend `PreferenceService`) and never overrides a tone the user already picked. |
+| Q2 | On a 403 (Gmail expired) from approve/edit/send/reject, the draft page did not update shared state, so the top bar kept showing Gmail as connected. | DraftDetail calls `AuthService.setGoogleConnected(false)` on a 403. |
+| Q3 | Cookie-era leftovers: frontend `withCredentials: true` and XSRF config; backend CORS `credentials: true`. | Removed (auth is the Bearer header only). |
+| Q4 | `GET /api/logs` (and the entity variant) returned the page size as `total`. | `total` is a real `countDocuments` count. |
+| Q5 | `fetchEmails`, `createDraft` and `updateDraft` loaded the Gmail account twice; the cached copy of a sent reply stored raw text as `bodyHtml`. | One account lookup (`getGmailContext`); sent copy stores the same escaped HTML as the sent message. |
+| Q6 | `.env.example` listed only the `gmail.modify` scope. | Lists `gmail.readonly`, `gmail.modify`, `gmail.send`. |
 
-### 5.3 P3 — deferred security hardening
+### 5.3 Verification — pending
 
-See section 4 (S5, S12, in-memory rate limits).
+| # | Item | Size |
+|---|---|---|
+| V1 | ~~Clean `npm ci` in `frontend/` (stale Angular 17 install).~~ | **Done** 2026-11-03 |
+| V2 | Re-run everything on the pinned Node 20.19.5 (no Node version manager on the dev machine; verified on Node 24.15 only) and `docker compose up --build`. | S |
+| V3 | Browser smoke test: connect Gmail, cancel on Google's screen (expect the dashboard message), then generate (default tone preselected), approve and send one real reply. | S |
 
-### 5.4 P4 — cleanup — not started
+### 5.4 Features — not started
+
+| # | Item | Evidence | Size |
+|---|---|---|---|
+| F1 | **Preferences page** (default tone, signature, style-example count). The signature can only be set via the API today, which limits draft quality. | `preferenceRoutes.ts`; frontend `PreferenceService` has only `getPreferences` | M |
+| F2 | **CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5. | no `.github/` | M |
+| F3 | **Concurrent generation race**: two generations for the same thread can both create PENDING drafts. A partial unique index needs the supersede flow reordered (retire the old draft before saving the new one, restoring it if the save fails). | `DraftService.generateDraft` | M |
+| F4 | **Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`). | `GmailService.fetchThreadEmails`, `OpenAIService.generateDraft` | M |
+| F5 | Activity-log screen. Low demo value. | `logRoutes.ts` | M |
+| F6 | Reply-all and `Reply-To` support. | `buildRawReply` uses the sender only | M |
+| F7 | Retry with backoff for transient Gmail failures. | — | M |
+
+### 5.5 Needs approval (dependency changes)
 
 | # | Item | Notes |
 |---|---|---|
-| P4-1 | `cookie-parser` and `@types/cookie-parser` installed but never imported. | Dependency change: needs approval. |
-| P4-2 | Frontend still sets `withCredentials: true` and XSRF configuration (cookie-era leftovers). | `auth.interceptor.ts`, `app.config.ts` |
-| P4-3 | `GET /api/logs` returns `total` as the page size, not the real total. | `logController.ts` |
-| P4-4 | `fetchEmails` loads the Gmail account twice. | `gmailService.ts` |
-| P4-5 | The cached copy of a sent reply stores plain text as `bodyHtml`. | `DraftService.recordOutboundMessage` |
-| P4-6 | Initial bundle 527.28 kB, above the 500 kB warning budget. | Measured 2026-11-03. |
-| P4-7 | Noisy backend test output (unmocked logger in some suites). | — |
-| P4-8 | ~~Local `frontend/node_modules` was Angular 17 while `package.json` is Angular 21.~~ | **Done** 2026-11-03: clean `npm ci`. |
-| P4-9 | `npm audit` (frontend) reports 35 vulnerabilities (22 moderate, 10 high, 3 critical). | Fixing means dependency upgrades: needs approval. |
-| P4-10 | `frontend/tsconfig.spec.json` matches no files (`src/**/*.spec.ts`); tests live in `tests/*.vitest.ts`. | Stale config. |
+| D1 | Remove unused `cookie-parser` and `@types/cookie-parser` (backend). | Never imported. |
+| D2 | `npm audit` (frontend): 35 vulnerabilities (22 moderate, 10 high, 3 critical). | Fix requires upgrades. |
+| D3 | Initial bundle 527 kB, above the 500 kB warning budget. | Investigate (e.g. `provideAnimations()`, Material imports) before changing budgets. |
 
-### 5.5 Documentation follow-ups
+### 5.6 Cleanup — not started
 
-- `backend/.env.example` says "Required scopes: gmail.modify"; the code requests `gmail.readonly`, `gmail.modify` and `gmail.send` (README is correct).
-- Re-run `ng build`, frontend typecheck and Docker on Node 20.19.5 and update section 0 and the README test table.
+| # | Item | Notes |
+|---|---|---|
+| C-1 | Noisy backend test output (stack traces from failure-path tests; unmocked logger in some suites). | — |
+| C-2 | `frontend/tsconfig.spec.json` matches no files (`src/**/*.spec.ts`); tests live in `tests/*.vitest.ts`. | Stale config. |
+
+### 5.7 Deferred security hardening
+
+See section 4 (S5, S12 items, in-memory rate limits).
