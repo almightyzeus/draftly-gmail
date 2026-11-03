@@ -35,6 +35,7 @@ vi.mock('../src/services/openaiService.js', () => ({
 vi.mock('../src/services/gmailService.js', () => ({
   GmailService: {
     fetchThreadEmails: vi.fn(),
+    syncThread: vi.fn().mockResolvedValue(0),
     createDraft: vi.fn(),
     updateDraft: vi.fn(),
     sendDraft: vi.fn(),
@@ -143,6 +144,17 @@ describe('DraftService', () => {
       await expect(DraftService.toResponse(userId, [])).resolves.toEqual([]);
       expect(EmailMessage.find).not.toHaveBeenCalled();
     });
+  });
+
+  it('syncs the thread of a single stored email so the AI sees the whole conversation', async () => {
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (Draft.findOne as unknown as Mock).mockResolvedValue(null);
+    (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
+
+    const result = await DraftService.generateDraft(userId, 'msg-1', 'formal');
+
+    expect(GmailService.syncThread).toHaveBeenCalledWith(userId, 'thread-1');
+    expect(result.replyToGmailMessageId).toBe('msg-1');
   });
 
   it('generates a draft from a stored email', async () => {
@@ -401,6 +413,30 @@ describe('DraftService', () => {
       expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['from-them'], 'formal', undefined);
       expect(result.replyToGmailMessageId).toBe('from-them');
       expect(result.isConsolidated).toBe(false);
+    });
+
+    it('syncs the whole thread from Gmail before choosing the reply target', async () => {
+      (GmailService.fetchThreadEmails as unknown as Mock).mockResolvedValue([msg('their', 'INBOUND', 'sender@example.com')]);
+      arrangeNewDraft();
+
+      await DraftService.generateDraft(userId, undefined, 'formal', 'thread-1');
+
+      expect(GmailService.syncThread).toHaveBeenCalledWith(userId, 'thread-1');
+      const syncOrder = (GmailService.syncThread as unknown as Mock).mock.invocationCallOrder[0];
+      expect(syncOrder).toBeLessThan((GmailService.fetchThreadEmails as unknown as Mock).mock.invocationCallOrder[0]);
+    });
+
+    it('still generates from cached messages when the thread cannot be synced', async () => {
+      (GmailService.syncThread as unknown as Mock).mockRejectedValueOnce(
+        new AppError('Gmail rate limit reached. Please wait a moment and try again.', 429)
+      );
+      (GmailService.fetchThreadEmails as unknown as Mock).mockResolvedValue([msg('their', 'INBOUND', 'sender@example.com')]);
+      arrangeNewDraft();
+
+      const result = await DraftService.generateDraft(userId, undefined, 'formal', 'thread-1');
+
+      expect(result.replyToGmailMessageId).toBe('their');
+      expect(OpenAIService.generateDraft).toHaveBeenCalled();
     });
 
     it('picks the latest inbound message when none is unread', async () => {

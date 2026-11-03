@@ -84,6 +84,7 @@ export class DraftService {
 
       // If threadId provided, fetch all emails in thread for consolidation
       if (threadId) {
+        await this.syncThreadContext(userId, threadId);
         const threadEmails = await GmailService.fetchThreadEmails(userId, threadId);
         if (threadEmails.length === 0) {
           throw new NotFoundError('No emails found in thread');
@@ -136,6 +137,8 @@ export class DraftService {
 
         gmailMessageIds = [gmailMessageId];
         targetThreadId = email.threadId;
+        // The reply target is fixed; the sync gives the AI the whole thread.
+        await this.syncThreadContext(userId, email.threadId);
       } else {
         throw new ValidationError('Either gmailMessageId or threadId must be provided');
       }
@@ -220,6 +223,26 @@ export class DraftService {
         'Failed to generate draft'
       );
       throw error;
+    }
+  }
+
+  /**
+   * Bring the thread's messages into the cache from Gmail before generating,
+   * so reply targets and AI context cover the whole thread. Generation still
+   * works from the cached messages when Gmail cannot be reached (not
+   * connected, access revoked, rate-limited or unavailable): the draft is
+   * then based on what is cached, and approve/send report any Gmail problem.
+   */
+  private static async syncThreadContext(userId: string, threadId: string): Promise<void> {
+    if (!threadId) return;
+    try {
+      const count = await GmailService.syncThread(userId, threadId);
+      logger.info({ userId, threadId, count }, 'Synced thread from Gmail for draft generation');
+    } catch (error) {
+      logger.warn(
+        { userId, threadId, error: error instanceof Error ? error.message : String(error) },
+        'Could not sync the thread from Gmail; generating from cached messages'
+      );
     }
   }
 

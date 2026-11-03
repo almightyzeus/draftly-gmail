@@ -24,6 +24,9 @@ vi.mock('../src/services/gmailService.js', async () => {
     GmailService: {
       ...actual.GmailService,
       fetchEmails: vi.fn().mockResolvedValue([]),
+      syncThread: vi.fn().mockResolvedValue(0),
+      // Static methods are not copied by the spread above.
+      fetchThreadEmails: actual.GmailService.fetchThreadEmails.bind(actual.GmailService),
       createDraft: vi.fn().mockResolvedValue('gmail-draft-1'),
       updateDraft: vi.fn().mockResolvedValue(undefined),
       sendDraft: vi.fn().mockResolvedValue('sent-message-1'),
@@ -312,6 +315,40 @@ describe('Integration workflows', () => {
 
     expect(generate.status).toBe(201);
     expect(generate.body.tone).toBe('concise');
+  });
+
+  it('replies to a thread message that was only in Gmail, not yet in the cache', async () => {
+    const { user, token } = await registerUser();
+    const seeded = await seedEmail(user.id);
+    await seeded.updateOne({ labels: ['INBOX'] }); // read
+    const { GmailService } = await import('../src/services/gmailService.js');
+    // Gmail has a newer unread reply in the thread that never appeared in a listing.
+    (GmailService.syncThread as any).mockImplementationOnce(async (userId: string, threadId: string) => {
+      await EmailMessage.create({
+        userId: new Types.ObjectId(userId),
+        gmailMessageId: 'msg-2',
+        threadId,
+        from: 'sender@example.com',
+        to: 'test@example.com',
+        subject: 'Re: Question',
+        snippet: 'One more thing.',
+        bodyPlain: 'One more thing.',
+        direction: 'INBOUND',
+        labels: ['UNREAD'],
+        internalDate: new Date(Date.now() + 60_000),
+      });
+      return 2;
+    });
+
+    const generate = await request(app)
+      .post('/api/drafts/generate')
+      .set('Authorization', `Bearer ${token}`)
+      .send({ threadId: 'thread-1', tone: 'formal' });
+
+    expect(generate.status).toBe(201);
+    expect(GmailService.syncThread).toHaveBeenCalledWith(user.id, 'thread-1');
+    const draft = await Draft.findById(generate.body._id).lean();
+    expect(draft?.replyToGmailMessageId).toBe('msg-2');
   });
 
   describe('one PENDING draft per thread (concurrent generations)', () => {

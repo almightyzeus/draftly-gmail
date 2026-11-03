@@ -14,13 +14,13 @@ No dependency upgrades and no commits unless explicitly approved.
 
 All six hardening stages (section 3) are complete. From the 2026-11-03 reconciliation, the P1
 items (section 5.1), quick-win Batch 1 (section 5.2), verification (5.3), F1 (the Preferences
-page), F2 (CI pipeline) and F3 (concurrent generation race) (5.4) are done.
+page), F2 (CI pipeline), F3 (concurrent generation race) and F4 (full thread context) (5.4) are done.
 
 | Check | Result |
 |---|---|
 | Backend typecheck | `npx tsc --noEmit` clean |
-| Backend tests | 23 files, **379 passing** (`npm run test:ci`) |
-| Backend coverage | 96.20% statements, 85.83% branches, 98.58% functions, 96.20% lines |
+| Backend tests | 23 files, **389 passing** (`npm run test:ci`) |
+| Backend coverage | 96.23% statements, 85.81% branches, 98.61% functions, 96.23% lines |
 | Frontend dependencies | Clean `npm ci` from the lockfile: Angular 21.2.22, Material 21.2.14 (the local install had been a stale Angular 17) |
 | Frontend tests | 6 files, **114 passing** |
 | Frontend coverage | 95.27% statements, 81.62% branches, 95.26% functions, 95.79% lines |
@@ -175,7 +175,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | F1 | ~~**Preferences page** (default tone, signature, style-example count).~~ | **Done** 2026-11-03: lazy, guarded `/preferences` page (account menu → Preferences) with validation matching the API, save, and a discard-changes confirmation. `GET`/`PUT /api/preferences` create the defaults atomically (upsert) for a user without stored preferences instead of returning 404. | M |
 | F2 | ~~**CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5.~~ | **Done** 2026-11-03: `.github/workflows/ci.yml` runs on pushes to `master`, pull requests and manual dispatch. Two parallel jobs on Node from `.nvmrc`: backend (`npm ci`, `tsc --noEmit`, `test:ci` with coverage thresholds, placeholder env values, cached MongoDB binary) and frontend (`npm ci`, app typecheck, `test:coverage`, `npm run build`). Coverage reports are uploaded as artifacts. Simulated locally in a clean worktree (Node 24.15); the first run on GitHub happens on the next push. | M |
 | F3 | ~~**Concurrent generation race**: two generations for the same thread can both create PENDING drafts.~~ | **Done** 2026-11-03: partial unique index `one_pending_draft_per_thread` (`{userId, threadId}` where `status: PENDING`). `DraftService.savePendingDraft` retires the current pending draft, inserts the new one, and restores the old one if the insert fails; on a duplicate key it reuses the winning draft when it matches the request (same tone, no context), otherwise replaces it (at most 3 attempts, then 409). Startup (`server.ts`) runs `enforceSinglePendingDraftPerThread()`: retires older duplicate PENDING drafts (newest kept, audit `SUPERSEDED` with `reason: duplicate_pending`), then builds the index. Integration tests send simultaneous requests; against the old code they returned 500s. | M |
-| F4 | **Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`). | `GmailService.fetchThreadEmails`, `OpenAIService.generateDraft` | M |
+| F4 | ~~**Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`).~~ | **Done** 2026-11-03: `GmailService.syncThread` fetches the thread (`threads.get`, `format: full`, newest 50 messages) and caches it through `cacheMessage`, the same parsing/upsert the inbox listing now uses. `DraftService.generateDraft` syncs before choosing the reply target (thread requests) and before generating (single-message requests), so `OpenAIService` sees the whole thread without changes. A failed sync (not connected, 403, 429, 5xx) is logged and generation falls back to the cache; `invalid_grant` still marks Gmail disconnected. | M |
 | F5 | Activity-log screen. Low demo value. | `logRoutes.ts` | M |
 | F6 | Reply-all and `Reply-To` support. | `buildRawReply` uses the sender only | M |
 | F7 | Retry with backoff for transient Gmail failures. | — | M |

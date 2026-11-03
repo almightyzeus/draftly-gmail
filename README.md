@@ -47,7 +47,7 @@ The system supports:
 - Angular frontend served through an nginx container
 - nginx reverse proxy forwards `/api` requests to the backend container
 - Express backend exposes REST APIs and integrates with Gmail/OpenAI
-- Gmail is the source of truth for the inbox: listing and search call the Gmail API; MongoDB caches the messages that were listed (needed for thread context, drafting, and reply headers)
+- Gmail is the source of truth for the inbox: listing and search call the Gmail API; MongoDB caches the messages that were listed, plus whole threads fetched when a draft is generated (needed for thread context, drafting, and reply headers)
 - MongoDB stores users, Gmail accounts (encrypted tokens), cached emails, drafts and their send state, preferences, and activity logs
 - Docker Compose orchestrates frontend, backend, and MongoDB services locally
 
@@ -388,6 +388,8 @@ Generate draft body (send `threadId` for a consolidated reply, or `gmailMessageI
 
 `tone` is optional (`formal`, `concise` or `friendly`). Without it, the user's `defaultTone` preference is used (`formal` if none is stored), and the email page preselects that tone.
 
+Before generating, the backend fetches the whole thread from Gmail (`threads.get`, newest 50 messages) and caches it, so the reply target and the AI's context include messages that never appeared in an inbox listing (archived messages, your own replies) and current unread state. If Gmail cannot be reached (not connected, access revoked, rate-limited or unavailable), generation uses the cached messages.
+
 The reply always targets a message from someone else: the unread incoming messages in the thread, or otherwise the latest incoming message — never your own messages. Generation is limited to 10 requests per minute per user.
 
 A thread has at most one `PENDING` draft, enforced by a partial unique index (`one_pending_draft_per_thread`), so this also holds when generations run at the same time:
@@ -506,7 +508,7 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 23 | 379 passing | 96.20% | 85.83% | 98.58% | 96.20% |
+| Backend | 23 | 389 passing | 96.23% | 85.81% | 98.61% | 96.23% |
 | Frontend | 6 | 114 passing | 95.27% | 81.62% | 95.26% | 95.79% |
 
 Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
@@ -544,7 +546,7 @@ Some backend test output includes logged error stack traces from tests that exer
 - Optimized for local Docker Compose deployment and demos rather than production cloud deployment (MongoDB runs without authentication on the internal Docker network).
 - Sending is idempotent but not mathematically exactly-once (see [Idempotent sending](#idempotent-sending)).
 - Replies go to the sender only: there is no reply-all, and a `Reply-To` header is not used.
-- Thread context comes from cached messages, i.e. messages that have appeared in an inbox listing.
+- Thread context covers the newest 50 messages of a thread (the prompt uses the latest 20). When Gmail cannot be reached during generation, only cached messages are used.
 - Rate limits are kept in memory per backend process.
 - Refresh tokens are stateless JWTs: logout clears them in the browser, but a copied refresh token stays valid until it expires. Tokens are stored in `localStorage`.
 - Email HTML is sanitized and shown inline (not in a sandboxed iframe). Remote images are hidden until the user clicks **Show images**.

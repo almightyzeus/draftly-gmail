@@ -290,44 +290,7 @@ export class GmailService {
             format: 'full',
           });
 
-          const message = messageResponse.data;
-          const headers = message.payload?.headers || [];
-
-          const subjectHeader = this.getHeader(headers, 'Subject');
-          const fromHeader = this.getHeader(headers, 'From');
-          const toHeader = this.getHeader(headers, 'To');
-          const dateHeader = this.getHeader(headers, 'Date');
-          const rfcMessageId = this.getHeader(headers, 'Message-ID');
-          const references = this.getHeader(headers, 'References');
-
-          const { bodyPlain, bodyHtml } = this.parseEmailBody(message.payload);
-          const direction = this.getEmailDirection(message, gmailEmail);
-
-          // Save to database
-          const userObjectId = new Types.ObjectId(userId);
-          const emailDoc = await EmailMessage.findOneAndUpdate(
-            {
-              userId: userObjectId,
-              gmailMessageId: message.id,
-            },
-            {
-              userId: userObjectId,
-              gmailMessageId: message.id,
-              rfcMessageId,
-              references,
-              threadId: message.threadId || '',
-              subject: subjectHeader || '(No Subject)',
-              from: fromHeader || '',
-              to: toHeader || '',
-              snippet: message.snippet || '',
-              bodyPlain,
-              bodyHtml,
-              internalDate: this.getMessageDate(message, dateHeader),
-              direction,
-              labels: message.labelIds || [],
-            },
-            { upsert: true, returnDocument: 'after' }
-          );
+          const emailDoc = await this.cacheMessage(userId, messageResponse.data, gmailEmail);
 
           return {
             id: emailDoc._id,
@@ -556,7 +519,70 @@ export class GmailService {
   }
 
   /**
-   * Fetch all emails in a thread
+   * Parse a full-format Gmail message and upsert it into the EmailMessage
+   * cache. Shared by inbox listing and thread sync, so both store the same
+   * fields (including the RFC headers needed for replies).
+   */
+  private static async cacheMessage(userId: string, message: any, gmailEmail: string) {
+    const headers = message.payload?.headers || [];
+    const dateHeader = this.getHeader(headers, 'Date');
+    const { bodyPlain, bodyHtml } = this.parseEmailBody(message.payload);
+    const userObjectId = new Types.ObjectId(userId);
+
+    return EmailMessage.findOneAndUpdate(
+      { userId: userObjectId, gmailMessageId: message.id },
+      {
+        userId: userObjectId,
+        gmailMessageId: message.id,
+        rfcMessageId: this.getHeader(headers, 'Message-ID'),
+        references: this.getHeader(headers, 'References'),
+        threadId: message.threadId || '',
+        subject: this.getHeader(headers, 'Subject') || '(No Subject)',
+        from: this.getHeader(headers, 'From') || '',
+        to: this.getHeader(headers, 'To') || '',
+        snippet: message.snippet || '',
+        bodyPlain,
+        bodyHtml,
+        internalDate: this.getMessageDate(message, dateHeader),
+        direction: this.getEmailDirection(message, gmailEmail),
+        labels: message.labelIds || [],
+      },
+      { upsert: true, returnDocument: 'after' }
+    );
+  }
+
+  /** Most recent messages of a thread cached by syncThread (prompts use at most 20). */
+  static readonly MAX_SYNCED_THREAD_MESSAGES = 50;
+
+  /**
+   * Fetch a whole thread from Gmail (threads.get) and cache its messages, so
+   * draft generation sees every message, not only those that appeared in an
+   * inbox listing (e.g. archived messages and the user's own replies). Labels
+   * such as UNREAD are refreshed too. Returns the number of messages cached.
+   */
+  static async syncThread(userId: string, threadId: string): Promise<number> {
+    const { gmail, account } = await this.getGmailContext(userId);
+
+    let response;
+    try {
+      response = await gmail.users.threads.get({ userId: 'me', id: threadId, format: 'full' });
+    } catch (error) {
+      throw await this.toGmailError(userId, error);
+    }
+
+    // Gmail returns a thread's messages oldest-first; keep the newest.
+    const messages = (response.data.messages || [])
+      .filter((message: any) => message.id)
+      .slice(-this.MAX_SYNCED_THREAD_MESSAGES);
+    await mapWithConcurrency(messages, this.MESSAGE_FETCH_CONCURRENCY, (message) =>
+      this.cacheMessage(userId, message, account.gmailEmail)
+    );
+    return messages.length;
+  }
+
+  /**
+   * Cached emails of a thread, newest first. Call syncThread first to include
+   * messages that never appeared in an inbox listing.
    */
   static async fetchThreadEmails(userId: string, threadId: string): Promise<any[]> {
     try {

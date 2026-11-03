@@ -134,6 +134,83 @@ describe('GmailService', () => {
     );
   });
 
+  describe('syncThread (whole thread from Gmail)', () => {
+    const gmailMessage = (id: string, from: string, labelIds: string[], body = `Body of ${id}`) => ({
+      id,
+      threadId: 'thread-1',
+      snippet: body,
+      labelIds,
+      internalDate: String(Date.parse('2026-11-01T10:00:00Z')),
+      payload: {
+        mimeType: 'text/plain',
+        headers: [
+          { name: 'Subject', value: 'Project' },
+          { name: 'From', value: from },
+          { name: 'To', value: 'someone@example.com' },
+          { name: 'Message-ID', value: `<${id}@example.com>` },
+        ],
+        body: { data: Buffer.from(body).toString('base64') },
+      },
+    });
+    let threadsGet: Mock;
+
+    beforeEach(() => {
+      threadsGet = vi.fn();
+      mocks.gmail.mockReturnValue({ users: { threads: { get: threadsGet } } });
+      (EmailMessage.findOneAndUpdate as unknown as Mock).mockResolvedValue({});
+    });
+
+    it("caches every message of the thread, including archived ones and the user's own replies", async () => {
+      threadsGet.mockResolvedValue({
+        data: {
+          messages: [
+            gmailMessage('archived', 'Sender <sender@example.com>', []),
+            gmailMessage('my-reply', 'User <user@gmail.com>', ['SENT']),
+            gmailMessage('latest', 'Sender <sender@example.com>', ['INBOX', 'UNREAD']),
+          ],
+        },
+      });
+
+      await expect(GmailService.syncThread(userId, 'thread-1')).resolves.toBe(3);
+
+      expect(threadsGet).toHaveBeenCalledWith({ userId: 'me', id: 'thread-1', format: 'full' });
+      const updates = (EmailMessage.findOneAndUpdate as unknown as Mock).mock.calls;
+      expect(updates.map(([filter]) => filter)).toEqual(
+        ['archived', 'my-reply', 'latest'].map((id) => ({ userId: new Types.ObjectId(userId), gmailMessageId: id }))
+      );
+      const byId = Object.fromEntries(updates.map(([, update]) => [update.gmailMessageId, update]));
+      expect(byId['archived']).toMatchObject({ direction: 'INBOUND', labels: [], bodyPlain: 'Body of archived', rfcMessageId: '<archived@example.com>' });
+      expect(byId['my-reply']).toMatchObject({ direction: 'OUTBOUND', labels: ['SENT'] });
+      expect(byId['latest']).toMatchObject({ direction: 'INBOUND', labels: ['INBOX', 'UNREAD'] });
+      expect(updates[0][2]).toEqual({ upsert: true, returnDocument: 'after' });
+    });
+
+    it('caches only the newest messages of a very long thread', async () => {
+      const total = GmailService.MAX_SYNCED_THREAD_MESSAGES + 5;
+      threadsGet.mockResolvedValue({
+        data: { messages: Array.from({ length: total }, (_, i) => gmailMessage(`m-${i}`, 'sender@example.com', ['INBOX'])) },
+      });
+
+      await expect(GmailService.syncThread(userId, 'thread-1')).resolves.toBe(GmailService.MAX_SYNCED_THREAD_MESSAGES);
+
+      const ids = (EmailMessage.findOneAndUpdate as unknown as Mock).mock.calls.map(([filter]) => filter.gmailMessageId);
+      expect(ids).not.toContain('m-0');
+      expect(ids).toContain(`m-${total - 1}`);
+    });
+
+    it('handles an empty thread', async () => {
+      threadsGet.mockResolvedValue({ data: {} });
+      await expect(GmailService.syncThread(userId, 'thread-1')).resolves.toBe(0);
+      expect(EmailMessage.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('requires a connected Gmail account', async () => {
+      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(null);
+      await expect(GmailService.syncThread(userId, 'thread-1')).rejects.toMatchObject({ statusCode: 409 });
+      expect(threadsGet).not.toHaveBeenCalled();
+    });
+  });
+
   it('gets stored email and thread emails', async () => {
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue({
       _id: 'email-id',
@@ -542,11 +619,13 @@ describe('GmailService', () => {
       });
     const drafts = { create: vi.fn(), update: vi.fn(), send: vi.fn(), delete: vi.fn() };
     const messagesGet = vi.fn();
+    const threadsGet = vi.fn();
 
     beforeEach(() => {
       Object.values(drafts).forEach((fn) => fn.mockReset());
       messagesGet.mockReset();
-      mocks.gmail.mockReturnValue({ users: { drafts, messages: { get: messagesGet } } });
+      threadsGet.mockReset();
+      mocks.gmail.mockReturnValue({ users: { drafts, messages: { get: messagesGet }, threads: { get: threadsGet } } });
     });
 
     const operations: [string, () => Promise<unknown>, Mock][] = [
@@ -562,6 +641,7 @@ describe('GmailService', () => {
         },
         messagesGet,
       ],
+      ['syncThread', () => GmailService.syncThread(userId, 'thread-1'), threadsGet],
     ];
 
     it.each(operations)('%s: invalid_grant marks Gmail disconnected and returns 403', async (_name, run, apiCall) => {
