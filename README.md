@@ -22,7 +22,7 @@ The system supports:
 
 ## Tech Stack
 
-- Backend: Node.js 20, Express 5, TypeScript
+- Backend: Node.js 24, Express 5, TypeScript
 - Database: MongoDB with Mongoose
 - Frontend: Angular 21 (standalone components, lazy-loaded routes) with Angular Material 21
 - AI: OpenAI API
@@ -106,7 +106,7 @@ docker-compose.yml
 
 ## Prerequisites
 
-- Node.js 20.19.5 (pinned in `.nvmrc`; run `nvm use`). Angular 21's CLI needs Node ≥ 20.19, so older Node versions cannot build or test the frontend.
+- Node.js 24 LTS (`.nvmrc` holds `24`, so `nvm use`, CI and the `node:24-alpine` Docker images all take the latest Node 24 release). Node 20 reached end-of-life in April 2026; Angular 21 also supports Node ≥ 20.19 and 22.12.
 - Google Cloud OAuth2 credentials with the Gmail API enabled
 - Docker Desktop / Docker Engine with Docker Compose
 - OpenAI API key
@@ -527,7 +527,7 @@ Last verified 2026-11-03:
 | Backend | 24 | 447 passing | 96.34% | 87.39% | 97.51% | 96.34% |
 | Frontend | 7 | 135 passing | 95.60% | 82.45% | 95.83% | 96.18% |
 
-Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
+Verified on Node 24.15.0 locally after a clean `npm ci`; the Docker images build and run on Node 24.22.2. The frontend app typecheck is clean and `npm run build` passes.
 
 Backend suites that use MongoDB start an in-memory server through `tests/helpers/mongoMemory.ts` with a 60-second launch timeout (mongod's 10-second default caused random "Instance failed to start" failures on slower machines).
 

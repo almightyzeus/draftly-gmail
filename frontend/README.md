@@ -2,7 +2,7 @@
 
 Angular 21 single-page app for Draftly (standalone components, lazy-loaded routes, Angular Material 21). See the [project README](../README.md) for the full setup, API, and Docker instructions.
 
-Requires Node.js ≥ 20.19 (the repository pins 20.19.5 in `.nvmrc`; run `nvm use`).
+Requires Node.js 24 LTS (`.nvmrc` holds `24`; run `nvm use`). Angular 21 also runs on Node ≥ 20.19 and 22.12.
 
 ## Development server
 

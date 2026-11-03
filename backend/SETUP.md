@@ -2,7 +2,7 @@
 
 ## Prerequisites
 
-- Node.js 20.19.5 (pinned in `.nvmrc`)
+- Node.js 24 LTS (`.nvmrc` holds `24`)
 - MongoDB running locally or Atlas connection string
 - OpenAI API key
 - Google OAuth2 credentials

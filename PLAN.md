@@ -28,10 +28,10 @@ page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread contex
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
 | Production build | `ng build` passes; initial bundle 527.41 kB (only the 500 kB warning budget exceeded); Preferences (7.39 kB) and Activity (74 kB, 10.4 kB gzipped) are lazy chunks |
 | CI | `.github/workflows/ci.yml` (GitHub Actions, Node from `.nvmrc`): every step passed in a clean checkout (fresh `npm ci`, no `.env`, placeholder env values) |
-| Docker | `docker compose up --build` run by the user on 2026-11-03 (images build on `node:20-alpine`); browser smoke test confirmed by the user |
+| Docker | Images rebuilt on `node:24-alpine` (D4): backend runs Node 24.22.2 and loads its compiled app; the frontend image's nginx config is valid (its `backend` upstream resolves inside compose). Earlier `node:20` stack and browser smoke test confirmed by the user |
 
-Verified on Node 24.15 (supported by Angular 21); no Node version manager is installed on this
-machine, so the pinned 20.19.5 was not re-tested.
+Verified on Node 24.15.0 locally; the Docker images build and run on Node 24.22.2 (`.nvmrc` holds
+`24` since D4; Node 20 reached end-of-life on 2026-04-30).
 
 Previous checkpoint (2026-10-04, Node 20.19.5): backend 23 files / 348 tests, 95.59% statements;
 frontend 5 files / 83 tests, 93.87% statements; initial bundle ≈527 kB (over the 500 kB
@@ -188,7 +188,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | D1 | ~~Remove unused `cookie-parser` and `@types/cookie-parser` (backend).~~ | **Done** 2026-11-03 (approved): uninstalled; the lockfile also drops their dependency `cookie-signature@1.0.6` (Express keeps its own 1.2.2) and three optional-peer entries npm 11 no longer records (`zod`, two nested `gcp-metadata`; none are imported). Clean `npm ci`, typecheck, build and all 447 tests pass. |
 | D2 | `npm audit` (frontend): 35 vulnerabilities (22 moderate, 10 high, 3 critical). | Fix requires upgrades. |
 | D3 | Initial bundle 527 kB, above the 500 kB warning budget. | Investigate (e.g. `provideAnimations()`, Material imports) before changing budgets. |
-| D4 | **Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30. Update `.nvmrc` (20.19.5), both Dockerfiles (`node:20-alpine`), and CI (reads `.nvmrc`); `@types/node` is already 25. | Tests and builds already pass on Node 24.15 locally (Angular 21 supports it). Re-run the Docker build and CI after the change. |
+| D4 | ~~**Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30.~~ | **Done** 2026-11-03 (approved): `.nvmrc` `20.19.5` → `24` (CI's `setup-node` and `nvm use` read it), both Dockerfiles `node:20-alpine` → `node:24-alpine`; docs updated. No dependency changes: every engine range already allows Node 24. Tests and builds pass on 24.15.0; `docker compose build` succeeds (Node 24.22.2 in the image). The first GitHub CI run on Node 24 happens on the next push. |
 
 ### 5.6 Cleanup
 

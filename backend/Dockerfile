@@ -1,5 +1,5 @@
 # Build stage: full dependency tree (TypeScript etc.), exact versions from the lockfile.
-FROM node:20-alpine AS build
+FROM node:24-alpine AS build
 
 WORKDIR /app
 
@@ -12,7 +12,7 @@ COPY . .
 RUN npm run build
 
 # Runtime stage: production dependencies only, running as the unprivileged "node" user.
-FROM node:20-alpine
+FROM node:24-alpine
 
 WORKDIR /app
 
