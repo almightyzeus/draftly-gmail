@@ -20,12 +20,15 @@ All six hardening stages (section 3) are complete, and the P1 backlog items from
 | Backend typecheck | `npx tsc --noEmit` clean |
 | Backend tests | 23 files, **366 passing** (`npm run test:ci`) |
 | Backend coverage | 96.23% statements, 85.42% branches, 99.24% functions, 96.23% lines |
+| Frontend dependencies | Clean `npm ci` from the lockfile: Angular 21.2.22, Material 21.2.14 (the local install had been a stale Angular 17) |
 | Frontend tests | 5 files, **91 passing** |
-| Frontend coverage | 97.73% statements, 90.51% branches, 95.9% functions, 97.73% lines |
-| Frontend typecheck / `ng build` | **Not verified**: local `frontend/node_modules` has Angular 17.3.12 while `package.json` requires `^21` (stale install). `tsc` fails only on `provideAppInitializer` (an Angular 19+ API) for that reason. Needs `nvm use && npm ci` in `frontend/`. |
+| Frontend coverage | 94.05% statements, 81.64% branches, 93.91% functions, 94.6% lines |
+| Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
+| Production build | `ng build` passes; initial bundle 527.28 kB (only the 500 kB warning budget exceeded) |
 | Docker | Not re-run since 2026-10-04 |
 
-Verified on Node 24.15 (not the pinned 20.19.5).
+Verified on Node 24.15 (supported by Angular 21); no Node version manager is installed on this
+machine, so the pinned 20.19.5 was not re-tested.
 
 Previous checkpoint (2026-10-04, Node 20.19.5): backend 23 files / 348 tests, 95.59% statements;
 frontend 5 files / 83 tests, 93.87% statements; initial bundle ≈527 kB (over the 500 kB
@@ -168,9 +171,11 @@ See section 4 (S5, S12, in-memory rate limits).
 | P4-3 | `GET /api/logs` returns `total` as the page size, not the real total. | `logController.ts` |
 | P4-4 | `fetchEmails` loads the Gmail account twice. | `gmailService.ts` |
 | P4-5 | The cached copy of a sent reply stores plain text as `bodyHtml`. | `DraftService.recordOutboundMessage` |
-| P4-6 | Initial bundle ≈527 kB, above the 500 kB warning budget. | Re-measure after `npm ci`. |
+| P4-6 | Initial bundle 527.28 kB, above the 500 kB warning budget. | Measured 2026-11-03. |
 | P4-7 | Noisy backend test output (unmocked logger in some suites). | — |
-| P4-8 | Local `frontend/node_modules` is Angular 17 while `package.json` is Angular 21. | Environment, not code: `npm ci` in `frontend/`. |
+| P4-8 | ~~Local `frontend/node_modules` was Angular 17 while `package.json` is Angular 21.~~ | **Done** 2026-11-03: clean `npm ci`. |
+| P4-9 | `npm audit` (frontend) reports 35 vulnerabilities (22 moderate, 10 high, 3 critical). | Fixing means dependency upgrades: needs approval. |
+| P4-10 | `frontend/tsconfig.spec.json` matches no files (`src/**/*.spec.ts`); tests live in `tests/*.vitest.ts`. | Stale config. |
 
 ### 5.5 Documentation follow-ups
 

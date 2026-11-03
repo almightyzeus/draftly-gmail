@@ -495,9 +495,9 @@ Last verified 2026-11-03:
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
 | Backend | 23 | 366 passing | 96.23% | 85.42% | 99.24% | 96.23% |
-| Frontend | 5 | 91 passing | 97.73% | 90.51% | 95.9% | 97.73% |
+| Frontend | 5 | 91 passing | 94.05% | 81.64% | 93.91% | 94.6% |
 
-These numbers come from Node 24 with a local `frontend/node_modules` that still had Angular 17 installed, so `ng build` was not re-run for them. Re-run `nvm use && npm ci` in `frontend/` before checking the build.
+Verified on Node 24.15 (Angular 21 supports it) after a clean `npm ci`; the pinned Node 20.19.5 was not re-tested. The frontend app typecheck is clean and `npm run build` passes.
 
 Backend suites that use MongoDB start an in-memory server through `tests/helpers/mongoMemory.ts` with a 60-second launch timeout (mongod's 10-second default caused random "Instance failed to start" failures on slower machines).
 
