@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi, type Mock } from 'vitest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
+import { startMongoMemoryServer } from './helpers/mongoMemory.js';
 import mongoose, { Types } from 'mongoose';
 import request from 'supertest';
 import { app } from '../src/app.js';
@@ -30,7 +31,7 @@ let mongoServer: MongoMemoryServer;
 
 describe('Durable send idempotency (real MongoDB)', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await startMongoMemoryServer();
     await mongoose.connect(mongoServer.getUri());
   });
 

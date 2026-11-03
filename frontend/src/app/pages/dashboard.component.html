@@ -1,6 +1,15 @@
 <app-top-bar />
 
 <main class="page-content">
+  @if (gmailConnectError) {
+    <p class="inline-error page-alert" role="alert">
+      <mat-icon>error_outline</mat-icon>
+      <span>{{ gmailConnectError }}</span>
+      <button mat-icon-button class="page-alert__dismiss" aria-label="Dismiss" (click)="dismissGmailConnectError()">
+        <mat-icon>close</mat-icon>
+      </button>
+    </p>
+  }
   @if (!currentUser) {
     <div class="state">
       <mat-spinner diameter="40"></mat-spinner>

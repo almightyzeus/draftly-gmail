@@ -6,6 +6,7 @@ import { EmailMessage } from '../src/models/EmailMessage.js';
 import { OpenAIService } from '../src/services/openaiService.js';
 import { GmailService } from '../src/services/gmailService.js';
 import { ActivityLogService } from '../src/services/activityLogService.js';
+import { AppError, ForbiddenError } from '../src/utils/errors.js';
 
 vi.mock('../src/models/Draft.js', () => {
   const DraftMock = vi.fn();
@@ -152,12 +153,84 @@ describe('DraftService', () => {
     expect(ActivityLogService.logActivity).toHaveBeenCalledWith(userId, 'DRAFT_GENERATED', 'Draft', 'info', draftId, expect.any(Object));
   });
 
-  it('returns existing pending draft for the same thread', async () => {
-    const existing = buildDraft();
-    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
-    (Draft.findOne as unknown as Mock).mockResolvedValue(existing);
+  describe('an existing PENDING draft for the thread', () => {
+    const oldDraftId = new Types.ObjectId();
+    const arrangeExisting = (tone = 'formal') => {
+      const existing = buildDraft({ _id: oldDraftId, tone });
+      (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+      (Draft.findOne as unknown as Mock).mockResolvedValue(existing);
+      (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, _id: new Types.ObjectId(draftId) }));
+      (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue({ ...existing, status: 'REJECTED' });
+      return existing;
+    };
+    const expectSuperseded = () => {
+      expect(Draft.findOneAndUpdate).toHaveBeenCalledWith(
+        { _id: oldDraftId, userId: new Types.ObjectId(userId), status: 'PENDING' },
+        {
+          $set: { status: 'REJECTED', rejectedAt: expect.any(Date) },
+          $push: {
+            auditTrail: {
+              at: expect.any(Date),
+              action: 'SUPERSEDED',
+              by: 'system',
+              meta: { supersededBy: draftId },
+            },
+          },
+        },
+        { returnDocument: 'after' }
+      );
+      expect(ActivityLogService.logActivity).toHaveBeenCalledWith(
+        userId, 'DRAFT_SUPERSEDED', 'Draft', 'info', oldDraftId.toString(), { supersededBy: draftId }
+      );
+    };
 
-    await expect(DraftService.generateDraft(userId, 'msg-1', 'formal')).resolves.toBe(existing);
+    it('is returned for the same tone without new context (e.g. a double click)', async () => {
+      const existing = arrangeExisting('formal');
+
+      await expect(DraftService.generateDraft(userId, 'msg-1', 'formal')).resolves.toBe(existing);
+      expect(OpenAIService.generateDraft).not.toHaveBeenCalled();
+      expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('is replaced when a different tone is requested (regression: old draft silently reused)', async () => {
+      arrangeExisting('formal');
+
+      const result = await DraftService.generateDraft(userId, 'msg-1', 'friendly');
+
+      expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['msg-1'], 'friendly', undefined);
+      expect(result.tone).toBe('friendly');
+      expect(result.draftBody).toBe('Generated reply');
+      expectSuperseded();
+    });
+
+    it('is replaced when the user gives new instructions, even with the same tone', async () => {
+      arrangeExisting('formal');
+
+      const result = await DraftService.generateDraft(userId, 'msg-1', 'formal', undefined, 'Decline politely');
+
+      expect(OpenAIService.generateDraft).toHaveBeenCalledWith(userId, ['msg-1'], 'formal', 'Decline politely');
+      expect(result.draftBody).toBe('Generated reply');
+      expectSuperseded();
+    });
+
+    it('is kept when generating the replacement fails', async () => {
+      arrangeExisting('formal');
+      (OpenAIService.generateDraft as unknown as Mock).mockRejectedValueOnce(new AppError('The AI returned an empty draft. Please try again.', 502));
+
+      await expect(DraftService.generateDraft(userId, 'msg-1', 'concise')).rejects.toMatchObject({ statusCode: 502 });
+      expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+    });
+
+    it('is not logged as superseded if it left PENDING meanwhile (e.g. approved)', async () => {
+      arrangeExisting('formal');
+      (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue(null);
+
+      await DraftService.generateDraft(userId, 'msg-1', 'concise');
+
+      expect(ActivityLogService.logActivity).not.toHaveBeenCalledWith(
+        userId, 'DRAFT_SUPERSEDED', expect.anything(), expect.anything(), expect.anything(), expect.anything()
+      );
+    });
   });
 
   describe('reply target never resolves to the user (regression: replies sent to self)', () => {
@@ -375,6 +448,18 @@ describe('DraftService', () => {
       statusCode: 502,
       message: 'Could not update the Gmail draft, so your edit was not saved. Please try again.',
     });
+    expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['expired or revoked (403)', new ForbiddenError('Gmail access has expired or was revoked. Please reconnect Gmail.')],
+    ['rate limited (429)', new AppError('Gmail rate limit exceeded. Please try again shortly.', 429)],
+  ])('keeps the status when Gmail access is %s while editing an APPROVED draft', async (_label, gmailError) => {
+    (Draft.findOne as unknown as Mock).mockResolvedValue(buildDraft({ status: 'APPROVED', gmailDraftId: 'gmail-draft-1' }));
+    (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
+    (GmailService.updateDraft as unknown as Mock).mockRejectedValueOnce(gmailError);
+
+    await expect(DraftService.updateDraft(userId, draftId, 'New text')).rejects.toBe(gmailError);
     expect(Draft.findOneAndUpdate).not.toHaveBeenCalled();
   });
 

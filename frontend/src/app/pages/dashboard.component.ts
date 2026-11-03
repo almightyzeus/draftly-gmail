@@ -17,6 +17,7 @@ import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
 import { TopBarComponent } from '../shared/top-bar.component';
 import { formatListDate, senderName } from '../shared/format';
+import { gmailConnectErrorMessage } from '../shared/gmail-connect-error';
 
 interface Email {
   id: string;
@@ -71,6 +72,9 @@ export class DashboardComponent implements OnInit, OnDestroy {
   readonly formatDate = formatListDate;
   readonly senderName = senderName;
 
+  /** Why the last Gmail connection attempt failed (from the OAuth callback redirect). */
+  gmailConnectError: string | null = null;
+
   /** 0 = Inbox, 1 = Drafts; mirrored in the URL (?tab=drafts). */
   selectedTab = 0;
 
@@ -115,6 +119,18 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   ngOnInit(): void {
     this.selectedTab = this.route.snapshot.queryParamMap.get('tab') === 'drafts' ? 1 : 0;
+
+    // The Gmail OAuth callback reports a failed connection as ?gmailError=<code>.
+    // Show it once, then drop it from the URL so a reload doesn't repeat it.
+    this.gmailConnectError = gmailConnectErrorMessage(this.route.snapshot.queryParamMap.get('gmailError'));
+    if (this.gmailConnectError) {
+      this.router.navigate([], {
+        relativeTo: this.route,
+        queryParams: { gmailError: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+    }
 
     // AuthService.restoreSession() loads /me at startup and login/register set
     // the user, so currentUser$ is the single source of user state here.
@@ -194,8 +210,13 @@ export class DashboardComponent implements OnInit, OnDestroy {
     return !!email.labels?.includes('UNREAD');
   }
 
+  dismissGmailConnectError(): void {
+    this.gmailConnectError = null;
+  }
+
   connectGmail(): void {
     this.emailsError = null;
+    this.gmailConnectError = null;
     this.authService.connectGmail().subscribe({
       error: (error) => {
         console.error('Failed to start Gmail connection:', error);

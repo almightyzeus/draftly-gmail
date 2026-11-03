@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeEach, afterAll, beforeAll } from 'vitest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
+import { startMongoMemoryServer } from './helpers/mongoMemory.js';
 import mongoose from 'mongoose';
 import { User } from '../src/models/User.js';
 import { UserPreference } from '../src/models/UserPreference.js';
@@ -9,7 +10,7 @@ let mongoServer: MongoMemoryServer;
 
 describe('User Model', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await startMongoMemoryServer();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
   });
@@ -137,7 +138,7 @@ describe('User Model', () => {
 
 describe('UserPreference Model', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await startMongoMemoryServer();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
   });
@@ -197,7 +198,7 @@ describe('UserPreference Model', () => {
 
 describe('GmailAccount Model', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await startMongoMemoryServer();
     const mongoUri = mongoServer.getUri();
     await mongoose.connect(mongoUri);
   });

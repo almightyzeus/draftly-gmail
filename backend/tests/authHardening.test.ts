@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
+import { startMongoMemoryServer } from './helpers/mongoMemory.js';
 import mongoose from 'mongoose';
 import request from 'supertest';
 import { app } from '../src/app.js';
@@ -17,7 +18,7 @@ let mongoServer: MongoMemoryServer;
 
 describe('Session and OAuth hardening (HTTP)', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await startMongoMemoryServer();
     await mongoose.connect(mongoServer.getUri());
   });
 

@@ -90,6 +90,15 @@ body {
   color: var(--dr-danger);
 }
 
+/* A page-level alert above the main content, with an optional dismiss button. */
+.page-alert {
+  margin-bottom: var(--dr-gap);
+}
+
+.page-alert__dismiss {
+  margin-left: auto;
+}
+
 /* Spinner inside a button label. */
 .btn-spinner {
   display: inline-block;

@@ -19,7 +19,8 @@ export default defineConfig({
     include: ['tests/**/*.test.ts'],
     clearMocks: true,
     testTimeout: 30000,
-    hookTimeout: 30000,
+    // Above the in-memory MongoDB launch timeout (tests/helpers/mongoMemory.ts).
+    hookTimeout: 90000,
     fileParallelism: false,
     coverage: {
       provider: 'v8',

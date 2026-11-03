@@ -1,5 +1,6 @@
 import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
-import { MongoMemoryServer } from 'mongodb-memory-server';
+import type { MongoMemoryServer } from 'mongodb-memory-server';
+import { startMongoMemoryServer } from './helpers/mongoMemory.js';
 import mongoose from 'mongoose';
 import request from 'supertest';
 import { app } from '../src/app.js';
@@ -16,7 +17,7 @@ const originalNodeEnv = env.nodeEnv;
 // Each test file gets a fresh module graph, so the in-memory limiter store starts empty.
 describe('Auth rate limiting', () => {
   beforeAll(async () => {
-    mongoServer = await MongoMemoryServer.create();
+    mongoServer = await startMongoMemoryServer();
     await mongoose.connect(mongoServer.getUri());
     env.nodeEnv = 'development';
   });

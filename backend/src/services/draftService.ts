@@ -137,17 +137,19 @@ export class DraftService {
         throw new ValidationError('Either gmailMessageId or threadId must be provided');
       }
 
-      // Check if draft already exists for this thread/message (idempotency)
+      // A thread has at most one PENDING draft. Repeating the same request
+      // (e.g. a double click) returns it. A different tone or new instructions
+      // mean the user wants a new draft: it replaces the pending one below.
       const existingDraft = await Draft.findOne({
         userId: userObjectId,
         threadId: targetThreadId,
         status: 'PENDING',
       });
 
-      if (existingDraft) {
-        logger.warn(
-          { userId, threadId: targetThreadId },
-          'Draft already exists for this thread'
+      if (existingDraft && existingDraft.tone === tone && !customContext) {
+        logger.info(
+          { userId, threadId: targetThreadId, draftId: existingDraft._id },
+          'Pending draft with the same tone already exists for this thread; reusing it'
         );
         return existingDraft;
       }
@@ -192,6 +194,12 @@ export class DraftService {
         emailCount: gmailMessageIds.length,
       });
 
+      // Retire the pending draft this one replaces, only now that the new one
+      // is saved, so a failed generation never loses the previous draft.
+      if (existingDraft) {
+        await this.supersedeDraft(userId, userObjectId, existingDraft._id, draft._id);
+      }
+
       logger.info(
         {
           userId,
@@ -211,6 +219,41 @@ export class DraftService {
         'Failed to generate draft'
       );
       throw error;
+    }
+  }
+
+  /**
+   * Mark a PENDING draft as REJECTED because a newer draft replaced it. It
+   * stays visible in the drafts list. A draft that left PENDING meanwhile
+   * (e.g. it was approved) is left alone.
+   */
+  private static async supersedeDraft(
+    userId: string,
+    userObjectId: Types.ObjectId,
+    oldDraftId: Types.ObjectId,
+    newDraftId: Types.ObjectId
+  ): Promise<void> {
+    const rejectedAt = new Date();
+    const superseded = await Draft.findOneAndUpdate(
+      { _id: oldDraftId, userId: userObjectId, status: 'PENDING' },
+      {
+        $set: { status: 'REJECTED', rejectedAt },
+        $push: {
+          auditTrail: {
+            at: rejectedAt,
+            action: 'SUPERSEDED',
+            by: 'system',
+            meta: { supersededBy: newDraftId.toString() },
+          },
+        },
+      },
+      { returnDocument: 'after' }
+    );
+
+    if (superseded) {
+      await this.logActivity(userId, 'DRAFT_SUPERSEDED', oldDraftId.toString(), {
+        supersededBy: newDraftId.toString(),
+      });
     }
   }
 
@@ -416,6 +459,11 @@ export class DraftService {
         gmailError instanceof Error ? gmailError : new Error(String(gmailError)),
         'Failed to update Gmail draft; edit not saved'
       );
+      // Expired/revoked Gmail access (403) and Gmail rate limits (429) keep
+      // their status so the client can prompt a reconnect or a retry.
+      if (gmailError instanceof AppError && [403, 429].includes(gmailError.statusCode)) {
+        throw gmailError;
+      }
       throw new AppError(
         'Could not update the Gmail draft, so your edit was not saved. Please try again.',
         502

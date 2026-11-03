@@ -22,35 +22,58 @@ export const getOAuthUrl = (req: any, res: Response) => {
 };
 
 /**
+ * Error codes the OAuth callback passes to the frontend (`?gmailError=`).
+ * Only fixed codes travel in the URL; the frontend maps them to messages.
+ */
+export type GmailConnectError =
+  | 'access_denied'
+  | 'missing_code'
+  | 'state_expired'
+  | 'state_invalid'
+  | 'connection_failed';
+
+function redirectWithGmailError(res: Response, code: GmailConnectError): void {
+  res.redirect(`${env.frontendUrl}/dashboard?gmailError=${code}`);
+}
+
+/**
  * Handle OAuth callback from Google
- * Verifies the state parameter to ensure secure user identification
+ * Verifies the state parameter to ensure secure user identification.
+ * This is a browser navigation, so every outcome is a redirect back to the
+ * app: the dashboard on success, or the dashboard with `?gmailError=<code>`
+ * (the user is normally still signed in; if not, login returns them there).
  */
 export const handleOAuthCallback = async (req: any, res: Response, next: NextFunction) => {
   try {
-    const code = req.query.code as string;
-    const state = req.query.state as string;
+    const code = typeof req.query.code === 'string' ? req.query.code : undefined;
+    const state = typeof req.query.state === 'string' ? req.query.state : undefined;
+
+    // Google reports a cancelled or denied consent as ?error=access_denied.
+    if (req.query.error) {
+      logger.info({ googleError: String(req.query.error) }, 'Gmail OAuth consent not granted');
+      return redirectWithGmailError(res, 'access_denied');
+    }
 
     if (!code) {
-      return res.status(400).json({ error: 'Missing authorization code' });
+      logger.warn('OAuth callback without an authorization code');
+      return redirectWithGmailError(res, 'missing_code');
     }
 
-    // Verify state token and extract userId
-    let userId: string;
     try {
-      userId = GmailOAuthService.verifyOAuthStateToken(state);
+      GmailOAuthService.verifyOAuthStateToken(state);
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Invalid OAuth state';
       logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth state verification failed');
-      return res.redirect(`${env.frontendUrl}/login?error=${encodeURIComponent(errorMessage)}`);
+      const expired = error instanceof Error && error.message.includes('expired');
+      return redirectWithGmailError(res, expired ? 'state_expired' : 'state_invalid');
     }
 
-    await GmailOAuthService.handleCallback(code, state);
+    await GmailOAuthService.handleCallback(code, state as string);
 
     // Redirect to dashboard using configured FRONTEND_URL
     res.redirect(`${env.frontendUrl}/dashboard`);
   } catch (error) {
     logger.error(error instanceof Error ? error : new Error(String(error)), 'OAuth callback error');
-    res.redirect(`${env.frontendUrl}/login?error=${encodeURIComponent('gmail_connection_failed')}`);
+    redirectWithGmailError(res, 'connection_failed');
   }
 };
 

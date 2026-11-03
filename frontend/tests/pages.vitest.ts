@@ -8,12 +8,16 @@ import { EmailDetailComponent } from '../src/app/pages/email-detail.component';
 import { DraftDetailComponent } from '../src/app/pages/draft-detail.component';
 
 const snackBar = { open: vi.fn() };
-const router = { navigate: vi.fn() };
+const router = { navigate: vi.fn(), navigateByUrl: vi.fn() };
 /** ConfirmService double: answers every confirmation with `answer`. */
 const confirmWith = (answer: boolean) => ({ confirm: vi.fn(() => of(answer)) });
 let confirmYes = confirmWith(true);
 /** ActivatedRoute double for the dashboard (?tab=...). */
-const dashRoute = (tab?: string) => ({ snapshot: { queryParamMap: { get: (key: string) => (key === 'tab' ? tab ?? null : null) } } });
+const dashRoute = (tab?: string, extra: Record<string, string> = {}) => queryRoute({ ...(tab ? { tab } : {}), ...extra });
+/** ActivatedRoute double with the given query parameters. */
+function queryRoute(params: Record<string, string> = {}) {
+  return { snapshot: { queryParamMap: { get: (key: string) => params[key] ?? null } } };
+}
 const draftsApi = { getDrafts: vi.fn(() => of([])) };
 
 describe('frontend page classes', () => {
@@ -25,7 +29,7 @@ describe('frontend page classes', () => {
 
   it('LoginComponent validates and submits login', () => {
     const auth = { login: vi.fn().mockReturnValue(of({})) };
-    const component = new LoginComponent(new FormBuilder(), auth as any, router as any, snackBar as any);
+    const component = new LoginComponent(new FormBuilder(), auth as any, router as any, snackBar as any, queryRoute() as any);
 
     component.onSubmit();
     expect(auth.login).not.toHaveBeenCalled();
@@ -33,12 +37,28 @@ describe('frontend page classes', () => {
     component.loginForm.setValue({ email: 'user@example.com', password: 'password' });
     component.onSubmit();
     expect(auth.login).toHaveBeenCalledWith('user@example.com', 'password');
-    expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
+    expect(router.navigateByUrl).toHaveBeenCalledWith('/dashboard');
+  });
+
+  it.each([
+    ['an in-app returnUrl', '/draft/abc?x=1', '/draft/abc?x=1'],
+    ['the OAuth error redirect', '/dashboard?gmailError=access_denied', '/dashboard?gmailError=access_denied'],
+    ['an absolute URL', 'https://evil.example.com', '/dashboard'],
+    ['a protocol-relative URL', '//evil.example.com', '/dashboard'],
+    ['a backslash host', '/\\evil.example.com', '/dashboard'],
+  ])('LoginComponent returns to %s after login', (_label, returnUrl, expected) => {
+    const auth = { login: vi.fn().mockReturnValue(of({})) };
+    const component = new LoginComponent(new FormBuilder(), auth as any, router as any, snackBar as any, queryRoute({ returnUrl }) as any);
+    component.loginForm.setValue({ email: 'user@example.com', password: 'password' });
+
+    component.onSubmit();
+
+    expect(router.navigateByUrl).toHaveBeenCalledWith(expected);
   });
 
   it('LoginComponent handles login errors', () => {
     const auth = { login: vi.fn().mockReturnValue(throwError(() => ({ error: { error: 'Bad login' } }))) };
-    const component = new LoginComponent(new FormBuilder(), auth as any, router as any, snackBar as any);
+    const component = new LoginComponent(new FormBuilder(), auth as any, router as any, snackBar as any, queryRoute() as any);
     component.loginForm.setValue({ email: 'user@example.com', password: 'password' });
     component.onSubmit();
     expect(component.isLoading).toBe(false);
@@ -142,6 +162,48 @@ describe('frontend page classes', () => {
 
     component.connectGmail();
     expect(component.emailsError).toBe('Could not start the Gmail connection. Please try again.');
+  });
+
+  describe('DashboardComponent Gmail connection errors from the OAuth callback (?gmailError=)', () => {
+    const disconnectedAuth = () => ({
+      currentUser$: of({ id: '1', name: 'User', email: 'user@example.com', googleConnected: false }),
+      connectGmail: vi.fn().mockReturnValue(of(undefined)),
+    });
+
+    it('shows the message once and removes the code from the URL', () => {
+      const route = dashRoute(undefined, { gmailError: 'access_denied' });
+      const component = new DashboardComponent(disconnectedAuth() as any, {} as any, draftsApi as any, router as any, route as any);
+
+      component.ngOnInit();
+
+      expect(component.gmailConnectError).toBe('Gmail was not connected because access was not granted on the Google screen.');
+      expect(router.navigate).toHaveBeenCalledWith([], {
+        relativeTo: route,
+        queryParams: { gmailError: null },
+        queryParamsHandling: 'merge',
+        replaceUrl: true,
+      });
+
+      component.dismissGmailConnectError();
+      expect(component.gmailConnectError).toBeNull();
+    });
+
+    it('shows a generic message for an unknown code (URL text is never displayed)', () => {
+      const component = new DashboardComponent(disconnectedAuth() as any, {} as any, draftsApi as any, router as any, dashRoute(undefined, { gmailError: '<b>hi</b>' }) as any);
+      component.ngOnInit();
+      expect(component.gmailConnectError).toBe('Gmail could not be connected. Please try again.');
+    });
+
+    it('does nothing without a code, and clears the message on a new connection attempt', () => {
+      const component = new DashboardComponent(disconnectedAuth() as any, {} as any, draftsApi as any, router as any, dashRoute() as any);
+      component.ngOnInit();
+      expect(component.gmailConnectError).toBeNull();
+      expect(router.navigate).not.toHaveBeenCalled();
+
+      component.gmailConnectError = 'previous failure';
+      component.connectGmail();
+      expect(component.gmailConnectError).toBeNull();
+    });
   });
 
   it('DashboardComponent switches to Connect Gmail when the Gmail grant has expired (403)', () => {

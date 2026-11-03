@@ -534,6 +534,69 @@ describe('GmailService', () => {
     });
   });
 
+  describe('Gmail failures on draft operations (not only the inbox list)', () => {
+    const invalidGrant = () =>
+      Object.assign(new Error('invalid_grant'), {
+        status: 400,
+        response: { status: 400, data: { error: 'invalid_grant' } },
+      });
+    const drafts = { create: vi.fn(), update: vi.fn(), send: vi.fn(), delete: vi.fn() };
+    const messagesGet = vi.fn();
+
+    beforeEach(() => {
+      Object.values(drafts).forEach((fn) => fn.mockReset());
+      messagesGet.mockReset();
+      mocks.gmail.mockReturnValue({ users: { drafts, messages: { get: messagesGet } } });
+    });
+
+    const operations: [string, () => Promise<unknown>, Mock][] = [
+      ['createDraft', () => GmailService.createDraft(userId, 'a@example.com', 'Re: Hi', 'Body', 'thread-1'), drafts.create],
+      ['updateDraft', () => GmailService.updateDraft(userId, 'gd-1', 'Body', 'a@example.com', 'Re: Hi', 'thread-1'), drafts.update],
+      ['sendDraft', () => GmailService.sendDraft(userId, 'gd-1', 'thread-1'), drafts.send],
+      ['deleteDraft', () => GmailService.deleteDraft(userId, 'gd-1'), drafts.delete],
+      [
+        'getReplyMetadata',
+        () => {
+          (EmailMessage.findOne as unknown as Mock).mockResolvedValue({ gmailMessageId: 'msg-1' });
+          return GmailService.getReplyMetadata(userId, 'msg-1');
+        },
+        messagesGet,
+      ],
+    ];
+
+    it.each(operations)('%s: invalid_grant marks Gmail disconnected and returns 403', async (_name, run, apiCall) => {
+      apiCall.mockRejectedValue(invalidGrant());
+
+      await expect(run()).rejects.toMatchObject({
+        statusCode: 403,
+        message: 'Gmail access has expired or was revoked. Please reconnect Gmail.',
+      });
+      expect(GmailAccount.updateMany).toHaveBeenCalledWith(
+        { userId: new Types.ObjectId(userId), revokedAt: null },
+        { $set: { revokedAt: expect.any(Date) } }
+      );
+      expect(User.findByIdAndUpdate).toHaveBeenCalledWith(new Types.ObjectId(userId), {
+        googleConnected: false,
+        gmailEmail: null,
+      });
+    });
+
+    it.each(operations)('%s: a Gmail 429 becomes a 429, other failures pass through', async (_name, run, apiCall) => {
+      apiCall.mockRejectedValueOnce(Object.assign(new Error('Rate limited'), { response: { status: 429 } }));
+      await expect(run()).rejects.toMatchObject({ statusCode: 429 });
+
+      const boom = Object.assign(new Error('Backend error'), { code: 500 });
+      apiCall.mockRejectedValueOnce(boom);
+      await expect(run()).rejects.toBe(boom);
+      expect(GmailAccount.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('keeps "Gmail account not connected" as a 409', async () => {
+      (GmailAccount.findOne as unknown as Mock).mockResolvedValue(null);
+      await expect(GmailService.sendDraft(userId, 'gd-1', 'thread-1')).rejects.toMatchObject({ statusCode: 409 });
+    });
+  });
+
   describe('Token Refresh Persistence', () => {
     it('sets up token refresh listener when getting Gmail client', async () => {
       const userId = new Types.ObjectId().toString();

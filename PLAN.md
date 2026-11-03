@@ -1,62 +1,43 @@
-# Draftly — Review Findings & Hardening Plan
+# Draftly — Status, Review Findings & Backlog
 
-This replaces the original one-week build plan (its schedule and checklists are complete
-or superseded). The plan below comes from a full review of the repository.
+This file tracks verified project status. It replaced the original one-week build plan;
+sections 2–3 keep the October 2026 review and its six hardening stages as history, and
+section 5 is the live backlog.
 
-**Working rules for every stage:** one stage at a time; inspect the files again before
-changing them; add or update tests; run the stage's validation commands; stop for review.
+**Working rules for every change:** one item at a time; inspect the files again before
+changing them; add or update tests; run the validation commands; stop for review.
 No dependency upgrades and no commits unless explicitly approved.
 
 ---
 
-## 0. Status — all stages complete (verified 2026-10-04, Node 20.19.5)
+## 0. Current status (verified 2026-11-03)
 
-| Stage | Outcome |
+All six hardening stages (section 3) are complete, and the P1 backlog items from the
+2026-11-03 reconciliation (section 5.1) are fixed.
+
+| Check | Result |
 |---|---|
-| 1 Session & OAuth hardening | Done: header-only auth, no token cookies, `GET /api/gmail/oauth/url`, OAuth state has its own audience, per-callback OAuth client, redacted request logs (S1, S2, S3, S8) |
-| 2 Draft & send integrity | Done: single hardened MIME builder (CR/LF stripped, single parsed recipient, encoded subject, base64 bodies), Gmail-sync-before-save for approved drafts, save-before-approve/send in the UI, exact direction detection, no placeholder drafts, Gmail `internalDate` (C1, C2, S4, S6, C4, C5) |
-| 3 Errors, config, dead code | Done: typed errors and 404/409/422/400/413 status codes, one error helper, string-typed inputs and length caps, per-user generate limit, OpenAI config/timeout/prompt caps, dead code removed, Docker in production mode as non-root (C3, A1, A3, A4, S7, S10, S11) |
-| 4 Frontend structure | Done: lazy routes (initial bundle 995 kB → 523 kB), observer-style subscriptions, dashboard leak/double-load fixed, signal-based busy state, safer email rendering (A5, C7, S9-partial) |
-| 5 UI/UX polish | Done: shared top bar with Gmail status, Inbox/Drafts tabs, drafts list, recipient header, Material confirm dialogs, snackbars, global styles, accessibility, responsive layouts |
-| 6 Verification & docs | Done: full validation suite, Docker checks, README / frontend README / SETUP.md / `.env.example` updated |
+| Backend typecheck | `npx tsc --noEmit` clean |
+| Backend tests | 23 files, **366 passing** (`npm run test:ci`) |
+| Backend coverage | 96.23% statements, 85.42% branches, 99.24% functions, 96.23% lines |
+| Frontend tests | 5 files, **91 passing** |
+| Frontend coverage | 97.73% statements, 90.51% branches, 95.9% functions, 97.73% lines |
+| Frontend typecheck / `ng build` | **Not verified**: local `frontend/node_modules` has Angular 17.3.12 while `package.json` requires `^21` (stale install). `tsc` fails only on `provideAppInitializer` (an Angular 19+ API) for that reason. Needs `nvm use && npm ci` in `frontend/`. |
+| Docker | Not re-run since 2026-10-04 |
 
-Fixes added during the stages (beyond the original plan):
+Verified on Node 24.15 (not the pinned 20.19.5).
 
-- Reject on an APPROVED draft always failed; now it withdraws the draft and deletes its Gmail copy (Stage 3).
-- Malformed / oversized JSON bodies returned 500; now 400 / 413 (Stage 3).
-- **Replies could be addressed to the user** when a thread's newest messages were the user's own: reply targets are now always messages from someone else, and approve/send refuse self-addressed replies.
-- Inbox listing fetched Gmail messages sequentially (6.6–7.7 s per page); now 10 in parallel (≈1.1–2.9 s).
-- Deprecated Mongoose `new: true` options replaced with `returnDocument: 'after'`.
+Previous checkpoint (2026-10-04, Node 20.19.5): backend 23 files / 348 tests, 95.59% statements;
+frontend 5 files / 83 tests, 93.87% statements; initial bundle ≈527 kB (over the 500 kB
+warning budget, under the 1 MB error budget).
 
-Follow-up (2026-10-04): C6 fixed (AI gets text derived from HTML-only emails; single-part HTML emails are stored as HTML), A7 fixed (`zod` and `joi` removed; the stale `ts-node-dev` lockfile entries were pruned in the same `npm uninstall`), and S9 extended (remote email images hidden until "Show images"). Backend 23 files / 348 tests, frontend 5 files / 83 tests.
+## 1. Baseline (history)
 
-Still open (documented in the README, deliberately not done): S5 (OAuth state not bound to the browser), stateless refresh tokens, in-memory rate limits.
+At the start of the October review: backend 18 files / 253 tests (93.09% statements),
+frontend 3 files / 36 tests (83.83%), initial bundle 994.85 kB against a 1 MB hard error
+budget, Docker working with nginx proxying `/api`.
 
-## 1. Baseline
-
-At the time of the review:
-
-| Area | Status |
-|---|---|
-| Backend tests | 18 files, 253 tests passing; `npx tsc --noEmit` clean |
-| Backend coverage | 93.09% statements, 75.6% branches |
-| Frontend tests | 3 files, 36 tests passing; app typecheck clean |
-| Frontend coverage | 83.83% statements, 67.1% branches (needs Node ≥ 20) |
-| Production build | passes; **initial bundle 994.85 kB vs a 1 MB hard error budget** |
-| Docker | `docker compose up --build` works; nginx proxies `/api` to the backend |
-
-After all stages:
-
-| Area | Status |
-|---|---|
-| Backend tests | 22 files, 336 tests passing; `npx tsc --noEmit` clean |
-| Backend coverage | 95.5% statements, 84.48% branches |
-| Frontend tests | 4 files, 78 tests passing; app typecheck clean |
-| Frontend coverage | 93.67% statements, 80.1% branches |
-| Production build | passes; initial bundle 527.21 kB (only the 500 kB warning budget is exceeded) |
-| Docker | rebuilt from committed code; backend in production mode as `node`; `MONGODB_URI=mongodb://mongodb:27017/draftly`; nginx proxies `/api`; port 3000 bound to 127.0.0.1 |
-
-### Completed work (preserve)
+Completed before the review (preserve):
 
 - Signed, expiring Gmail OAuth state; `FRONTEND_URL` redirects; encrypted Gmail tokens; refresh persistence; Google revocation; `invalid_grant` → account marked disconnected.
 - JWT access/refresh tokens; `POST /api/auth/refresh`; interceptor refresh-and-retry once.
@@ -68,205 +49,130 @@ After all stages:
 
 ---
 
-## 2. Review findings
-
-Severity reflects this app's actual deployment: a local, multi-user-capable app behind nginx.
-Each finding cites the code it comes from.
+## 2. Review findings (October 2026) and their status
 
 ### 2.1 Security
 
-| # | Severity | Finding | Evidence |
+| # | Severity | Finding | Status |
 |---|---|---|---|
-| S1 | **Medium** | **Logout does not end the session.** The frontend also writes the access token (15 min) and refresh token (7 days) to JS-readable cookies, and `logout()` only clears `localStorage`. The backend accepts both cookies (`authenticateJWT` cookie fallback, `/auth/refresh` cookie fallback), so after logout anyone using that browser can mint new tokens for 7 days. The cookies exist only so the full-page `/oauth/connect` redirect is authenticated. | `frontend/.../auth.service.ts` `storeTokens`/`setCookie`/`logout`; `backend/src/middleware/auth.ts`; `authController.refresh` |
-| S2 | **Medium** | **The OAuth `state` JWT is also a valid API access token.** It is signed with `JWT_ACCESS_SECRET`, carries `userId`, and `authenticateJWT` ignores its `type: 'gmail_oauth'` claim. The state passes through Google's redirect URL, browser history and the backend request log (S8), so anyone who sees it gets a 10-minute API session as that user. | `gmailOAuthService.generateOAuthStateToken`; `middleware/auth.ts` |
-| S3 | **Medium** | **The OAuth callback uses a process-wide singleton OAuth2 client.** `handleCallback` calls `oauth2Client.setCredentials(tokens)` on a module-level client, then `getProfile`. Two concurrent callbacks can fetch user A's profile with user B's credentials, saving A's account under B's Gmail address. That address also drives INBOUND/OUTBOUND classification. The last user's tokens also stay in the shared client. | `services/googleClient.ts` (`oauth2Client`); `gmailOAuthService.handleCallback` |
-| S4 | **Medium** | **Reply headers are built from untrusted input without CR/LF stripping.** `To:` comes from the inbound `From` header and `Subject:` from the inbound subject; both are concatenated into the raw RFC 822 message. If Gmail returns a decoded header value containing a line break (e.g. an RFC 2047 encoded word), a sender could inject headers such as `Bcc:` into the user's approved reply. *Exploitability against Gmail's API is not verified; the unsafe concatenation is.* The same MIME builder is duplicated in `createDraft` and `updateDraft`, and bodies are sent unencoded (no transfer encoding, unbounded line length). | `gmailService.createDraft` / `updateDraft` |
-| S5 | Low | The OAuth `state` is signed but not tied to the browser that started the flow. Another Draftly user could get a victim to complete Google consent with *their* state and link the victim's Gmail to their account. This needs social engineering, a Google consent click, and an account on the same instance. | `gmailOAuthService.verifyOAuthStateToken` |
-| S6 | Low | **Direction is detected by substring match:** `from.includes(userEmail)`. `evil-user@gmail.com` matches `user@gmail.com`, so attacker mail can be stored as OUTBOUND and fed to the AI as "my writing style" examples. | `gmailService.getEmailDirection`; `openaiService.fetchLearningEmails` |
-| S7 | Low | **Docker runs with `NODE_ENV=development`**, so the global error handler returns stack traces and pino-pretty is used. The backend image runs as root with dev dependencies (`npm install`, no `--omit=dev`). | `backend/.env.docker` (untracked), `app.ts` error handler, `backend/Dockerfile` |
-| S8 | Low | **The request log records full URLs**, including the OAuth `code` and `state` on the callback and users' Gmail search queries. | `app.ts` (`morgan('combined')`) |
-| S9 | Low | **Email HTML renders inline in the app page.** Angular's sanitizer removes scripts and event handlers (no script XSS found), but remote images or tracking pixels load automatically and links render in the app's context. Plain text uses `bypassSecurityTrustHtml` after manual escaping; that's safe as written but unnecessary. | `email-detail.component.ts/html` |
-| S10 | Low | **Non-string body fields reach Mongo filters.** `gmailMessageId` / `threadId` from `POST /drafts/generate` are used in queries untyped, so `{"$ne": null}` acts as an operator. Every query is scoped to `userId`, so there is no cross-user impact. | `draftController.generateDraft` → `draftService` / `gmailService` |
-| S11 | Low | **No OpenAI cost or abuse bounds.** `/drafts/generate` has no rate limit, there are no length caps on thread bodies, learning emails, `customContext` or `signature`, and the OpenAI client has no timeout. Prompt injection from email content is mitigated by human approval. | `openaiService.generateDraft`; `preferenceController` |
-| S12 | Info | Stateless refresh tokens (not revocable server-side); tokens in `localStorage` (standard SPA trade-off); 6-character minimum password; no minimum strength check on JWT secrets; nginx serves the SPA without CSP or other security headers; MongoDB has no auth (internal Docker network only). | various |
-
-Verified as fine: bcrypt hashing; HS256 pinned on verify; separate access/refresh secrets; every Draft/Email/Log query scoped by `userId`; AES-256-GCM with a random IV and auth tag; CORS locked to `FRONTEND_URL`; Helmet on the API; send idempotency; Gmail search params validated.
+| S1 | Medium | Logout did not end the session (JS-readable token cookies accepted by the API). | **Fixed** (Stage 1): Bearer header only; no token cookies; legacy cookies cleared on logout. |
+| S2 | Medium | The OAuth `state` JWT was also a valid API access token. | **Fixed** (Stage 1): own audience; `authenticateJWT` rejects tokens with `type`/`aud`. |
+| S3 | Medium | OAuth callback used a process-wide OAuth2 client (cross-user credential mixing). | **Fixed** (Stage 1): a fresh client per callback; singleton removed. |
+| S4 | Medium | Reply headers built from untrusted input without CR/LF stripping; MIME builder duplicated. | **Fixed** (Stage 2): single `buildRawReply` in `utils/mimeMessage.ts`. |
+| S5 | Low | OAuth `state` not bound to the browser that started the flow. | **Deferred** (documented in README). |
+| S6 | Low | Direction detected by substring match on `From`. | **Fixed** (Stage 2): `SENT` label or exact address match. |
+| S7 | Low | Docker ran in development mode, as root, with dev dependencies. | **Fixed** (Stage 3): `NODE_ENV=production`, two-stage image, `USER node`. |
+| S8 | Low | Request log recorded OAuth `code`/`state` and search queries. | **Fixed** (Stage 1): `utils/redact.ts`. |
+| S9 | Low | Email HTML rendered inline; remote images loaded automatically. | **Fixed / accepted**: sanitized once per load, remote images hidden until "Show images"; inline rendering (no sandboxed iframe) accepted. |
+| S10 | Low | Non-string body fields reached Mongo filters. | **Fixed** (Stage 3): string-only ids and inputs with length caps. |
+| S11 | Low | No OpenAI cost or abuse bounds. | **Fixed** (Stage 3): per-user generate limit, prompt caps, timeout. |
+| S12 | Info | Stateless refresh tokens; tokens in `localStorage`; 6-character minimum password; no JWT-secret strength check; no CSP/security headers in nginx; MongoDB without auth. | **Deferred** (see section 4). |
 
 ### 2.2 Correctness
 
-| # | Severity | Finding | Evidence |
-|---|---|---|---|
-| C1 | **Medium** | **Editing an APPROVED draft can diverge from what is sent.** If the Gmail draft update fails, the error is logged and the Mongo body is still saved. The UI shows the new text, but Send sends the Gmail draft, which still holds the old text. An edit racing a send can also change the body of a SENT draft (full-document `save()` with no status condition). | `draftService.updateDraft` |
-| C2 | **Medium** | **Approve with unsaved edits is racy.** `approveDraft()` calls `saveDraft()` without waiting, then immediately sends approve, so the Gmail draft can be created from the old body. | `draft-detail.component.ts` `approveDraft` |
-| C3 | **Medium** | **Not-found and ownership failures return 500.** Services throw plain `Error('Draft not found')`, `Error('Email not found')`, `Error('Gmail account not connected')`, and controllers map non-`AppError`s to 500. A test currently asserts that a cross-user GET returns 500. | `draftService.*`, `gmailService.getEmail`, `getGmailClient`; `integration.test.ts` |
-| C4 | Low | An empty OpenAI response is saved as the literal draft body "Failed to generate draft", which could then be approved and sent. | `openaiService.generateDraft` |
-| C5 | Low | `internalDate` comes from the sender-controlled `Date` header. An unparseable date makes the cache upsert fail and the message silently disappears from the list. Gmail's own `internalDate` is available. | `gmailService.fetchEmails` |
-| C6 | Low | HTML-only emails cache an empty `bodyPlain`, so the AI prompt and the style examples get no content. | `gmailService.parseEmailBody` |
-| C7 | Low | The dashboard's `currentUser$` subscription is never unsubscribed (a leak per visit), and the first load can fetch the inbox twice (subscription plus `getMe()`). | `dashboard.component.ts` `ngOnInit` |
+| # | Finding | Status |
+|---|---|---|
+| C1 | Editing an APPROVED draft could diverge from what Gmail sends. | **Fixed** (Stage 2): Gmail sync first, conditional Mongo update. |
+| C2 | Approve with unsaved edits was racy. | **Fixed** (Stage 2): save then approve (`switchMap`). |
+| C3 | Not-found/ownership failures returned 500. | **Fixed** (Stage 3): typed errors, 404/409. |
+| C4 | Empty OpenAI response saved as a placeholder draft. | **Fixed** (Stage 2): 502, nothing saved. |
+| C5 | `internalDate` came from the sender-controlled `Date` header. | **Fixed** (Stage 2): Gmail `internalDate`. |
+| C6 | HTML-only emails gave the AI no content. | **Fixed** (2026-10-04): `utils/htmlToText.ts`. |
+| C7 | Dashboard user subscription leaked; double initial inbox fetch. | **Fixed** (Stage 4): explicit unsubscribe in `ngOnDestroy` (not `takeUntilDestroyed` as planned); single initial load. |
 
 ### 2.3 Architecture
 
-| # | Problem | Proposed change | Benefit | Risk | Worth it? |
-|---|---|---|---|---|---|
-| A1 | Six controllers each define the same `handleError`; services mix `AppError` with plain `Error` (see C3). | Services throw `NotFoundError`/`ConflictError`; one shared `sendError(res, err, fallback)` helper. | Correct status codes, one place to change. | Low; tests assert some statuses. | **Yes** |
-| A2 | The MIME message builder is duplicated in `createDraft` and `updateDraft` (S4). | A single `buildReplyMessage()` that sanitizes headers and base64-encodes the parts. | Fixes S4 once. | Low; tests on raw output. | **Yes** |
-| A3 | Dead code: `GmailService.sendReply` (throws "Not implemented"), `deleteDraft`, the `sendDraft` `inReplyTo`/`references` params (unused), `GmailOAuthService.getValidTokens` plus a second `persistRefreshedTokens`, the singleton `oauth2Client`, `encryptToJson`/`decryptFromJson`, `OpenAIService.generateReply`/`generateConsolidatedReply`/`extractKeyPoints`; frontend `app.component.html`/`.css` (unused CLI welcome page, 476 lines). | Delete. | Less surface and confusion. | Very low. | **Yes** |
-| A4 | OpenAI config bypasses `env`: it reads `process.env` directly and defaults to `gpt-4-turbo`, while `env.openai.model` defaults to `gpt-4o-mini` and is unused. | Use `env.openai`; set a timeout and retries. | One source of config. | Very low. | **Yes** |
-| A5 | **The initial bundle is 5 kB below the hard 1 MB build error**; every route is eager. Any new Material module (dialog, chips) can break the build. | Lazy-load routes with `loadComponent`. | Large headroom; faster first paint. | Low. | **Yes** (needed before UI work) |
-| A6 | Inbox listing fetches messages sequentially (N+1, 21 Gmail calls per page). | Bounded parallel `messages.get` (e.g. 5 at a time). | Noticeably faster inbox. | Low–medium (Gmail quota). | Optional |
-| A7 | `zod` and `joi` are installed but unused; validation is hand-written. | Leave the code as is; removing them is a dependency change and needs your approval. | — | — | Leave |
-| A8 | Controllers use `try/catch` everywhere, even though Express 5 forwards async errors. | — | Marginal. | Broad churn. | **Leave** |
+| # | Item | Status |
+|---|---|---|
+| A1 | Duplicated controller error handling. | **Fixed**: shared `sendError` in `utils/errors.ts`. |
+| A2 | Duplicated MIME builder. | **Fixed** with S4. |
+| A3 | Dead code (backend and frontend). | **Fixed** (Stage 3/4). |
+| A4 | OpenAI config bypassed `env`. | **Fixed**: `env.openai`, 60 s timeout, 2 retries. |
+| A5 | Initial bundle 5 kB below the 1 MB hard limit. | **Fixed** (Stage 4): lazy routes (≈527 kB). |
+| A6 | Sequential Gmail `messages.get` (N+1). | **Fixed**: 10 in parallel (`utils/concurrency.ts`). |
+| A7 | Unused `zod` and `joi`. | **Fixed** (2026-10-04): removed. |
+| A8 | `try/catch` in every controller despite Express 5. | **Left as is** by decision. |
 
-### 2.4 Frontend / UI
+### 2.4–2.6 Frontend, Angular/RxJS, tests
 
-- **Functional gap:** there is no drafts list. After leaving a draft page the only ways back are regenerating or knowing the URL; "Back to Drafts" goes to the dashboard. `DraftService.getDrafts()` exists but nothing uses it.
-- **Native `confirm()` dialogs** for send, reject, disconnect and unsaved changes. `MatDialog` is injected into DraftDetail but unused.
-- **Inconsistent feedback:** success/error shown as cards on draft and email pages, as `MatSnackBar` on login and register.
-- **The draft editor is a raw `<textarea>`** with a hand-made character count and label, unlike every other field, which uses `mat-form-field`.
-- **Accessibility:** icon-only buttons (back, account menu) have no accessible name; inbox rows are clickable `<tr>`s with no keyboard access; no `autocomplete` on login/register fields; the dashboard toolbar has no app title.
-- **Duplicated styling:** login and register CSS are identical except one `max-width`; `loading-state`, `error-state`, `error-card`, `toolbar`, `content`, `inline-spinner` and `full-width` are redefined in 2–4 page stylesheets; 59 hardcoded colour values across page CSS. Dashboard CSS is 3.69 kB against a 4 kB error budget.
-- **Repetition:** `isSaving || isApproving || isRejecting || isSending` appears 7 times in the draft template; the "spinner inside button" block appears 6 times.
-- **Responsive:** the 4-column inbox table isn't adapted for narrow screens.
-- **No Bootstrap** in the project, so polish uses Angular Material plus shared global styles.
-
-### 2.5 Angular / RxJS
-
-- 18 `subscribe(next, error)` calls use the deprecated two-callback form.
-- No lifecycle-safe teardown for long-lived streams (C7); `takeUntilDestroyed()` fits.
-- Template calls to `sanitizeHtml()` / `formatPlainText()` run on every change-detection pass.
-- Constructor DI everywhere; no signals or `OnPush`. The app is zone-based with mutable component state, which is fine as it is.
-- `provideAnimations()` may be removable with Material 21 (a bundle saving), but this needs investigation first and is not recommended blind.
-
-### 2.6 Tests
-
-Backend: good coverage, and the new idempotency/rate-limit tests run against real Mongo. Some test files don't mock the logger, so test output is noisy.
-Frontend: tests construct component classes directly, so there are no template, rendering or accessibility assertions. That's acceptable at this size; the UI stage verifies in a real browser.
+All items from the review were addressed in Stages 4–5: drafts list (Dashboard **Drafts**
+tab), Material confirm dialog instead of `confirm()`, snackbars, `mat-form-field` draft
+editor, accessibility (aria-labels, keyboard rows, `autocomplete`, app title), shared global
+styles, responsive inbox table, observer-object subscriptions, signal-based busy state in
+DraftDetail. Frontend tests still construct component classes directly (no template or
+rendering assertions); accepted at this size.
 
 ---
 
-## 3. Staged plan
+## 3. Completed stages (history)
 
-Priorities: 1 = must-fix security/correctness · 2 = architecture · 3 = UI/UX · 4 = Angular/RxJS · 5 = cleanup.
-**Stages 1–3 are recommended. Stage 4 is recommended as scoped (targeted, not a migration). Stage 5 is recommended, with the drafts list needing your decision. Stage 6 is the original final verification and docs stage.**
+| Stage | Outcome |
+|---|---|
+| 1 Session & OAuth hardening (S1, S2, S3, S8) | Header-only auth, `GET /api/gmail/oauth/url`, OAuth state audience, per-callback OAuth client, redacted request logs. |
+| 2 Draft & send integrity (C1, C2, S4, S6, C4, C5) | Hardened MIME builder, Gmail-sync-before-save, save-before-approve/send, exact direction detection, no placeholder drafts, Gmail `internalDate`. |
+| 3 Errors, config, dead code (C3, A1, A3, A4, S7, S10, S11) | Typed errors and status codes, input caps, per-user generate limit, OpenAI config/timeout/caps, dead code removed, production Docker as non-root. |
+| 4 Frontend structure (A5, C7, S9) | Lazy routes (995 kB → 523 kB), observer subscriptions, dashboard leak fixed, signal busy state, safer email rendering. |
+| 5 UI/UX polish | Top bar with Gmail status, Inbox/Drafts tabs, drafts list, recipient header, confirm dialogs, snackbars, global styles, accessibility, responsive layouts. |
+| 6 Verification & docs | Full validation suite, Docker checks, README / frontend README / SETUP.md / `.env.example` updated. |
 
-### Stage 1 — Session & OAuth hardening *(Priority 1: S1, S2, S3, S8)*
-
-- **Objective:** logout really ends the session; OAuth artifacts can't be used as credentials; no shared OAuth client state.
-- **Changes:**
-  1. Add `GET /api/gmail/oauth/url` (authenticated XHR) returning the consent URL. The frontend fetches it and then navigates, which removes the need for auth cookies.
-  2. Remove the cookie fallbacks from `authenticateJWT` and `/auth/refresh`; stop writing token cookies; `logout()` deletes any legacy cookies. Keep `/oauth/connect` working by header only, or remove it once the frontend no longer uses it.
-  3. Give the OAuth state token its own audience (`aud: 'gmail-oauth-state'`) and make `authenticateJWT` reject any token carrying that audience or a `type` claim.
-  4. `handleCallback` uses a fresh `createOAuth2Client()`; delete the singleton.
-  5. Strip query strings from request-log lines for `/api/gmail/oauth/callback` (and `q` on `/emails`).
-- **Files:** `backend/src/middleware/auth.ts`, `controllers/authController.ts`, `controllers/gmailController.ts`, `routes/gmailRoutes.ts`, `services/gmailOAuthService.ts`, `services/googleClient.ts`, `app.ts`; `frontend/.../auth.service.ts`, `services/gmail.service.ts`.
-- **Tests:**
-  - a cookie-only request gets 401;
-  - `/refresh` without a body token gets 401;
-  - a state token used as Bearer gets 401;
-  - a normal access token still works;
-  - two concurrent callbacks each save their own Gmail address;
-  - the `/oauth/url` response;
-  - frontend `connectGmail` and `logout` behaviour.
-- **Validation:** backend `npx tsc --noEmit`, `npm test`; frontend `npm test`, typecheck, `ng build`; Docker connect-Gmail redirect check in a browser.
-- **Risk:** low–medium. It touches the OAuth entry point. The Google redirect URI is unchanged, and existing sessions keep working via the header.
-- **Not included:** S5 (binding state to the browser via an HttpOnly nonce cookie). Recommended to leave and document for a local app; it could be added here if you want it.
-
-### Stage 2 — Draft & send workflow integrity *(Priority 1: C1, C2, S4, S6, C4, C5)*
-
-- **Objective:** what the user approves is exactly what Gmail sends, and reply headers can't be injected.
-- **Changes:**
-  1. Single `buildReplyMessage()`: strip CR/LF from header values, RFC 2047-encode a non-ASCII subject, base64-encode the plain-text and HTML parts, use a random boundary (fixes A2).
-  2. `updateDraft` on an APPROVED draft: if the Gmail sync fails, fail the request without saving (502/409). The update is conditional on status `PENDING|APPROVED` and no active send claim.
-  3. Frontend: approve waits for the save (`concat`/`switchMap`) before approving.
-  4. Direction: OUTBOUND when Gmail's `SENT` label is present or the parsed `From` address equals the account address exactly.
-  5. An empty AI response throws instead of saving placeholder text.
-  6. Use Gmail `internalDate` (falling back to the `Date` header, then now).
-- **Files:** `backend/src/services/gmailService.ts`, `draftService.ts`, `openaiService.ts`; `frontend/.../draft-detail.component.ts`; tests.
-- **Tests:**
-  - header injection attempt (`\r\nBcc:`) is neutralised;
-  - encoded subject and body round-trip;
-  - Gmail sync failure leaves Mongo unchanged;
-  - edit is rejected on a SENT or claimed draft;
-  - save-then-approve ordering;
-  - `evil-user@` stays INBOUND;
-  - `SENT` label means OUTBOUND;
-  - empty AI response produces an error;
-  - invalid `Date` header still caches.
-- **Validation:** backend typecheck and full suite; frontend tests and build.
-- **Risk:** medium. It changes the raw MIME format, so check one real approve/send in Gmail once Gmail is reconnected.
-
-### Stage 3 — Consistent errors, config & dead code *(Priority 2/5: C3, A1, A3, A4, S7, S10, S11)*
-
-- **Objective:** correct HTTP statuses, one error path, one config source, no dead code.
-- **Changes:**
-  1. Services throw `NotFoundError` / `ConflictError` / `ValidationError`.
-  2. Shared controller error helper.
-  3. Controllers require string types for ids and bodies (closes S10).
-  4. OpenAI uses `env.openai`, with a timeout and per-message/`customContext`/`signature` length caps.
-  5. A light per-user limiter on `/drafts/generate`.
-  6. Delete the dead code listed in A3.
-  7. `docker-compose.yml` sets `NODE_ENV: production`.
-  8. Backend image installs production dependencies only and runs as the non-root `node` user.
-- **Files:** backend controllers, services, `app.ts`, `docker-compose.yml`, `backend/Dockerfile`, `utils/errors.ts`; tests (including updating the cross-user test from 500 to 404).
-- **Tests:**
-  - 404 for a missing or other user's draft and email;
-  - 409 for invalid state transitions;
-  - 400 for non-string ids;
-  - the generate limiter;
-  - OpenAI input truncation.
-- **Validation:** backend typecheck, `npm test`, `npm run test:coverage`; `docker compose up --build`, then health and login checks.
-- **Risk:** low–medium. API status codes change (500 becomes 404/409); the frontend already reads `error.error.error`.
-
-### Stage 4 — Frontend structure & targeted modernization *(Priority 2/4: A5, C7, S9, §2.5)*
-
-- **Objective:** build headroom and lifecycle-safe RxJS. This is not a migration.
-- **Changes:**
-  1. Lazy-load routes (`loadComponent`).
-  2. Replace the deprecated `subscribe(next, error)` calls with observer objects.
-  3. `takeUntilDestroyed()` for the dashboard's user stream; a single initial inbox fetch.
-  4. DraftDetail: busy flags as signals with a `computed` `isBusy` (removes the 7× repeated expression). Other components stay as they are unless a signal clearly simplifies them.
-  5. Render plain-text email with `white-space: pre-wrap` and interpolation (drops `bypassSecurityTrustHtml`); compute sanitized HTML once per load instead of per change-detection pass.
-  6. Delete the unused `app.component.html` / `.css`.
-- **Files:** `app.routes.ts`, all page components, `auth.service.ts`; tests.
-- **Tests:** update component tests for observer callbacks and signals; dashboard teardown test; single initial fetch; email plain-text rendering.
-- **Validation:** frontend `npm test`, coverage, `ng build` (record the new initial bundle size), browser smoke test of every route.
-- **Risk:** low.
-
-### Stage 5 — UI/UX polish (Material-first, same visual identity) *(Priority 3: §2.4)*
-
-- **Objective:** a consistent, accessible, responsive UI without a redesign.
-- **Changes:**
-  1. One reusable `ConfirmDialogComponent` (MatDialog) replacing `confirm()`.
-  2. Draft editor as `mat-form-field` `textarea` with a `mat-hint` character count.
-  3. Transient success via `MatSnackBar` everywhere; inline error states remain for load failures.
-  4. Shared global styles for auth pages, page toolbar/content, loading/error/empty states, and button spinners; remove duplicated page CSS; replace hardcoded colours with theme colours or a few CSS variables.
-  5. Accessibility: `aria-label`s on icon buttons; keyboard-activatable inbox rows (`tabindex`, Enter/Space); `autocomplete` attributes; app title in the toolbar.
-  6. Responsive table: hide the preview/date columns on narrow screens.
-  7. **Minimal drafts list** (decision needed): a "Drafts" card on the dashboard using the existing `MatTable` and `GET /api/drafts`, filtered by status. Recommended, because without it drafts are unreachable.
-- **Files:** page templates/CSS, `styles.css`, a new `shared/confirm-dialog.component.ts`, `dashboard.component.*`; tests.
-- **Tests:** dialog confirm and cancel paths; drafts list loading/empty/error states; keyboard activation on rows.
-- **Validation:** frontend tests and build (CSS budgets); headless-browser check of each page at desktop and phone widths, with screenshots for review.
-- **Risk:** low–medium, since it's visual. Done page by page.
-
-### Stage 6 — Final verification & documentation *(the original Stage 6, still pending)*
-
-- **Objective:** confirm everything end to end and make the docs match reality.
-- **Steps:**
-  1. Backend: `npx tsc --noEmit`, `npm test`, `npm run test:coverage`.
-  2. Frontend: `npm test`, `npm run test:coverage`, `npm run build`. Use Node ≥ 20; the default Node 18 can't run these.
-  3. `docker compose up --build`; confirm `mongodb://mongodb:27017/draftly` inside Docker; confirm nginx proxies `/api`.
-  4. README: search, pagination, idempotent sending and `Idempotency-Key`, current API behaviour and status codes, actual test and coverage numbers, Angular 21 stack, Docker usage (`TRUST_PROXY`, loopback port, OAuth redirect URI), Node 20 requirement, the "Testing" OAuth app 7-day refresh-token caveat.
-- **Risk:** none (verification and docs only).
+Fixes added during the stages: reject on an APPROVED draft withdraws it and deletes its Gmail
+copy; malformed/oversized JSON → 400/413; replies can never be addressed to the user;
+deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 
 ---
 
-## 4. Recommended to leave alone
+## 4. Deferred by decision
 
-- **Adopting `zod`/`joi`** or other validation-framework rewrites: hand validation is adequate. Removing the unused packages is a dependency change and would need your approval.
-- **Express 5 async-handler refactor:** broad churn for little gain (A8).
-- **A full signals or `OnPush` conversion** of services and components: not needed for a zone-based app this size.
-- **Server-side refresh-token revocation store:** extra state and complexity; logout correctness comes from Stage 1.
-- **Sandboxed-iframe email rendering:** script XSS is already mitigated; document the remote-image behaviour (S9) instead.
-- **Removing `provideAnimations()`:** possible bundle win, but only after checking Material 21's needs.
-- **Gmail N+1 parallelisation (A6):** optional; do it only if inbox latency matters for the demo.
-- **OAuth state browser binding (S5):** low risk for a local app; document it.
+- **S5** OAuth state browser binding: low risk for a local app; documented.
+- **S12** items: server-side refresh-token revocation, tokens in `localStorage`, password policy, JWT-secret strength check, nginx CSP/security headers, MongoDB auth.
+- **In-memory rate limits** (per backend process).
+- **Express 5 async-handler refactor** (A8): broad churn for little gain.
+- **Full signals / `OnPush` conversion**: not needed for a zone-based app this size.
+- **Sandboxed-iframe email rendering**: script XSS already mitigated; remote images gated.
+- **Removing `provideAnimations()`**: only after checking Material 21's needs.
+
+---
+
+## 5. Backlog (from the 2026-11-03 reconciliation)
+
+### 5.1 P1 — correctness / demo-visible — **done 2026-11-03**
+
+| # | Item | Resolution |
+|---|---|---|
+| P1-1 | Expired Gmail grant (`invalid_grant`) and Gmail 429 were only mapped on the inbox list; approve/edit/send/reject returned a generic 500 and did not mark Gmail disconnected. | `GmailService.toGmailError` applied to every Gmail call (`createDraft`, `updateDraft`, `sendDraft`, `deleteDraft`, `getReplyMetadata`, list). Editing an approved draft keeps 403/429 instead of 502. |
+| P1-2 | OAuth callback errors redirected to `/login?error=…`, which the login page ignored; a cancelled Google consent returned raw JSON 400; login ignored `returnUrl`. | Callback always redirects to `/dashboard?gmailError=<code>` (`access_denied`, `missing_code`, `state_expired`, `state_invalid`, `connection_failed`); the dashboard shows a dismissible message and clears the code; login honours an in-app `returnUrl` (absolute, `//` and `/\` URLs rejected). |
+| P1-3 | Generating again with a different tone or new context silently returned the old PENDING draft. | Same tone and no context → reuse (double-click safe). Otherwise generate a new draft, then mark the old PENDING one `REJECTED` with audit action `SUPERSEDED` (activity `DRAFT_SUPERSEDED`). A failed generation keeps the old draft. |
+| P1-4 | Flaky backend suites (in-memory MongoDB 10 s launch timeout); `npm run test:ci` failed (`--threads` removed in vitest 1.x). | `tests/helpers/mongoMemory.ts` (60 s launch timeout) used by all Mongo suites; `hookTimeout` 90 s; `test:ci` is `vitest run --coverage` (file parallelism is already off in `vitest.config.ts`). |
+
+### 5.2 P2 — functional gaps — not started
+
+| # | Item | Evidence |
+|---|---|---|
+| P2-1 | `defaultTone` preference is stored but never applied (controller and frontend default to `formal`). | `draftController.generateDraft`; `email-detail.component.ts` `selectedTone` |
+| P2-2 | No Preferences screen (signature, style-example count only via API); no activity-log screen. | `preferenceRoutes.ts`, `logRoutes.ts` have no frontend client |
+| P2-3 | Thread context and consolidation only see cached messages (ones that appeared in a listing). | `GmailService.fetchThreadEmails`, `OpenAIService.generateDraft` |
+| P2-4 | No CI pipeline (no `.github/`). Should run typecheck, `test:ci` and `ng build` on Node 20.19.5. | — |
+| P2-5 | When approve/edit/send gets 403 (Gmail expired), the draft page shows the message but does not update shared state; the top bar shows **Connect Gmail** only after the next inbox load. | `draft-detail.component.ts` (no `AuthService.setGoogleConnected`) |
+| P2-6 | Two concurrent generations for the same thread can still both create PENDING drafts (no unique constraint). | `DraftService.generateDraft` |
+
+### 5.3 P3 — deferred security hardening
+
+See section 4 (S5, S12, in-memory rate limits).
+
+### 5.4 P4 — cleanup — not started
+
+| # | Item | Notes |
+|---|---|---|
+| P4-1 | `cookie-parser` and `@types/cookie-parser` installed but never imported. | Dependency change: needs approval. |
+| P4-2 | Frontend still sets `withCredentials: true` and XSRF configuration (cookie-era leftovers). | `auth.interceptor.ts`, `app.config.ts` |
+| P4-3 | `GET /api/logs` returns `total` as the page size, not the real total. | `logController.ts` |
+| P4-4 | `fetchEmails` loads the Gmail account twice. | `gmailService.ts` |
+| P4-5 | The cached copy of a sent reply stores plain text as `bodyHtml`. | `DraftService.recordOutboundMessage` |
+| P4-6 | Initial bundle ≈527 kB, above the 500 kB warning budget. | Re-measure after `npm ci`. |
+| P4-7 | Noisy backend test output (unmocked logger in some suites). | — |
+| P4-8 | Local `frontend/node_modules` is Angular 17 while `package.json` is Angular 21. | Environment, not code: `npm ci` in `frontend/`. |
+
+### 5.5 Documentation follow-ups
+
+- `backend/.env.example` says "Required scopes: gmail.modify"; the code requests `gmail.readonly`, `gmail.modify` and `gmail.send` (README is correct).
+- Re-run `ng build`, frontend typecheck and Docker on Node 20.19.5 and update section 0 and the README test table.

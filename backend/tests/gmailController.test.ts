@@ -106,18 +106,31 @@ describe('GmailController', () => {
       expect(mockRes.redirect).toHaveBeenCalledWith('http://localhost:4200/dashboard');
     });
 
-    it('should return 400 if authorization code is missing', async () => {
+    it('redirects with gmailError=missing_code if the authorization code is missing', async () => {
       mockReq.query = {
         state: 'valid-state-token',
       };
 
       await handleOAuthCallback(mockReq, mockRes as Response, mockNext);
 
-      expect(mockRes.status).toHaveBeenCalledWith(400);
-      expect(mockRes.json).toHaveBeenCalledWith({ error: 'Missing authorization code' });
+      expect(mockRes.redirect).toHaveBeenCalledWith('http://localhost:4200/dashboard?gmailError=missing_code');
+      expect(GmailOAuthService.handleCallback).not.toHaveBeenCalled();
     });
 
-    it('should redirect to login error if state verification fails', async () => {
+    it('redirects with gmailError=access_denied when the user cancels the Google consent', async () => {
+      mockReq.query = {
+        error: 'access_denied',
+        state: 'valid-state-token',
+      };
+
+      await handleOAuthCallback(mockReq, mockRes as Response, mockNext);
+
+      expect(mockRes.redirect).toHaveBeenCalledWith('http://localhost:4200/dashboard?gmailError=access_denied');
+      expect(GmailOAuthService.verifyOAuthStateToken).not.toHaveBeenCalled();
+      expect(GmailOAuthService.handleCallback).not.toHaveBeenCalled();
+    });
+
+    it('redirects with gmailError=state_invalid if state verification fails', async () => {
       mockReq.query = {
         code: 'auth-code-123',
         state: 'invalid-or-tampered-state',
@@ -131,12 +144,11 @@ describe('GmailController', () => {
       await handleOAuthCallback(mockReq, mockRes as Response, mockNext);
 
       expect(GmailOAuthService.verifyOAuthStateToken).toHaveBeenCalledWith('invalid-or-tampered-state');
-      expect(mockRes.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('http://localhost:4200/login?error=')
-      );
+      expect(mockRes.redirect).toHaveBeenCalledWith('http://localhost:4200/dashboard?gmailError=state_invalid');
+      expect(GmailOAuthService.handleCallback).not.toHaveBeenCalled();
     });
 
-    it('should redirect to login error if state is missing', async () => {
+    it('redirects with gmailError=state_invalid if state is missing', async () => {
       mockReq.query = {
         code: 'auth-code-123',
       };
@@ -148,12 +160,10 @@ describe('GmailController', () => {
 
       await handleOAuthCallback(mockReq, mockRes as Response, mockNext);
 
-      expect(mockRes.redirect).toHaveBeenCalledWith(
-        'http://localhost:4200/login?error=Missing%20OAuth%20state%20parameter'
-      );
+      expect(mockRes.redirect).toHaveBeenCalledWith('http://localhost:4200/dashboard?gmailError=state_invalid');
     });
 
-    it('should redirect to login error if state is expired', async () => {
+    it('redirects with gmailError=state_expired if state is expired', async () => {
       mockReq.query = {
         code: 'auth-code-123',
         state: 'expired-state-token',
@@ -166,15 +176,10 @@ describe('GmailController', () => {
 
       await handleOAuthCallback(mockReq, mockRes as Response, mockNext);
 
-      expect(mockRes.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('http://localhost:4200/login?error=')
-      );
-      expect(mockRes.redirect).toHaveBeenCalledWith(
-        expect.stringContaining('expired')
-      );
+      expect(mockRes.redirect).toHaveBeenCalledWith('http://localhost:4200/dashboard?gmailError=state_expired');
     });
 
-    it('should redirect to login error page on callback failure', async () => {
+    it('redirects with gmailError=connection_failed on callback failure, without leaking the error text', async () => {
       mockReq.query = {
         code: 'auth-code-123',
         state: 'valid-state',
@@ -186,9 +191,7 @@ describe('GmailController', () => {
 
       await handleOAuthCallback(mockReq, mockRes as Response, mockNext);
 
-      expect(mockRes.redirect).toHaveBeenCalledWith(
-        'http://localhost:4200/login?error=gmail_connection_failed'
-      );
+      expect(mockRes.redirect).toHaveBeenCalledWith('http://localhost:4200/dashboard?gmailError=connection_failed');
     });
   });
 

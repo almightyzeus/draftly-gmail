@@ -1,7 +1,7 @@
 import { Component } from '@angular/core';
 
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
-import { RouterModule, Router } from '@angular/router';
+import { RouterModule, Router, ActivatedRoute } from '@angular/router';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
@@ -30,7 +30,8 @@ export class LoginComponent {
     private fb: FormBuilder,
     private authService: AuthService,
     private router: Router,
-    private snackBar: MatSnackBar
+    private snackBar: MatSnackBar,
+    private route: ActivatedRoute
   ) {
     this.loginForm = this.fb.group({
       email: ['', [Validators.required, Validators.email]],
@@ -47,7 +48,7 @@ export class LoginComponent {
     this.authService.login(email, password).subscribe({
       next: () => {
         this.snackBar.open('Login successful!', 'Close', { duration: 3000 });
-        this.router.navigate(['/dashboard']);
+        this.router.navigateByUrl(this.safeReturnUrl());
       },
       error: (error) => {
         this.isLoading = false;
@@ -55,5 +56,19 @@ export class LoginComponent {
         this.snackBar.open(message, 'Close', { duration: 5000, panelClass: ['error'] });
       },
     });
+  }
+
+  /**
+   * Where to go after login: the page the auth guard redirected from
+   * (?returnUrl=), if it is an in-app path; otherwise the dashboard.
+   * Absolute and protocol-relative URLs are ignored (no open redirect).
+   */
+  private safeReturnUrl(): string {
+    const returnUrl = this.route.snapshot.queryParamMap.get('returnUrl');
+    // Browsers treat "/\host" like "//host", so both are rejected.
+    if (returnUrl && /^\/(?![/\\])/.test(returnUrl)) {
+      return returnUrl;
+    }
+    return '/dashboard';
   }
 }

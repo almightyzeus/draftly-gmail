@@ -409,21 +409,37 @@ export class GmailService {
       'Gmail messages.list failed'
     );
 
-    // The refresh token is dead (expired in a "Testing" OAuth app, or revoked
-    // by the user). This is a token-endpoint 400, not a bad search.
+    // An invalid_grant is a token-endpoint 400, not a bad search: check it first.
+    if (!this.isInvalidGrant(error) && this.httpStatus(error) === 400 && hadSearchInput) {
+      return new ValidationError('Invalid Gmail search query or page token');
+    }
+    return this.toGmailError(userId, error);
+  }
+
+  /**
+   * Map Gmail API failures every caller can act on, for any Gmail call:
+   * - invalid_grant: the refresh token is dead (expired in a "Testing" OAuth
+   *   app, or revoked by the user). Gmail is marked disconnected and 403 is
+   *   returned, so the UI prompts to reconnect instead of failing with a 500.
+   * - 429: Gmail rate limit.
+   * Anything else is returned unchanged.
+   */
+  private static async toGmailError(userId: string, error: any): Promise<unknown> {
+    if (error instanceof AppError) {
+      return error;
+    }
     if (this.isInvalidGrant(error)) {
       await this.markGmailDisconnected(userId);
       return new ForbiddenError('Gmail access has expired or was revoked. Please reconnect Gmail.');
     }
-
-    const status = Number(error?.response?.status ?? error?.status ?? error?.code);
-    if (status === 400 && hadSearchInput) {
-      return new ValidationError('Invalid Gmail search query or page token');
-    }
-    if (status === 429) {
+    if (this.httpStatus(error) === 429) {
       return new AppError('Gmail rate limit exceeded. Please try again shortly.', 429);
     }
     return error;
+  }
+
+  private static httpStatus(error: any): number {
+    return Number(error?.response?.status ?? error?.status ?? error?.code);
   }
 
   private static isInvalidGrant(error: any): boolean {
@@ -510,12 +526,17 @@ export class GmailService {
     }
 
     const gmail = await this.getGmailClient(userId);
-    const response = await gmail.users.messages.get({
-      userId: 'me',
-      id: gmailMessageId,
-      format: 'metadata',
-      metadataHeaders: ['Message-ID', 'References'],
-    });
+    let response;
+    try {
+      response = await gmail.users.messages.get({
+        userId: 'me',
+        id: gmailMessageId,
+        format: 'metadata',
+        metadataHeaders: ['Message-ID', 'References'],
+      });
+    } catch (error) {
+      throw await this.toGmailError(userId, error);
+    }
     const headers = response.data.payload?.headers || [];
     const rfcMessageId = this.getHeader(headers, 'Message-ID');
     const references = this.getHeader(headers, 'References');
@@ -615,7 +636,7 @@ export class GmailService {
         error instanceof Error ? error : new Error(String(error)),
         'Failed to create Gmail draft'
       );
-      throw error;
+      throw await this.toGmailError(userId, error);
     }
   }
 
@@ -663,7 +684,7 @@ export class GmailService {
         error instanceof Error ? error : new Error(String(error)),
         'Failed to update Gmail draft'
       );
-      throw error;
+      throw await this.toGmailError(userId, error);
     }
   }
 
@@ -696,7 +717,7 @@ export class GmailService {
         error instanceof Error ? error : new Error(String(error)),
         'Failed to send Gmail draft'
       );
-      throw error;
+      throw await this.toGmailError(userId, error);
     }
   }
 
@@ -718,7 +739,7 @@ export class GmailService {
         error instanceof Error ? error : new Error(String(error)),
         'Failed to delete Gmail draft'
       );
-      throw error;
+      throw await this.toGmailError(userId, error);
     }
   }
 }

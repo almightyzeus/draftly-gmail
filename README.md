@@ -261,6 +261,8 @@ Note: for apps in **Testing** mode, Google expires refresh tokens after 7 days. 
 
 How the connect flow works: the frontend calls `GET /api/gmail/oauth/url` with its Bearer token, then navigates to the returned Google URL. The `state` parameter is a signed, 10-minute token with its own audience, so it cannot be used as an API token.
 
+Google then redirects the browser to the callback, which always redirects back to the app: to `/dashboard` on success, or to `/dashboard?gmailError=<code>` on failure. The dashboard shows a message for the code (and removes it from the URL). Codes: `access_denied` (consent cancelled or denied), `missing_code`, `state_expired`, `state_invalid`, `connection_failed`. Only these fixed codes travel in the URL, never error text. If the session ended meanwhile, login returns the user to that page.
+
 ## Demo Flow
 
 1. Run `docker compose up --build`.
@@ -269,7 +271,7 @@ How the connect flow works: the frontend calls `GET /api/gmail/oauth/url` with i
 4. Click **Connect Gmail** (top bar) and complete Google OAuth.
 5. Back on the dashboard, browse the **Inbox**: search with Gmail syntax (e.g. `from:alice subject:"report"`), toggle **Unread only**, and use **Next**/**Previous**.
 6. Open an email.
-7. Choose a tone, optionally add context, and click **Generate draft**.
+7. Choose a tone, optionally add context, and click **Generate draft**. Generating again with another tone or new context replaces the pending draft.
 8. Review the draft — the header shows who it will be sent to — and edit it if needed.
 9. Approve the draft. This creates a Gmail draft.
 10. Send the approved draft (you confirm the recipient first).
@@ -291,12 +293,12 @@ Errors are JSON: `{ "error": "message" }`.
 |---|---|
 | 400 | Invalid input (wrong type, too long, malformed JSON, invalid search/page token) |
 | 401 | Missing, invalid, or expired token (the frontend refreshes once and retries) |
-| 403 | Gmail access expired or was revoked — Gmail is marked disconnected; reconnect |
+| 403 | Gmail access expired or was revoked (detected on any Gmail call: listing, approve, edit, send, reject) — Gmail is marked disconnected; reconnect |
 | 404 | Not found, including another user's draft or email, or a malformed id |
 | 409 | Invalid state: e.g. approving a non-pending draft, editing/sending a sent draft, a send already in progress, Gmail not connected, or a reply that would go to your own address |
 | 413 | Request body too large |
 | 422 | Nothing valid to reply to (e.g. a thread with no message from someone else) |
-| 429 | Rate limit (failed logins, draft generation, or Gmail) |
+| 429 | Rate limit (failed logins, draft generation, or Gmail on any call) |
 | 502 | An upstream step failed: the Gmail draft could not be updated (edit not saved) or the AI returned an empty draft |
 
 ### Auth
@@ -384,6 +386,11 @@ Generate draft body (send `threadId` for a consolidated reply, or `gmailMessageI
 
 The reply always targets a message from someone else: the unread incoming messages in the thread, or otherwise the latest incoming message — never your own messages. Generation is limited to 10 requests per minute per user.
 
+A thread has at most one `PENDING` draft:
+
+- The same request again (same tone, no `customContext`, e.g. a double click) returns the existing pending draft without calling OpenAI.
+- A different tone, or any `customContext`, generates a new draft. Once it is saved, the previous pending draft is marked `REJECTED` (audit action `SUPERSEDED`; it stays in the drafts list). If generation fails, the previous draft is kept.
+
 Update draft body (max 50,000 chars):
 
 ```json
@@ -392,7 +399,7 @@ Update draft body (max 50,000 chars):
 }
 ```
 
-For an approved draft, the Gmail draft is updated first; if that fails, the edit is not saved and the API returns 502.
+For an approved draft, the Gmail draft is updated first; if that fails, the edit is not saved and the API returns 502 (or 403 / 429 if Gmail access expired or Gmail is rate limiting).
 
 Reject works for `PENDING` drafts and for `APPROVED` drafts that are not being sent; for an approved draft, its Gmail draft is also deleted (best effort — if that fails, the draft is still rejected and the failure is logged).
 
@@ -466,6 +473,7 @@ npm run dev
 npm run build
 npm test
 npm run test:coverage
+npm run test:ci        # coverage run for CI (test files run one at a time)
 ```
 
 Frontend:
@@ -482,12 +490,16 @@ npm run test:coverage
 
 Backend tests cover services, controllers, middleware, models, and API workflows against an in-memory MongoDB — including send idempotency under concurrency, OAuth hardening, rate limits, cross-user access, and reply-header injection attempts. Frontend tests cover services, the auth interceptor, and page/component behaviour (search and pagination, drafts, dialogs, error states).
 
-Last verified with Node 20.19.5:
+Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 23 | 348 passing | 95.59% | 84.62% | 99.21% | 95.59% |
-| Frontend | 5 | 83 passing | 93.87% | 80.71% | 93.79% | 94.43% |
+| Backend | 23 | 366 passing | 96.23% | 85.42% | 99.24% | 96.23% |
+| Frontend | 5 | 91 passing | 97.73% | 90.51% | 95.9% | 97.73% |
+
+These numbers come from Node 24 with a local `frontend/node_modules` that still had Angular 17 installed, so `ng build` was not re-run for them. Re-run `nvm use && npm ci` in `frontend/` before checking the build.
+
+Backend suites that use MongoDB start an in-memory server through `tests/helpers/mongoMemory.ts` with a 60-second launch timeout (mongod's 10-second default caused random "Instance failed to start" failures on slower machines).
 
 Validation before a demo:
 
@@ -526,6 +538,8 @@ Some backend test output includes logged error stack traces from tests that exer
 - Email HTML is sanitized and shown inline (not in a sandboxed iframe). Remote images are hidden until the user clicks **Show images**.
 - The OAuth `state` is signed and expiring but not tied to the browser that started the flow.
 - The Drafts tab shows the latest 50 drafts. Preferences and activity logs have APIs but no frontend screens yet.
+- The `defaultTone` preference is stored but not yet applied: generation defaults to `formal` unless a tone is sent.
+- When an approve, edit or send finds that Gmail access has expired, the page shows the reconnect message, but the top bar only switches to **Connect Gmail** after the next inbox load or page reload.
 
 ## Future Improvements
 
