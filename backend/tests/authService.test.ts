@@ -41,7 +41,7 @@ const buildUser = (overrides: Record<string, any> = {}) => ({
 describe('AuthService', () => {
   beforeEach(() => {
     vi.clearAllMocks();
-    (User as unknown as Mock).mockImplementation(() => buildUser());
+    (User as unknown as Mock).mockImplementation(function () { return buildUser(); });
   });
 
   it('generates access and refresh JWTs', () => {
@@ -68,7 +68,7 @@ describe('AuthService', () => {
 
   it('registers a new user and default preferences', async () => {
     const instance = buildUser({ email: 'new@example.com' });
-    (User as unknown as Mock).mockImplementation(() => instance);
+    (User as unknown as Mock).mockImplementation(function () { return instance; });
     mocks.userFindOne.mockResolvedValue(null);
     mocks.preferenceCreate.mockResolvedValue({});
 

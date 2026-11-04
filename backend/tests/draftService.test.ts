@@ -178,7 +178,7 @@ describe('DraftService', () => {
   it('syncs the thread of a single stored email so the AI sees the whole conversation', async () => {
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
     (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-    (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
+    (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft(data); });
 
     const result = await DraftService.generateDraft(userId, 'msg-1', 'formal');
 
@@ -189,7 +189,7 @@ describe('DraftService', () => {
   it('generates a draft from a stored email', async () => {
     (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
     (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-    (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, _id: new Types.ObjectId(draftId) }));
+    (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft({ ...data, _id: new Types.ObjectId(draftId) }); });
 
     const result = await DraftService.generateDraft(userId, 'msg-1', 'formal');
 
@@ -207,7 +207,7 @@ describe('DraftService', () => {
       });
       (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
       (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-      (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, _id: new Types.ObjectId(draftId) }));
+      (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft({ ...data, _id: new Types.ObjectId(draftId) }); });
     };
 
     it("uses the user's defaultTone preference", async () => {
@@ -244,7 +244,7 @@ describe('DraftService', () => {
       const existing = buildDraft({ _id: oldDraftId, tone });
       (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
       (Draft.findOne as unknown as Mock).mockResolvedValue(existing);
-      (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
+      (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft(data); });
       (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue({ ...existing, status: 'REJECTED' });
       return existing;
     };
@@ -312,7 +312,7 @@ describe('DraftService', () => {
     it('is retired before the new draft is saved, and restored if that save fails', async () => {
       arrangeExisting('formal');
       const save = vi.fn().mockRejectedValue(new Error('write failed'));
-      (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, save }));
+      (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft({ ...data, save }); });
 
       await expect(DraftService.generateDraft(userId, 'msg-1', 'concise')).rejects.toThrow('write failed');
 
@@ -344,9 +344,9 @@ describe('DraftService', () => {
         (Draft.findOne as unknown as Mock).mockResolvedValueOnce(existing) // pre-check
           .mockResolvedValueOnce(existing) // savePendingDraft
           .mockResolvedValueOnce(winner); // after the duplicate key
-        (Draft as unknown as Mock).mockImplementation((data) =>
-          buildDraft({ ...data, save: vi.fn().mockRejectedValue(duplicateKey()) })
-        );
+        (Draft as unknown as Mock).mockImplementation(function (data: any) {
+          return buildDraft({ ...data, save: vi.fn().mockRejectedValue(duplicateKey()) });
+        });
 
         await expect(DraftService.generateDraft(userId, 'msg-1', 'concise')).resolves.toBe(winner);
 
@@ -367,7 +367,7 @@ describe('DraftService', () => {
         const winner = buildDraft({ _id: winnerId, tone: 'formal' });
         (Draft.findOne as unknown as Mock).mockResolvedValueOnce(null).mockResolvedValueOnce(null).mockResolvedValueOnce(winner);
         const save = vi.fn().mockRejectedValueOnce(duplicateKey()).mockResolvedValueOnce(true);
-        (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, save }));
+        (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft({ ...data, save }); });
         (Draft.findOneAndUpdate as unknown as Mock).mockResolvedValue({ ...winner, status: 'REJECTED' });
 
         const result = await DraftService.generateDraft(userId, 'msg-1', 'friendly');
@@ -392,7 +392,7 @@ describe('DraftService', () => {
         (EmailMessage.findOne as unknown as Mock).mockResolvedValue(email);
         (Draft.findOne as unknown as Mock).mockResolvedValue(null);
         const save = vi.fn().mockRejectedValue(duplicateKey());
-        (Draft as unknown as Mock).mockImplementation((data) => buildDraft({ ...data, save }));
+        (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft({ ...data, save }); });
 
         await expect(DraftService.generateDraft(userId, 'msg-1', 'formal')).rejects.toMatchObject({ statusCode: 409 });
         expect(save).toHaveBeenCalledTimes(DraftService.MAX_PENDING_SAVE_ATTEMPTS);
@@ -421,7 +421,7 @@ describe('DraftService', () => {
     });
     const arrangeNewDraft = () => {
       (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-      (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
+      (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft(data); });
     };
 
     it('replies to the read inbound message when the newest messages are the user\'s own (exact thread shape seen in production)', async () => {
@@ -596,7 +596,7 @@ describe('DraftService', () => {
       { ...email, gmailMessageId: 'msg-2', direction: 'INBOUND' },
     ]);
     (Draft.findOne as unknown as Mock).mockResolvedValue(null);
-    (Draft as unknown as Mock).mockImplementation((data) => buildDraft(data));
+    (Draft as unknown as Mock).mockImplementation(function (data: any) { return buildDraft(data); });
 
     const result = await DraftService.generateDraft(userId, undefined, 'friendly', 'thread-1');
     expect(result.isConsolidated).toBe(true);

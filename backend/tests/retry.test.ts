@@ -28,7 +28,7 @@ describe('withRetry', () => {
     await expect(withRetry(fn, opts)).resolves.toBe('ok');
 
     expect(fn).toHaveBeenCalledTimes(4);
-    expect(opts.sleep.mock.calls.map(([ms]: [number]) => ms)).toEqual([400, 800, 1_000]);
+    expect(opts.sleep.mock.calls.map(([ms]) => ms)).toEqual([400, 800, 1_000]);
   });
 
   it('applies jitter between 50% and 100% of the backoff', async () => {

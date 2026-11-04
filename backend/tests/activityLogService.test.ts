@@ -29,7 +29,7 @@ describe('ActivityLogService', () => {
         save: vi.fn().mockResolvedValue(true),
       };
 
-      (ActivityLog as any).mockReturnValue(mockLog);
+      (ActivityLog as any).mockImplementation(function () { return mockLog; });
 
       const result = await ActivityLogService.logActivity(userId, action, entityType, 'info', entityId, meta);
 
@@ -50,7 +50,7 @@ describe('ActivityLogService', () => {
         save: vi.fn().mockResolvedValue(true),
       };
 
-      (ActivityLog as any).mockReturnValue(mockLog);
+      (ActivityLog as any).mockImplementation(function () { return mockLog; });
 
       await ActivityLogService.logActivity(userId, action, entityType);
 
@@ -75,7 +75,7 @@ describe('ActivityLogService', () => {
         save: vi.fn().mockResolvedValue(true),
       };
 
-      (ActivityLog as any).mockReturnValue(mockLog);
+      (ActivityLog as any).mockImplementation(function () { return mockLog; });
 
       await ActivityLogService.logActivity(userId, action, entityType, level);
 
@@ -96,7 +96,7 @@ describe('ActivityLogService', () => {
         save: vi.fn().mockRejectedValue(dbError),
       };
 
-      (ActivityLog as any).mockReturnValue(mockLog);
+      (ActivityLog as any).mockImplementation(function () { return mockLog; });
 
       await expect(ActivityLogService.logActivity(userId, action, entityType)).rejects.toThrow(
         InternalServerError
@@ -115,7 +115,7 @@ describe('ActivityLogService', () => {
         save: vi.fn().mockResolvedValue(true),
       };
 
-      (ActivityLog as any).mockReturnValue(mockLog);
+      (ActivityLog as any).mockImplementation(function () { return mockLog; });
 
       await ActivityLogService.logActivity(userId, action, entityType);
 
@@ -146,7 +146,7 @@ describe('ActivityLogService', () => {
         save: vi.fn().mockResolvedValue(true),
       };
 
-      (ActivityLog as any).mockReturnValue(mockLog);
+      (ActivityLog as any).mockImplementation(function () { return mockLog; });
 
       await ActivityLogService.logActivity(userId, action, entityType, 'info', undefined, meta);
 
@@ -167,7 +167,7 @@ describe('ActivityLogService', () => {
           save: vi.fn().mockResolvedValue(true),
         };
 
-        (ActivityLog as any).mockReturnValue(mockLog);
+        (ActivityLog as any).mockImplementation(function () { return mockLog; });
 
         await ActivityLogService.logActivity(userId, 'TEST_ACTION', 'TestEntity', level);
 

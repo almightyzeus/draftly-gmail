@@ -528,10 +528,12 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 25 | 455 passing | 96.41% | 87.60% | 97.53% | 96.41% |
+| Backend | 25 | 455 passing | 93.83% | 82.69% | 96.27% | 94.36% |
 | Frontend | 7 | 138 passing | 95.79% | 82.67% | 95.87% | 96.22% |
 
 Verified on Node 24.15.0 locally after a clean `npm ci`; the Docker images build and run on Node 24.22.2. The frontend app typecheck is clean and `npm run build` passes.
+
+Backend coverage is measured by Vitest 5's V8 provider, which counts statements and branches more strictly than the Vitest 1 provider used before 2026-11-04 (then 96.41% statements, 87.60% branches); the tests and covered files are the same.
 
 Backend suites that use MongoDB start an in-memory server through `tests/helpers/mongoMemory.ts` with a 60-second launch timeout (mongod's 10-second default caused random "Instance failed to start" failures on slower machines).
 

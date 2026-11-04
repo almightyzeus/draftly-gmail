@@ -14,13 +14,16 @@ const mockState = {
 
 vi.mock('openai', () => {
   return {
-    OpenAI: vi.fn(() => ({
-      chat: {
-        completions: {
-          create: (...args: any[]) => mockState.create(...args),
+    // Called with `new`: vitest 5 needs a function (not an arrow) implementation.
+    OpenAI: vi.fn(function () {
+      return {
+        chat: {
+          completions: {
+            create: (...args: any[]) => mockState.create(...args),
+          },
         },
-      },
-    })),
+      };
+    }),
   };
 });
 
