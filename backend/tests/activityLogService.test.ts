@@ -1,9 +1,9 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
-import { ActivityLogService } from '../src/services/activityLogService';
-import { ActivityLog } from '../src/models/ActivityLog';
-import { InternalServerError } from '../src/utils/errors';
+import { ActivityLogService } from '../src/services/activityLogService.js';
+import { ActivityLog, type LogLevel } from '../src/models/ActivityLog.js';
+import { InternalServerError } from '../src/utils/errors.js';
 
-vi.mock('../src/models/ActivityLog');
+vi.mock('../src/models/ActivityLog.js');
 vi.mock('../src/utils/logger.js');
 
 describe('ActivityLogService', () => {
@@ -159,7 +159,8 @@ describe('ActivityLogService', () => {
 
     it('should support different log levels', async () => {
       const userId = 'user123';
-      const levels: Array<'info' | 'warn' | 'error' | 'debug'> = ['info', 'warn', 'error', 'debug'];
+      // The schema's enum: 'debug' is not a valid level (a real save would fail validation).
+      const levels: LogLevel[] = ['info', 'warn', 'error'];
 
       for (const level of levels) {
         const mockLog = {

@@ -1,10 +1,10 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { Response } from 'express';
-import { register, login, refresh, me } from '../src/controllers/authController';
-import { AuthService } from '../src/services/authService';
-import { ConflictError, UnauthorizedError, AppError } from '../src/utils/errors';
+import { register, login, refresh, me } from '../src/controllers/authController.js';
+import { AuthService } from '../src/services/authService.js';
+import { ConflictError, UnauthorizedError, AppError } from '../src/utils/errors.js';
 
-vi.mock('../src/services/authService');
+vi.mock('../src/services/authService.js');
 
 describe('AuthController', () => {
   let mockReq: any;

@@ -24,8 +24,8 @@ vi.mock('../src/config/env.js', () => envMocks);
 vi.mock('../src/services/googleClient.js', () => ({
   createOAuth2Client: vi.fn(),
 }));
-vi.mock('../src/services/gmailOAuthService');
-vi.mock('../src/services/gmailService');
+vi.mock('../src/services/gmailOAuthService.js');
+vi.mock('../src/services/gmailService.js');
 vi.mock('../src/utils/logger.js');
 
 import {
@@ -34,10 +34,10 @@ import {
   revokeOAuth,
   fetchEmails,
   getEmail,
-} from '../src/controllers/gmailController';
-import { GmailOAuthService } from '../src/services/gmailOAuthService';
-import { GmailService } from '../src/services/gmailService';
-import { AppError } from '../src/utils/errors';
+} from '../src/controllers/gmailController.js';
+import { GmailOAuthService } from '../src/services/gmailOAuthService.js';
+import { GmailService } from '../src/services/gmailService.js';
+import { AppError } from '../src/utils/errors.js';
 
 describe('GmailController', () => {
   let mockReq: any;
@@ -61,7 +61,7 @@ describe('GmailController', () => {
       redirect: vi.fn().mockReturnThis(),
     };
 
-    mockNext = vi.fn();
+    mockNext = vi.fn() as unknown as NextFunction;
   });
 
   describe('getOAuthUrl', () => {
@@ -245,7 +245,7 @@ describe('GmailController', () => {
         limit: '50',
       };
 
-      const mockEmails = [];
+      const mockEmails: any[] = [];
 
       (GmailService.fetchEmails as unknown as Mock).mockResolvedValue(mockEmails);
 
@@ -433,7 +433,7 @@ describe('GmailController', () => {
         limit: '50',
       };
 
-      const mockEmails = [];
+      const mockEmails: any[] = [];
 
       (GmailService.fetchEmails as unknown as Mock).mockResolvedValue(mockEmails);
 

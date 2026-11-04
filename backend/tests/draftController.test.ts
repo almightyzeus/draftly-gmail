@@ -8,11 +8,11 @@ import {
   approveDraft,
   rejectDraft,
   sendDraft,
-} from '../src/controllers/draftController';
-import { DraftService } from '../src/services/draftService';
-import { AppError } from '../src/utils/errors';
+} from '../src/controllers/draftController.js';
+import { DraftService } from '../src/services/draftService.js';
+import { AppError } from '../src/utils/errors.js';
 
-vi.mock('../src/services/draftService');
+vi.mock('../src/services/draftService.js');
 
 describe('DraftController', () => {
   let mockReq: any;

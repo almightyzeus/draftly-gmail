@@ -3,7 +3,7 @@ import { Request, Response, NextFunction } from 'express';
 import { authenticateJWT, AuthRequest } from '../src/middleware/auth.js';
 import jwt from 'jsonwebtoken';
 
-vi.mock('../src/utils/logger');
+vi.mock('../src/utils/logger.js');
 
 describe('Auth Middleware', () => {
   let mockRequest: Partial<AuthRequest>;

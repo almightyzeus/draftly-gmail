@@ -12,9 +12,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock('../src/models/User.js', () => {
-  const UserMock = vi.fn();
-  UserMock.findOne = mocks.userFindOne;
-  UserMock.findById = mocks.userFindById;
+  const UserMock = Object.assign(vi.fn(), {
+    findOne: mocks.userFindOne,
+    findById: mocks.userFindById,
+  });
   return { User: UserMock };
 });
 

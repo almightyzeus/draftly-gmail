@@ -438,15 +438,15 @@ describe('Integration workflows', () => {
         userId: new Types.ObjectId(user.id),
         gmailMessageId: 'msg-1',
         threadId: 'thread-1',
-        tone: 'formal',
+        tone: 'formal' as const,
         promptVersion: '1.0',
         draftBody: 'Body',
       };
 
-      await Draft.create({ ...base, status: 'PENDING' });
-      await expect(Draft.create({ ...base, status: 'PENDING' })).rejects.toMatchObject({ code: 11000 });
-      await expect(Draft.create({ ...base, status: 'APPROVED' })).resolves.toBeTruthy();
-      await expect(Draft.create({ ...base, threadId: 'thread-2', status: 'PENDING' })).resolves.toBeTruthy();
+      await Draft.create({ ...base, status: 'PENDING' as const });
+      await expect(Draft.create({ ...base, status: 'PENDING' as const })).rejects.toMatchObject({ code: 11000 });
+      await expect(Draft.create({ ...base, status: 'APPROVED' as const })).resolves.toBeTruthy();
+      await expect(Draft.create({ ...base, threadId: 'thread-2', status: 'PENDING' as const })).resolves.toBeTruthy();
     });
 
     it('retires duplicate PENDING drafts left from before the index, keeping the newest, then builds it', async () => {

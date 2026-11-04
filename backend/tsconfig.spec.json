@@ -1,0 +1,13 @@
+/* Type-checks the Vitest suites (tests/**) together with src: npm run typecheck:tests. Vitest itself strips types without checking them. */
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "rootDir": ".",
+    "types": ["node", "vitest/globals"],
+    // Tests run on Node 24, so ES2022 APIs such as Array.prototype.at are available.
+    "lib": ["ES2022"]
+  },
+  "include": ["src/**/*.ts", "tests/**/*.ts", "vitest.config.ts"],
+  "exclude": ["dist", "node_modules", "coverage"]
+}

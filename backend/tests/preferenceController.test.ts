@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { Response } from 'express';
-import { getUserPreferences, updateUserPreferences } from '../src/controllers/preferenceController';
-import { PreferenceService } from '../src/services/preferenceService';
-import { AppError } from '../src/utils/errors';
+import { getUserPreferences, updateUserPreferences } from '../src/controllers/preferenceController.js';
+import { PreferenceService } from '../src/services/preferenceService.js';
+import { AppError } from '../src/utils/errors.js';
 
-vi.mock('../src/services/preferenceService');
-vi.mock('../src/utils/logger');
+vi.mock('../src/services/preferenceService.js');
+vi.mock('../src/utils/logger.js');
 
 describe('PreferenceController', () => {
   let mockReq: any;

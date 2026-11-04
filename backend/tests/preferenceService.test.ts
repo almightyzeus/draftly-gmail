@@ -3,8 +3,8 @@ import { PreferenceService, DEFAULT_PREFERENCES } from '../src/services/preferen
 import { UserPreference } from '../src/models/UserPreference.js';
 import { InternalServerError } from '../src/utils/errors.js';
 
-vi.mock('../src/models/UserPreference');
-vi.mock('../src/utils/logger');
+vi.mock('../src/models/UserPreference.js');
+vi.mock('../src/utils/logger.js');
 
 const userId = 'user123';
 

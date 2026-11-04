@@ -24,7 +24,7 @@ vi.mock('openai', () => {
   };
 });
 
-vi.mock('../src/utils/logger');
+vi.mock('../src/utils/logger.js');
 
 vi.mock('../src/models/EmailMessage.js', () => ({
   EmailMessage: { findOne: vi.fn(), find: vi.fn() },

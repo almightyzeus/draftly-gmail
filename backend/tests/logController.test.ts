@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi, type Mock } from 'vitest';
 import { Response } from 'express';
-import { getUserLogs, getEntityLogs } from '../src/controllers/logController';
-import { ActivityLogService } from '../src/services/activityLogService';
-import { AppError } from '../src/utils/errors';
+import { getUserLogs, getEntityLogs } from '../src/controllers/logController.js';
+import { ActivityLogService } from '../src/services/activityLogService.js';
+import { AppError } from '../src/utils/errors.js';
 
-vi.mock('../src/services/activityLogService');
-vi.mock('../src/utils/logger');
+vi.mock('../src/services/activityLogService.js');
+vi.mock('../src/utils/logger.js');
 
 describe('LogController', () => {
   let mockReq: any;
@@ -50,7 +50,7 @@ describe('LogController', () => {
     it('should get user logs with custom limit', async () => {
       mockReq.query = { limit: '50' };
 
-      const mockLogs = [];
+      const mockLogs: any[] = [];
 
       (ActivityLogService.getUserActivityLogs as unknown as Mock).mockResolvedValue(mockLogs);
 
@@ -62,7 +62,7 @@ describe('LogController', () => {
     it('should cap limit at 200', async () => {
       mockReq.query = { limit: '500' };
 
-      const mockLogs = [];
+      const mockLogs: any[] = [];
 
       (ActivityLogService.getUserActivityLogs as unknown as Mock).mockResolvedValue(mockLogs);
 
@@ -74,7 +74,7 @@ describe('LogController', () => {
     it('should use skip parameter for pagination', async () => {
       mockReq.query = { limit: '20', skip: '40' };
 
-      const mockLogs = [];
+      const mockLogs: any[] = [];
 
       (ActivityLogService.getUserActivityLogs as unknown as Mock).mockResolvedValue(mockLogs);
 
@@ -144,7 +144,7 @@ describe('LogController', () => {
       mockReq.params = { entityType: 'email', entityId: 'email456' };
       mockReq.query = { limit: '100' };
 
-      const mockLogs = [];
+      const mockLogs: any[] = [];
 
       (ActivityLogService.getEntityLogs as unknown as Mock).mockResolvedValue(mockLogs);
 
@@ -157,7 +157,7 @@ describe('LogController', () => {
       mockReq.params = { entityType: 'draft', entityId: 'draft123' };
       mockReq.query = { limit: '200' };
 
-      const mockLogs = [];
+      const mockLogs: any[] = [];
 
       (ActivityLogService.getEntityLogs as unknown as Mock).mockResolvedValue(mockLogs);
 
@@ -170,7 +170,7 @@ describe('LogController', () => {
       mockReq.params = { entityType: ['draft'], entityId: ['draft123'] };
       mockReq.query = {};
 
-      const mockLogs = [];
+      const mockLogs: any[] = [];
 
       (ActivityLogService.getEntityLogs as unknown as Mock).mockResolvedValue(mockLogs);
 
