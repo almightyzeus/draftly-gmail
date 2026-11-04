@@ -86,6 +86,25 @@ describe('AuthService', () => {
     await expect(AuthService.register('User', 'bad-email', 'password123')).rejects.toThrow(ValidationError);
   });
 
+  it.each([
+    ['7 characters', 'short12', 'Password must be at least 8 characters'],
+    ['over 72 bytes (bcrypt would truncate it)', 'é'.repeat(37), 'Password must be at most 72 bytes'],
+  ])('rejects a new password of %s', async (_label, password, message) => {
+    mocks.userFindOne.mockResolvedValue(null);
+    await expect(AuthService.register('User', 'new@example.com', password)).rejects.toThrow(message);
+  });
+
+  it('accepts a new password of exactly 8 characters and of exactly 72 bytes', async () => {
+    mocks.userFindOne.mockResolvedValue(null);
+    await expect(AuthService.register('User', 'new@example.com', 'eight888')).resolves.toBeTruthy();
+    await expect(AuthService.register('User', 'new2@example.com', 'é'.repeat(36))).resolves.toBeTruthy();
+  });
+
+  it('still lets an existing user with a shorter (older) password log in', async () => {
+    mocks.userFindOne.mockResolvedValue(buildUser({ comparePassword: vi.fn().mockResolvedValue(true) }));
+    await expect(AuthService.login('user@example.com', 'six666')).resolves.toBeTruthy();
+  });
+
   it('logs in valid users and rejects invalid credentials', async () => {
     const storedUser = buildUser({ comparePassword: vi.fn().mockResolvedValue(true) });
     mocks.userFindOne.mockResolvedValue(storedUser);

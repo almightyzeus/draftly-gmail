@@ -28,7 +28,7 @@ The system supports:
 - AI: OpenAI API
 - Gmail: Google OAuth2 and Gmail API
 - Auth: JWT access + refresh tokens
-- Security: bcrypt password hashing, AES-256-GCM token encryption, Helmet, CORS, rate limiting
+- Security: bcrypt password hashing, AES-256-GCM token encryption, Helmet, CORS, rate limiting, nginx Content-Security-Policy and security headers
 - Tests: Vitest (backend and frontend), Supertest, mongodb-memory-server
 
 ## Features
@@ -188,8 +188,9 @@ FRONTEND_URL=http://localhost:4200
 
 MONGODB_URI=mongodb://localhost:27017/draftly
 
-JWT_ACCESS_SECRET=replace-with-a-long-secret
-JWT_REFRESH_SECRET=replace-with-a-different-long-secret
+# At least 32 characters each and different from each other (the backend refuses to start otherwise)
+JWT_ACCESS_SECRET=replace-with-openssl-rand-base64-32-output
+JWT_REFRESH_SECRET=replace-with-a-different-openssl-rand-base64-32-output
 JWT_ACCESS_EXPIRES_IN=15m
 JWT_REFRESH_EXPIRES_IN=7d
 
@@ -336,6 +337,8 @@ Login body:
   "password": "password123"
 }
 ```
+
+New passwords must be at least 8 characters and at most 72 bytes (bcrypt ignores anything longer); login does not re-check length, so older accounts keep working.
 
 Login and register allow 5 **failed** attempts per 15 minutes per client IP; successful requests are not counted. Tokens are accepted only in the `Authorization` header (never from cookies).
 
@@ -524,8 +527,8 @@ Last verified 2026-11-03:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
-| Backend | 24 | 447 passing | 96.34% | 87.39% | 97.51% | 96.34% |
-| Frontend | 7 | 135 passing | 95.60% | 82.45% | 95.83% | 96.18% |
+| Backend | 25 | 455 passing | 96.41% | 87.60% | 97.53% | 96.41% |
+| Frontend | 7 | 138 passing | 95.79% | 82.67% | 95.87% | 96.22% |
 
 Verified on Node 24.15.0 locally after a clean `npm ci`; the Docker images build and run on Node 24.22.2. The frontend app typecheck is clean and `npm run build` passes.
 
@@ -557,6 +560,8 @@ Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tes
 - Remote images in emails (often tracking pixels) are hidden until the user chooses **Show images**, so opening an email does not reveal that it was read.
 - The app keeps the human-in-the-loop requirement by never sending generated text automatically.
 - Request logs redact OAuth codes, OAuth state, and search queries.
+- nginx serves the app with a Content-Security-Policy (`script-src 'self'`, no inline scripts; `style-src` allows inline styles because Angular injects component styles; images from any `https:` host for emails after **Show images**; `frame-ancestors 'none'`) plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`. Critical-CSS inlining is off in the production build because its `onload` handler would violate the CSP. No HSTS header: the Docker setup serves plain HTTP.
+- The backend refuses to start with JWT secrets shorter than 32 characters, left at the `.env.example` placeholder, or identical for access and refresh tokens.
 
 ## Known Limitations
 

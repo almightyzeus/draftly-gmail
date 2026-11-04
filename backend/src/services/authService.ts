@@ -11,6 +11,10 @@ import {
   InternalServerError,
 } from '../utils/errors.js';
 
+/** Password rules for new accounts (existing passwords keep working at login). */
+export const MIN_PASSWORD_LENGTH = 8;
+export const MAX_PASSWORD_BYTES = 72;
+
 export interface TokenPair {
   accessToken: string;
   refreshToken: string;
@@ -227,8 +231,12 @@ export class AuthService {
       throw new ValidationError('Invalid email format');
     }
 
-    if (!password || password.length < 6) {
-      throw new ValidationError('Password must be at least 6 characters');
+    if (!password || password.length < MIN_PASSWORD_LENGTH) {
+      throw new ValidationError(`Password must be at least ${MIN_PASSWORD_LENGTH} characters`);
+    }
+    // bcrypt only uses the first 72 bytes; longer passwords would be silently truncated.
+    if (Buffer.byteLength(password, 'utf8') > MAX_PASSWORD_BYTES) {
+      throw new ValidationError(`Password must be at most ${MAX_PASSWORD_BYTES} bytes`);
     }
   }
 

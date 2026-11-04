@@ -44,6 +44,34 @@ function requireEnv(name: string, description?: string): string {
   return value.trim();
 }
 
+/** Minimum length of each JWT secret: `openssl rand -base64 32` gives 44 characters. */
+export const MIN_JWT_SECRET_LENGTH = 32;
+
+/**
+ * Refuse weak JWT signing secrets: shorter than MIN_JWT_SECRET_LENGTH, the
+ * placeholders from .env.example, or the same value for access and refresh
+ * tokens (a refresh token would then also verify as an access token).
+ */
+export function validateJwtSecrets(accessSecret: string, refreshSecret: string): void {
+  const secrets: [string, string][] = [
+    ['JWT_ACCESS_SECRET', accessSecret],
+    ['JWT_REFRESH_SECRET', refreshSecret],
+  ];
+  for (const [name, value] of secrets) {
+    if (/your-.*secret|generate-with-openssl/i.test(value)) {
+      throw new Error(`${name} is still the .env.example placeholder. Generate one with: openssl rand -base64 32`);
+    }
+    if (value.length < MIN_JWT_SECRET_LENGTH) {
+      throw new Error(
+        `${name} must be at least ${MIN_JWT_SECRET_LENGTH} characters (got ${value.length}). Generate one with: openssl rand -base64 32`
+      );
+    }
+  }
+  if (accessSecret === refreshSecret) {
+    throw new Error('JWT_ACCESS_SECRET and JWT_REFRESH_SECRET must be different');
+  }
+}
+
 /**
  * Validate and parse port number
  */
@@ -112,6 +140,10 @@ function validateUrl(url: string, name: string): string {
  * Parse and validate all environment variables
  */
 function loadEnv(): EnvConfig {
+  const accessSecret = requireEnv('JWT_ACCESS_SECRET', 'JWT access token secret');
+  const refreshSecret = requireEnv('JWT_REFRESH_SECRET', 'JWT refresh token secret');
+  validateJwtSecrets(accessSecret, refreshSecret);
+
   return {
     nodeEnv: (['development', 'production', 'test'].includes(
       process.env.NODE_ENV || ''
@@ -124,9 +156,9 @@ function loadEnv(): EnvConfig {
     mongodbUri: requireEnv('MONGODB_URI', 'MongoDB connection string'),
 
     jwt: {
-      accessSecret: requireEnv('JWT_ACCESS_SECRET', 'JWT access token secret'),
+      accessSecret,
       accessExpiresIn: process.env.JWT_ACCESS_EXPIRES_IN ?? '15m',
-      refreshSecret: requireEnv('JWT_REFRESH_SECRET', 'JWT refresh token secret'),
+      refreshSecret,
       refreshExpiresIn: process.env.JWT_REFRESH_EXPIRES_IN ?? '7d',
     },
 

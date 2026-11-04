@@ -87,6 +87,25 @@ describe('frontend page classes', () => {
     expect(router.navigate).toHaveBeenCalledWith(['/dashboard']);
   });
 
+  it.each([
+    ['7 characters', 'short12', 'minlength'],
+    ['over 72 bytes', 'é'.repeat(37), 'maxbytes'],
+  ])('RegisterComponent rejects a password of %s, like the API', (_label, password, error) => {
+    const auth = { register: vi.fn().mockReturnValue(of({})) };
+    const component = new RegisterComponent(new FormBuilder(), auth as any, router as any, snackBar as any);
+    component.registerForm.setValue({ name: 'User', email: 'user@example.com', password, confirmPassword: password });
+
+    expect(component.registerForm.get('password')?.hasError(error)).toBe(true);
+    component.onSubmit();
+    expect(auth.register).not.toHaveBeenCalled();
+  });
+
+  it('RegisterComponent accepts exactly 72 bytes', () => {
+    const component = new RegisterComponent(new FormBuilder(), {} as any, router as any, snackBar as any);
+    component.registerForm.patchValue({ password: 'é'.repeat(36) });
+    expect(component.registerForm.get('password')?.valid).toBe(true);
+  });
+
   it('DashboardComponent fetches the inbox, marks unread mail, and opens an email', () => {
     const user$ = new BehaviorSubject<any>({ id: '1', name: 'User', email: 'user@example.com', googleConnected: true });
     const auth = { currentUser$: user$.asObservable() };

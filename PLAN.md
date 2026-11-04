@@ -20,11 +20,11 @@ page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread contex
 | Check | Result |
 |---|---|
 | Backend typecheck | `npx tsc --noEmit` clean |
-| Backend tests | 24 files, **447 passing** (`npm run test:ci`) |
-| Backend coverage | 96.34% statements, 87.39% branches, 97.51% functions, 96.34% lines |
+| Backend tests | 25 files, **455 passing** (`npm run test:ci`) |
+| Backend coverage | 96.41% statements, 87.60% branches, 97.53% functions, 96.41% lines |
 | Frontend dependencies | Clean `npm ci` from the lockfile (no `--legacy-peer-deps`): Angular 21.2.25 (CLI/build 21.2.29, pinned exactly), Material 21.2.14 |
-| Frontend tests | 7 files, **135 passing** |
-| Frontend coverage | 95.60% statements, 82.45% branches, 95.83% functions, 96.18% lines |
+| Frontend tests | 7 files, **138 passing** |
+| Frontend coverage | 95.79% statements, 82.67% branches, 95.87% functions, 96.22% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
 | Production build | `ng build` passes with no warnings; initial bundle 464.48 kB (107.36 kB transferred), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74 kB, 10.4 kB gzipped) are lazy chunks |
 | CI | `.github/workflows/ci.yml` (GitHub Actions, Node from `.nvmrc`): every step passed in a clean checkout (fresh `npm ci`, no `.env`, placeholder env values) |
@@ -72,7 +72,7 @@ Completed before the review (preserve):
 | S9 | Low | Email HTML rendered inline; remote images loaded automatically. | **Fixed / accepted**: sanitized once per load, remote images hidden until "Show images"; inline rendering (no sandboxed iframe) accepted. |
 | S10 | Low | Non-string body fields reached Mongo filters. | **Fixed** (Stage 3): string-only ids and inputs with length caps. |
 | S11 | Low | No OpenAI cost or abuse bounds. | **Fixed** (Stage 3): per-user generate limit, prompt caps, timeout. |
-| S12 | Info | Stateless refresh tokens; tokens in `localStorage`; 6-character minimum password; no JWT-secret strength check; no CSP/security headers in nginx; MongoDB without auth. | **Deferred** (see section 4). |
+| S12 | Info | Stateless refresh tokens; tokens in `localStorage`; 6-character minimum password; no JWT-secret strength check; no CSP/security headers in nginx; MongoDB without auth. | **Partly fixed** 2026-11-04 (section 5.7): password policy, JWT-secret check, nginx CSP and headers. The rest is deferred (section 4). |
 
 ### 2.2 Correctness
 
@@ -130,12 +130,12 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 ## 4. Deferred by decision
 
 - **S5** OAuth state browser binding: low risk for a local app; documented.
-- **S12** items: server-side refresh-token revocation, tokens in `localStorage`, password policy, JWT-secret strength check, nginx CSP/security headers, MongoDB auth.
+- **S12** items: server-side refresh-token revocation, tokens in `localStorage`, MongoDB auth. (Password policy, JWT-secret check and nginx CSP/headers were done on 2026-11-04, section 5.7.)
 - **In-memory rate limits** (per backend process).
 - **Express 5 async-handler refactor** (A8): broad churn for little gain.
 - **Full signals / `OnPush` conversion**: not needed for a zone-based app this size.
 - **Sandboxed-iframe email rendering**: script XSS already mitigated; remote images gated.
-- **Removing `provideAnimations()`**: only after checking Material 21's needs.
+- ~~**Removing `provideAnimations()`**~~: done in D3 (Material 21 does not use it).
 
 ---
 
@@ -200,6 +200,14 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | C-2 | ~~`frontend/tsconfig.spec.json` matches no files (`src/**/*.spec.ts`); tests live in `tests/*.vitest.ts`.~~ | **Done** 2026-11-03: `tsconfig.spec.json` now type-checks the Vitest suites (`npm run typecheck:tests`, also a CI step); the 4 errors it found are fixed (`runInInjectionContext` instead of the internal `Injector.runInContext`, one non-null assertion). The Karma `test` target in `angular.json` is removed (Karma is not installed; `ng test` could not run). |
 | C-3 | Backend tests are not type-checked (`tsconfig.json` excludes `tests/`); including them reports 41 errors in 8 files (mostly loose mock typing in controller tests). | Fix, then add a test typecheck step to CI like the frontend's. |
 
-### 5.7 Deferred security hardening
+### 5.7 Security hardening
 
-See section 4 (S5, S12 items, in-memory rate limits).
+**Quick wins — done 2026-11-04:**
+
+| # | Item | Result |
+|---|---|---|
+| H1 | nginx security headers | `frontend/nginx.conf` (`location /`, `always`): Content-Security-Policy `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, plus `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and `server_tokens off`. API responses keep helmet's headers. Production build sets `optimization.styles.inlineCritical: false`: its `onload="this.media='all'"` handler would be blocked by `script-src 'self'` and leave the stylesheet unapplied. `style-src 'unsafe-inline'` remains (Angular injects component styles and inlines the font CSS). Verified on the rebuilt image with curl. No HSTS (HTTP-only Docker setup). |
+| H2 | JWT-secret strength check | `validateJwtSecrets` in `config/env.ts`: each secret ≥ 32 characters, not the `.env.example` placeholder, and access ≠ refresh; the backend refuses to start otherwise. The existing `.env` files pass (44-character secrets). |
+| H3 | Password policy | New passwords: at least 8 characters, at most 72 UTF-8 bytes (bcrypt truncates longer ones), in the API and the register form. Login does not re-check length, so older 6–7 character passwords keep working. |
+
+**Still deferred:** see section 4 (S5, remaining S12 items, in-memory rate limits).

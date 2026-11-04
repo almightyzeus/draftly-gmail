@@ -1,6 +1,6 @@
 import { Component } from '@angular/core';
 
-import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
+import { AbstractControl, ReactiveFormsModule, FormBuilder, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { RouterModule, Router } from '@angular/router';
 import { MatInputModule } from '@angular/material/input';
 import { MatButtonModule } from '@angular/material/button';
@@ -8,6 +8,17 @@ import { MatCardModule } from '@angular/material/card';
 import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar, MatSnackBarModule } from '@angular/material/snack-bar';
 import { AuthService } from '../services/auth.service';
+
+/** Same rules as the API (POST /api/auth/register). */
+export const MIN_PASSWORD_LENGTH = 8;
+/** bcrypt only uses the first 72 bytes of a password. */
+export const MAX_PASSWORD_BYTES = 72;
+
+/** Fails when the value is longer than `max` bytes in UTF-8 (e.g. "é" counts as 2). */
+export function maxUtf8Bytes(max: number) {
+  return (control: AbstractControl): ValidationErrors | null =>
+    new TextEncoder().encode(control.value ?? '').length > max ? { maxbytes: { max } } : null;
+}
 
 @Component({
     selector: 'app-register',
@@ -23,6 +34,8 @@ import { AuthService } from '../services/auth.service';
     templateUrl: './register.component.html'
 })
 export class RegisterComponent {
+  readonly minPasswordLength = MIN_PASSWORD_LENGTH;
+  readonly maxPasswordBytes = MAX_PASSWORD_BYTES;
   registerForm: FormGroup;
   isLoading = false;
 
@@ -36,7 +49,7 @@ export class RegisterComponent {
       {
         name: ['', [Validators.required, Validators.minLength(2)]],
         email: ['', [Validators.required, Validators.email]],
-        password: ['', [Validators.required, Validators.minLength(6)]],
+        password: ['', [Validators.required, Validators.minLength(MIN_PASSWORD_LENGTH), maxUtf8Bytes(MAX_PASSWORD_BYTES)]],
         confirmPassword: ['', [Validators.required]],
       },
       { validators: this.passwordMatchValidator }

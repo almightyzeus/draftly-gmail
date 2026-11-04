@@ -47,7 +47,12 @@
           }
           @if (registerForm.get('password')?.hasError('minlength')) {
             <mat-error>
-              Password must be at least 6 characters
+              Password must be at least {{ minPasswordLength }} characters
+            </mat-error>
+          }
+          @if (registerForm.get('password')?.hasError('maxbytes')) {
+            <mat-error>
+              Password is too long (at most {{ maxPasswordBytes }} bytes)
             </mat-error>
           }
         </mat-form-field>
