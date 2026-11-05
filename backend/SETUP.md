@@ -49,7 +49,9 @@ NODE_ENV=development
 # MongoDB (local or Atlas)
 MONGODB_URI=mongodb://localhost:27017/draftly
 
-# JWT Secrets (paste the generated values from step 2)
+# JWT Secrets (paste the generated values from step 2).
+# Each must be at least 32 characters and the two must differ; the server
+# refuses to start with shorter, identical, or .env.example placeholder secrets.
 JWT_ACCESS_SECRET=<paste-here>
 JWT_REFRESH_SECRET=<paste-here>
 
@@ -66,6 +68,10 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/api/gmail/oauth/callback
 
 # Frontend URL
 FRONTEND_URL=http://localhost:4200
+
+# Optional
+# TRUST_PROXY=1      # reverse-proxy hops (docker-compose sets 1 for nginx)
+# LOG_LEVEL=debug    # default: info in production, debug in development, silent in tests
 ```
 
 ### 4. Ensure MongoDB is running
@@ -95,11 +101,11 @@ Health check:
 curl http://localhost:3000/health
 ```
 
-Response:
+Response (the timestamp is the current server time):
 ```json
 {
   "status": "ok",
-  "timestamp": "2024-01-15T10:30:00.000Z"
+  "timestamp": "2026-11-05T10:30:00.000Z"
 }
 ```
 
@@ -127,8 +133,9 @@ backend/
 ## Key Features
 
 ### Authentication
-- JWT-based authentication with access & refresh tokens
-- Password hashing with bcryptjs
+- JWT-based authentication with access (15 min) & refresh (7 days) tokens, sent only in the `Authorization: Bearer` header
+- Stateless sessions: there is no logout endpoint and refresh tokens are not stored server-side (see "Sessions, logout and the two kinds of tokens" in the project README)
+- Password hashing with bcryptjs; new passwords must be 8 characters to 72 bytes
 - Login/Register endpoints limited to 5 failed attempts per 15 minutes per client IP
 
 ### Security
@@ -143,9 +150,8 @@ backend/
 - Automatic encryption/decryption via `crypto.ts` utility
 
 ### Error Handling
-- Global error handler middleware
-- Detailed error messages in development
-- Sanitized errors in production
+- Typed errors mapped to status codes; a global error handler for everything else
+- Unexpected errors return `Internal Server Error`; the stack trace is included only when `NODE_ENV=development`
 
 ## API Endpoints (Auth)
 
@@ -172,6 +178,14 @@ Content-Type: application/json
 }
 ```
 
+### Refresh Tokens
+```bash
+POST /api/auth/refresh
+Content-Type: application/json
+
+{ "refreshToken": "<refreshToken>" }
+```
+
 ### Get Current User
 ```bash
 GET /api/auth/me
@@ -183,6 +197,13 @@ Authorization: Bearer <accessToken>
 ### Build
 ```bash
 npm run build
+```
+
+### Tests
+```bash
+npm test                  # Vitest (in-memory MongoDB, mocked Gmail/OpenAI)
+npm run test:ci           # with coverage thresholds, as in CI
+npm run typecheck:tests   # type-check the test suites
 ```
 
 ### Production

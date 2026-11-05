@@ -10,28 +10,38 @@ No dependency upgrades and no commits unless explicitly approved.
 
 ---
 
-## 0. Current status (verified 2026-11-03)
+## 0. Current status (verified 2026-11-05)
 
-All six hardening stages (section 3) are complete. From the 2026-11-03 reconciliation, the P1
-items (section 5.1), quick-win Batch 1 (section 5.2), verification (5.3), F1 (the Preferences
-page), F2 (CI pipeline), F3 (concurrent generation race), F4 (full thread context), F5 (activity page), F6 (reply all,
-`Reply-To`) and F7 (Gmail retries) (5.4) are done: the feature backlog is complete.
+All six hardening stages (section 3) are complete. From the 2026-11-03/04 reconciliation, the P1
+items (5.1), quick-win Batch 1 (5.2), verification V1–V3 (5.3), features F1–F7 (5.4), dependency
+items D1–D4 and D6 (5.5), cleanup C-1 to C-3 (5.6) and security quick wins H1–H3 (5.7) are done.
+Open: D5 (Angular CLI 22) and the items in section 6.
+
+Local checks re-run on 2026-11-05 (Node 24.15.0, Windows):
 
 | Check | Result |
 |---|---|
-| Backend typecheck | `npx tsc --noEmit` clean |
+| Backend typecheck | `npx tsc --noEmit` and `npm run typecheck:tests` clean; `npm run build` passes |
 | Backend tests | 25 files, **455 passing** (`npm run test:ci`) |
 | Backend coverage | 93.83% statements, 82.69% branches, 96.27% functions, 94.36% lines (Vitest 5 V8 provider, stricter than Vitest 1's; same 36 files) |
-| Frontend dependencies | Clean `npm ci` from the lockfile (no `--legacy-peer-deps`): Angular 21.2.25 (CLI/build 21.2.29, pinned exactly), Material 21.2.14 |
+| Frontend dependencies | Lockfile installs with plain `npm ci` (no `--legacy-peer-deps`; last clean install 2026-11-03): Angular 21.2.25 (CLI/build 21.2.29, pinned exactly), Material 21.2.14 |
 | Frontend tests | 7 files, **138 passing** |
 | Frontend coverage | 95.79% statements, 82.67% branches, 95.87% functions, 96.22% lines |
-| Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` clean |
-| Production build | `ng build` passes with no warnings; initial bundle 464.48 kB (107.36 kB transferred), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74 kB, 10.4 kB gzipped) are lazy chunks |
-| CI | `.github/workflows/ci.yml` (GitHub Actions, Node from `.nvmrc`): every step passed in a clean checkout (fresh `npm ci`, no `.env`, placeholder env values) |
-| Docker | Images rebuilt on `node:24-alpine` (D4): backend runs Node 24.22.2 and loads its compiled app; the frontend image's nginx config is valid (its `backend` upstream resolves inside compose). Earlier `node:20` stack and browser smoke test confirmed by the user |
+| Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` and `npm run typecheck:tests` clean |
+| Production build | `ng build` passes with no warnings; initial bundle 464.48 kB (107.36 kB transferred), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74.04 kB, 10.43 kB gzipped) are lazy chunks; the built `index.html` has no inline event handlers (CSP) |
+| `npm audit` | Backend 0; frontend 16 moderate, all in Angular CLI packaging tooling (D5) |
 
-Verified on Node 24.15.0 locally; the Docker images build and run on Node 24.22.2 (`.nvmrc` holds
-`24` since D4; Node 20 reached end-of-life on 2026-04-30).
+Other verification, with its date:
+
+| Check | Result |
+|---|---|
+| CI, GitHub-hosted | 12 runs since 2026-11-03 (checked 2026-11-05 via the GitHub API). Latest: `7dd415b` (2026-11-04, current `master`), both jobs passed. One failure: `9f33ab8` (2026-11-03), backend `npm ci` on Node 20 / npm 10, likely the npm 11-written lockfile (the log needs a login and was not read); all runs since `06577ce` (Node 24) passed. |
+| CI, local simulation | 2026-11-03: workflow steps in a clean worktree (fresh `npm ci`, no `.env`, placeholder env values), before the first hosted run |
+| Docker | 2026-11-03: both images built on `node:24-alpine` (Node 24.22.2); the backend loaded its compiled app; the frontend nginx config is valid inside compose. 2026-11-04: frontend image rebuilt, security headers checked with curl. **Not rebuilt since:** the backend image after H2 and D6 (Docker Desktop was not running on 2026-11-05) |
+| Browser | 2026-11-03: smoke test (V3) confirmed by the user. 2026-11-04: user re-checked the rebuilt stack after D2/D3 (menus, dialogs, snackbars). CSP (H1, added later that day) not yet confirmed in a browser console |
+
+Node: local runs use 24.15.0; the Docker image ran 24.22.2 when built; `.nvmrc` holds `24`
+since D4 (Node 20 reached end-of-life on 2026-04-30).
 
 Previous checkpoint (2026-10-04, Node 20.19.5): backend 23 files / 348 tests, 95.59% statements;
 frontend 5 files / 83 tests, 93.87% statements; initial bundle ≈527 kB (over the 500 kB
@@ -174,7 +184,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | # | Item | Evidence | Size |
 |---|---|---|---|
 | F1 | ~~**Preferences page** (default tone, signature, style-example count).~~ | **Done** 2026-11-03: lazy, guarded `/preferences` page (account menu → Preferences) with validation matching the API, save, and a discard-changes confirmation. `GET`/`PUT /api/preferences` create the defaults atomically (upsert) for a user without stored preferences instead of returning 404. | M |
-| F2 | ~~**CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5.~~ | **Done** 2026-11-03: `.github/workflows/ci.yml` runs on pushes to `master`, pull requests and manual dispatch. Two parallel jobs on Node from `.nvmrc`: backend (`npm ci`, `tsc --noEmit`, `test:ci` with coverage thresholds, placeholder env values, cached MongoDB binary) and frontend (`npm ci`, app typecheck, `test:coverage`, `npm run build`). Coverage reports are uploaded as artifacts. Simulated locally in a clean worktree (Node 24.15); the first run on GitHub happens on the next push. | M |
+| F2 | ~~**CI pipeline** (GitHub Actions): backend typecheck + `test:ci`, frontend typecheck + tests + `ng build`, on Node 20.19.5.~~ | **Done** 2026-11-03: `.github/workflows/ci.yml` runs on pushes to `master`, pull requests and manual dispatch. Two parallel jobs on Node from `.nvmrc`: backend (`npm ci`, `tsc --noEmit`, `test:ci` with coverage thresholds, placeholder env values, cached MongoDB binary) and frontend (`npm ci`, app typecheck, `test:coverage`, `npm run build`). Coverage reports are uploaded as artifacts. Simulated locally in a clean worktree (Node 24.15) before the first push; first GitHub-hosted run: `a66483f` (2026-11-03), passed. | M |
 | F3 | ~~**Concurrent generation race**: two generations for the same thread can both create PENDING drafts.~~ | **Done** 2026-11-03: partial unique index `one_pending_draft_per_thread` (`{userId, threadId}` where `status: PENDING`). `DraftService.savePendingDraft` retires the current pending draft, inserts the new one, and restores the old one if the insert fails; on a duplicate key it reuses the winning draft when it matches the request (same tone, no context), otherwise replaces it (at most 3 attempts, then 409). Startup (`server.ts`) runs `enforceSinglePendingDraftPerThread()`: retires older duplicate PENDING drafts (newest kept, audit `SUPERSEDED` with `reason: duplicate_pending`), then builds the index. Integration tests send simultaneous requests; against the old code they returned 500s. | M |
 | F4 | ~~**Full thread context**: thread context and consolidation only see cached messages (ones that appeared in a listing); fetch the thread from Gmail (`threads.get`).~~ | **Done** 2026-11-03: `GmailService.syncThread` fetches the thread (`threads.get`, `format: full`, newest 50 messages) and caches it through `cacheMessage`, the same parsing/upsert the inbox listing now uses. `DraftService.generateDraft` syncs before choosing the reply target (thread requests) and before generating (single-message requests), so `OpenAIService` sees the whole thread without changes. A failed sync (not connected, 403, 429, 5xx) is logged and generation falls back to the cache; `invalid_grant` still marks Gmail disconnected. | M |
 | F5 | ~~Activity-log screen.~~ | **Done** 2026-11-03: lazy, guarded `/activity` page (account menu → Activity): entries described in plain language (`shared/activity-format.ts`), filter chips by action, Newer/Older paging (25 per page, from the real `total`), links to each draft, loading/error/empty states; stale responses are ignored when filters change quickly. `GET /api/logs` accepts an optional `action` filter (whitelisted; `total` counts matching logs). A Material paginator was replaced by two buttons, shrinking the page chunk from 122 kB to 74 kB. | M |
@@ -185,12 +195,12 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 
 | # | Item | Notes |
 |---|---|---|
-| D1 | ~~Remove unused `cookie-parser` and `@types/cookie-parser` (backend).~~ | **Done** 2026-11-03 (approved): uninstalled; the lockfile also drops their dependency `cookie-signature@1.0.6` (Express keeps its own 1.2.2) and three optional-peer entries npm 11 no longer records (`zod`, two nested `gcp-metadata`; none are imported). Clean `npm ci`, typecheck, build and all 447 tests pass. |
+| D1 | ~~Remove unused `cookie-parser` and `@types/cookie-parser` (backend).~~ | **Done** 2026-11-03 (approved): uninstalled; the lockfile also drops their dependency `cookie-signature@1.0.6` (Express keeps its own 1.2.2) and three optional-peer entries npm 11 no longer records (`zod`, two nested `gcp-metadata`; none are imported). Clean `npm ci`, typecheck, build and all 447 tests pass locally (Node 24.15 / npm 11). **The hosted CI run for this commit (`9f33ab8`) failed** at the backend `npm ci` (CI still used Node 20 / npm 10, which likely expected those pruned entries); it was not re-run, and passed from the next commit (D4, Node 24) on. |
 | D2 | ~~`npm audit` (frontend): 35 vulnerabilities (22 moderate, 10 high, 3 critical).~~ | **Done** 2026-11-03 (approved), no major upgrades. **Frontend 35 → 16** (0 critical, 0 high): Angular framework 21.2.22 → 21.2.25 (fixes the only finding that ships to browsers, three `@angular/router` DoS advisories), CLI/build 21.2.22 → 21.2.29 (undici, vite, piscina), vitest/coverage-v8 4.1.11 → 4.1.12, plus `npm audit fix` for transitive tooling. Angular packages are now pinned exactly (caret ranges let npm mix patch releases, which broke peer resolution; that is why the Dockerfile needed `--legacy-peer-deps`). Removed unused `@angular/animations` and deprecated, unused `@angular/platform-browser-dynamic`. The frontend Dockerfile now uses `npm ci`. **Backend 23 → 9** (lockfile only, within existing ranges): runtime fixes `proxy-addr` 2.0.8 (critical IP spoofing; matters with `TRUST_PROXY=1`), `body-parser` 2.4.0, `qs` 6.17.1, `mongoose` 9.11.4 (prototype pollution), `morgan` 1.12.1, `express-rate-limit` 8.7.3 / `ip-address` 10.7.5. The newer mongoose types needed one `as const` in `DraftService`. Remaining findings: see D5, D6. |
 | D5 | Frontend: 16 moderate findings in npm's packaging internals (`pacote`, `sigstore`, `glob`, `minimatch`, …) under `@angular/cli`. | Build-time only (used by `ng add`/`ng update`, not by the app). Fix needs Angular CLI 22 (major); best done with a planned Angular 22 upgrade. |
-| D6 | ~~Backend: 9 findings (3 critical) in test tooling: `vitest` 1.6 (`tinypool`, `vite-node`), `vite` 5 (`esbuild`), `@vitest/coverage-v8` (`glob`, `test-exclude`).~~ | **Done** 2026-11-04 (approved): `vitest` and `@vitest/coverage-v8` 1.6.1 → 5.0.5 (pinned exactly; 5.1.0 was two days old), `vite` 5.4.21 → 8.3.5, and `tsx` 4.21.0 → 4.23.15 (its esbuild 0.27 had the last, low finding). **Backend audit: 0 vulnerabilities.** `vitest.config.ts` needed no changes. Since Vitest 4, a mock called with `new` must have a `function`/`class` implementation (`mockReturnValue` or an arrow throws), so 20 constructor mocks (`ActivityLog`, `Draft`, `User`, `OpenAI`) were converted; one `mock.calls` annotation adjusted for the new mock types. All 455 tests pass; coverage figures dropped (93.83% statements) only because the V8 provider now measures more strictly (same files, thresholds unchanged and met). |
+| D6 | ~~Backend: 9 findings (3 critical) in test tooling: `vitest` 1.6 (`tinypool`, `vite-node`), `vite` 5 (`esbuild`), `@vitest/coverage-v8` (`glob`, `test-exclude`).~~ | **Done** 2026-11-04 (approved): `vitest` and `@vitest/coverage-v8` 1.6.1 → 5.0.5 (pinned exactly; 5.1.0 was two days old), `vite` 5.4.21 → 8.3.5, and `tsx` 4.21.0 → 4.23.15 (its esbuild 0.27 had the last, low finding). **Backend audit: 0 vulnerabilities.** `vitest.config.ts` needed no changes. Since Vitest 4, a mock called with `new` must have a `function`/`class` implementation (`mockReturnValue` or an arrow throws), so 20 constructor mocks (`ActivityLog`, `Draft`, `User`, `OpenAI`) were converted; one `mock.calls` annotation adjusted for the new mock types. All 455 tests pass; coverage figures dropped (93.83% statements) only because the V8 provider now measures more strictly (same files, thresholds unchanged and met). Hosted CI on `7dd415b` (includes this commit) passed. The backend Docker image has not been rebuilt with this lockfile. |
 | D3 | ~~Initial bundle 527 kB, above the 500 kB warning budget.~~ | **Done** 2026-11-03 (approved): measured with `ng build --stats-json`. Material was already only in lazy chunks; the removable cost was `@angular/animations` (61 kB), pulled in solely by `provideAnimations()`. Angular Material 21 (and the CDK) no longer use it, and the app has no animation triggers, so the provider is removed: initial 527.41 → 463.86 kB (transfer 123.95 → 107.25 kB), no budget warning, budgets unchanged. What remains is Angular core/router/common, zone.js, rxjs and the prebuilt Material theme CSS (106 kB raw, 8 kB transferred). The unused `@angular/animations` package was uninstalled in D2. |
-| D4 | ~~**Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30.~~ | **Done** 2026-11-03 (approved): `.nvmrc` `20.19.5` → `24` (CI's `setup-node` and `nvm use` read it), both Dockerfiles `node:20-alpine` → `node:24-alpine`; docs updated. No dependency changes: every engine range already allows Node 24. Tests and builds pass on 24.15.0; `docker compose build` succeeds (Node 24.22.2 in the image). The first GitHub CI run on Node 24 happens on the next push. |
+| D4 | ~~**Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30.~~ | **Done** 2026-11-03 (approved): `.nvmrc` `20.19.5` → `24` (CI's `setup-node` and `nvm use` read it), both Dockerfiles `node:20-alpine` → `node:24-alpine`; docs updated. No dependency changes: every engine range already allows Node 24. Tests and builds pass on 24.15.0; `docker compose build` succeeds (Node 24.22.2 in the image). First GitHub-hosted run on Node 24: `06577ce` (2026-11-03), passed. |
 
 ### 5.6 Cleanup
 
@@ -206,8 +216,50 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 
 | # | Item | Result |
 |---|---|---|
-| H1 | nginx security headers | `frontend/nginx.conf` (`location /`, `always`): Content-Security-Policy `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, plus `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and `server_tokens off`. API responses keep helmet's headers. Production build sets `optimization.styles.inlineCritical: false`: its `onload="this.media='all'"` handler would be blocked by `script-src 'self'` and leave the stylesheet unapplied. `style-src 'unsafe-inline'` remains (Angular injects component styles and inlines the font CSS). Verified on the rebuilt image with curl. No HSTS (HTTP-only Docker setup). |
-| H2 | JWT-secret strength check | `validateJwtSecrets` in `config/env.ts`: each secret ≥ 32 characters, not the `.env.example` placeholder, and access ≠ refresh; the backend refuses to start otherwise. The existing `.env` files pass (44-character secrets). |
+| H1 | nginx security headers | `frontend/nginx.conf` (`location /`, `always`): Content-Security-Policy `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, plus `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and `server_tokens off`. API responses keep helmet's headers. Production build sets `optimization.styles.inlineCritical: false`: its `onload="this.media='all'"` handler would be blocked by `script-src 'self'` and leave the stylesheet unapplied. `style-src 'unsafe-inline'` remains (Angular injects component styles and inlines the font CSS). Verified on the rebuilt frontend image with curl (headers on `/` and SPA routes, no inline handlers); no browser-console check for CSP violations recorded yet. No HSTS (HTTP-only Docker setup). |
+| H2 | JWT-secret strength check | `validateJwtSecrets` in `config/env.ts`: each secret ≥ 32 characters, not the `.env.example` placeholder, and access ≠ refresh; the backend refuses to start otherwise. The existing `.env` files pass (44-character secrets; lengths checked, values not read). Unit-tested; not yet run inside a rebuilt backend Docker image. |
 | H3 | Password policy | New passwords: at least 8 characters, at most 72 UTF-8 bytes (bcrypt truncates longer ones), in the API and the register form. Login does not re-check length, so older 6–7 character passwords keep working. |
 
-**Still deferred:** see section 4 (S5, remaining S12 items, in-memory rate limits).
+**Still deferred:** see section 4 (S5, remaining S12 items, in-memory rate limits) and section 6.
+
+---
+
+## 6. Release readiness (reviewed 2026-11-05)
+
+### 6.1 Open items
+
+| # | Item | Notes |
+|---|---|---|
+| R1 | Rebuild the backend Docker image and start the stack. | Not done since H2 (JWT-secret check) and D6 (new lockfile). Expected to work (same `npm ci` as CI); not verified. |
+| R2 | Browser-console check of the CSP (H1). | Email with **Show images**, Connect Gmail, fonts/icons; look for "Refused to …" errors. |
+| D5 | Angular CLI 22 (major) for the 16 moderate tooling findings. | Build-time only. |
+
+### 6.2 Accepted MVP limitations
+
+These are known and documented, and acceptable for a local, single-user demo:
+
+- Send idempotency is at-most-once, not exactly-once: after a crash between Gmail accepting the message and MongoDB recording it, the draft is blocked for the 5-minute claim lease (send/edit/reject → 409), then the next send attempt gets Gmail's 404 for the used draft id, a generic 500, and the draft stays `APPROVED` although the email was delivered. No double send is possible. (Reviewed 2026-11-05; matches `DraftService.sendDraft` and `tests/sendIdempotency.test.ts`.)
+- Thread context limited to the newest 50 messages (prompt: 20); cache fallback when Gmail is unreachable.
+- Sanitized inline email HTML (no sandboxed iframe); OAuth `state` not browser-bound (S5).
+- Google **Testing**-mode refresh tokens expire after 7 days (reconnect).
+- Drafts tab limited to 50; activity log records draft actions only.
+- Frontend `npm audit`: 16 moderate findings in CLI tooling (D5).
+
+### 6.3 Production deployment requirements (not done)
+
+Session lifecycle (reviewed 2026-11-05): `POST /api/auth/refresh` returns a new access token and a
+new 7-day refresh token but invalidates nothing; there is no logout endpoint (logout only clears
+`localStorage`); so a copied refresh token can be renewed indefinitely until `JWT_REFRESH_SECRET`
+changes or the user is deleted. Google tokens are separate: **Disconnect Gmail** revokes them at
+Google; logout leaves Gmail connected.
+
+| # | Requirement |
+|---|---|
+| P-1 | Server-side refresh tokens: stored (hashed) with real rotation and reuse detection, a logout endpoint that revokes them, and invalidation on password change. |
+| P-2 | Tokens out of `localStorage` (e.g. `HttpOnly`, `Secure`, `SameSite` cookies plus CSRF protection). |
+| P-3 | HTTPS everywhere, HSTS, and HTTPS OAuth redirect URI / `FRONTEND_URL`. |
+| P-4 | MongoDB authentication, TLS, backups. |
+| P-5 | Secrets from a secrets manager; a published (verified) Google OAuth app. |
+| P-6 | Rate limits in a shared store (Redis or similar) for restarts and multiple instances. |
+| P-7 | Monitoring/alerting, log shipping, automated deployment. |
+| P-8 | Send recovery: after a stale claim, detect a message Gmail already sent (thread/Sent lookup) and mark the draft `SENT` instead of returning 500. |

@@ -56,7 +56,7 @@ The system supports:
 Backend:
 
 - Registration, login, JWT-protected routes, and token refresh (`POST /api/auth/refresh`)
-- Gmail OAuth connect, callback, and revoke; refreshed Google tokens are persisted; an expired or revoked Google grant marks Gmail as disconnected so the UI can prompt to reconnect
+- Gmail OAuth connect, callback, and revoke (revoke calls Google's revocation endpoint); refreshed Google tokens are persisted; an expired or revoked Google grant marks Gmail as disconnected so the UI can prompt to reconnect
 - Inbox listing with Gmail search (`q`), `label`, `unread`, `limit`, and Gmail page tokens (messages are fetched from Gmail in parallel, 10 at a time)
 - AI draft generation using tone, thread context, signature, custom context, and recent outbound style examples
 - Draft list/detail/update/approve/reject/send APIs; each draft response includes exactly who the reply goes to (`recipients`)
@@ -134,7 +134,7 @@ cp backend/.env.example backend/.env.docker
 MONGODB_URI=mongodb://mongodb:27017/draftly
 ```
 
-3. Fill in the secrets and keys (see [Local Development Setup](#local-development-setup) for how to generate them).
+3. Fill in the secrets and keys (see [Local Development Setup](#local-development-setup) for how to generate them). The backend refuses to start while `JWT_ACCESS_SECRET`/`JWT_REFRESH_SECRET` are still the `.env.example` placeholders, shorter than 32 characters, or identical.
 
 `docker-compose.yml` additionally sets, for the backend container:
 
@@ -342,6 +342,22 @@ New passwords must be at least 8 characters and at most 72 bytes (bcrypt ignores
 
 Login and register allow 5 **failed** attempts per 15 minutes per client IP; successful requests are not counted. Tokens are accepted only in the `Authorization` header (never from cookies).
 
+#### Sessions, logout and the two kinds of tokens
+
+Draftly handles two unrelated sets of tokens:
+
+| | Draftly session (JWT) | Google OAuth (Gmail access) |
+|---|---|---|
+| Issued by | Draftly at login/register | Google when the user connects Gmail |
+| Stored | Browser `localStorage` (access + refresh token) | MongoDB, encrypted (AES-256-GCM) |
+| Lifetime | Access 15 min, refresh 7 days (configurable) | Until revoked (7 days for Google apps in **Testing** mode) |
+| Ended by | **Log out** clears both tokens in the browser only | **Disconnect Gmail** calls Google's revocation endpoint and marks the account revoked |
+
+- `POST /api/auth/refresh` verifies the refresh token and that the user still exists, then returns a new access token **and a new 7-day refresh token**. The old refresh token is not invalidated: nothing is stored server-side.
+- There is no logout endpoint. Logging out clears the tokens in this browser; a refresh token copied before logout keeps working and can be exchanged for new ones indefinitely. It only stops working if `JWT_REFRESH_SECRET` is changed (which ends every session) or the user is deleted.
+- Logging out does not disconnect Gmail: the Google tokens stay stored, so the next login sees Gmail as connected. Disconnecting Gmail revokes the Google grant but does not end the Draftly session.
+- When an access token expires, the frontend refreshes once and retries the request; if refreshing fails, it logs out and returns to the login page.
+
 ### Gmail
 
 ```http
@@ -448,7 +464,13 @@ How it behaves:
 - A **different key** cannot re-send a `SENT` draft (409), and other users' drafts return 404.
 - The frontend generates one key per send attempt and reuses it on retry.
 
-Limit: this is a durable claim plus a stored result, not perfect exactly-once delivery. If the backend crashes after Gmail accepts the message but before MongoDB records it, the claim expires after 5 minutes; a retry then re-sends the same Gmail draft id, which Gmail rejects because sent drafts are deleted.
+Limit: this is a durable claim plus a stored result, not perfect exactly-once delivery. If the backend crashes after Gmail accepts the message but before MongoDB records it:
+
+- The message is **never sent twice**: a later attempt re-sends the same Gmail draft id, which Gmail rejects because sent drafts are deleted.
+- For 5 minutes the stranded claim blocks the draft: send, edit and reject return 409.
+- After 5 minutes any send attempt takes over the claim; Gmail rejects the used draft id, the claim is released and the API returns a generic 500. The draft stays `APPROVED` even though the email was delivered (check Gmail's Sent folder); it can then be rejected.
+
+Gmail failures during the send call itself are not retried (see Design Notes), for the same reason.
 
 ### Preferences
 
@@ -509,6 +531,8 @@ npm run typecheck:tests   # type-check the test suites (Vitest itself does not)
 
 CI: `.github/workflows/ci.yml` runs on every push to `master` and every pull request. The backend job runs `npm ci`, `npx tsc --noEmit`, `npm run typecheck:tests` and `npm run test:ci`; the frontend job runs `npm ci`, `npx tsc -p tsconfig.app.json --noEmit`, `npm run typecheck:tests`, `npm run test:coverage` and `npm run build`. Both use the Node version in `.nvmrc`, fail if the coverage thresholds are not met, and upload their coverage reports. The backend job sets placeholder values for the required environment variables (no secrets are needed: the tests use an in-memory MongoDB and mocks).
 
+GitHub-hosted runs (checked 2026-11-05 via the GitHub API): 12 runs, the first on 2026-11-03. The latest run, on `7dd415b` (2026-11-04, the current `master`), passed both jobs. One run failed: `9f33ab8` (2026-11-03, the `cookie-parser` removal), at the backend `npm ci` step while CI still ran Node 20 / npm 10; every run since the move to Node 24 (`06577ce`) has passed. Before the first hosted run, the workflow's steps were also simulated locally in a clean checkout; that simulation is not a substitute for the hosted results above.
+
 Frontend:
 
 ```bash
@@ -524,14 +548,18 @@ npm run typecheck:tests   # type-check the Vitest suites (Vitest itself does not
 
 Backend tests cover services, controllers, middleware, models, and API workflows against an in-memory MongoDB — including send idempotency under concurrency, OAuth hardening, rate limits, cross-user access, and reply-header injection attempts. Frontend tests cover services, the auth interceptor, and page/component behaviour (search and pagination, drafts, dialogs, error states).
 
-Last verified 2026-11-03:
+Last verified locally on 2026-11-05 (Node 24.15.0, Windows), re-running every check below:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
 | Backend | 25 | 455 passing | 93.83% | 82.69% | 96.27% | 94.36% |
 | Frontend | 7 | 138 passing | 95.79% | 82.67% | 95.87% | 96.22% |
 
-Verified on Node 24.15.0 locally after a clean `npm ci`; the Docker images build and run on Node 24.22.2. The frontend app typecheck is clean and `npm run build` passes.
+Both typechecks (app and tests) are clean on both sides, and the backend and frontend production builds pass. GitHub-hosted CI (Linux, Node 24 from `.nvmrc`) last passed on 2026-11-04 (see [Scripts](#scripts)).
+
+Node versions: tests and builds were run locally on Node 24.15.0; the Docker images use `node:24-alpine`, which was Node 24.22.2 when the images were last built (2026-11-03 for both images, 2026-11-04 for the frontend image). The backend image has not been rebuilt since the 2026-11-04 changes (JWT-secret check, Vitest 5 test tooling); those changes are covered by the local runs and hosted CI, not by a Docker build.
+
+`npm audit` (2026-11-05): backend **0** vulnerabilities; frontend **16 moderate**, all inside npm's packaging libraries used by `@angular/cli` (`pacote`, `sigstore`, `glob`, `minimatch`, …) for commands such as `ng add`/`ng update`. None of them are in the built app; fixing them requires Angular CLI 22 (a major upgrade, PLAN.md D5).
 
 Backend coverage is measured by Vitest 5's V8 provider, which counts statements and branches more strictly than the Vitest 1 provider used before 2026-11-04 (then 96.41% statements, 87.60% branches); the tests and covered files are the same.
 
@@ -556,30 +584,42 @@ Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tes
 - Drafts use explicit statuses: `PENDING`, `APPROVED`, `REJECTED`, and `SENT`. Sending is only allowed after approval.
 - Approval creates a Gmail draft, so the user can also inspect it in Gmail before sending. Unsaved edits are saved (and synced to Gmail) before approve or send, so what is sent is what is on screen.
 - Gmail calls retry transient failures (`gmailCall` in `GmailService`, `utils/retry.ts`): 3 attempts with exponential backoff and jitter (0.5 s, then 1 s), honouring `Retry-After` up to 4 s. Rate limits (429, or 403 `rateLimitExceeded`/`userRateLimitExceeded`) are retried for every call; server errors (408/5xx) and network errors only for calls that are safe to repeat (reads, draft update and delete). Creating or sending a draft is never repeated after such a failure, because Gmail may already have done it. The googleapis client's own retry is turned off so attempts never multiply.
-- Reply messages are built in one place: header values are stripped of line breaks, the recipient is reduced to a single parsed address, non-ASCII subjects are encoded, and bodies are base64-encoded.
-- A reply is never addressed to the user: reply targets are always messages from someone else, and approve/send refuse a draft whose recipient is the user's own address.
+- Reply messages are built in one place: header values are stripped of line breaks, address lists are parsed into single mailboxes (only the first mailbox of `From`; `Reply-To`, `To` and `Cc` split safely, at most 50 recipients), non-ASCII names and subjects are encoded, and bodies are base64-encoded.
+- A reply is never addressed to the user: reply targets are always messages from someone else, the user's own address is removed from To/Cc, and approve/send refuse a draft whose only recipient is the user.
 - User style learning retrieves recent outbound emails and includes them (truncated) as examples in the OpenAI prompt.
 - The AI always gets readable text: for HTML-only emails, plain text is derived from the HTML (markup, styles and scripts removed).
 - Remote images in emails (often tracking pixels) are hidden until the user chooses **Show images**, so opening an email does not reveal that it was read.
 - The app keeps the human-in-the-loop requirement by never sending generated text automatically.
 - Request logs redact OAuth codes, OAuth state, and search queries.
+- Security hardening added on 2026-11-04: the nginx headers and the JWT-secret check (next two items), and the password policy for new accounts (see [Auth](#auth)). The headers were checked with curl on the rebuilt frontend image; a browser-console check for CSP violations has not been recorded.
 - nginx serves the app with a Content-Security-Policy (`script-src 'self'`, no inline scripts; `style-src` allows inline styles because Angular injects component styles; images from any `https:` host for emails after **Show images**; `frame-ancestors 'none'`) plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`. Critical-CSS inlining is off in the production build because its `onload` handler would violate the CSP. No HSTS header: the Docker setup serves plain HTTP.
 - The backend refuses to start with JWT secrets shorter than 32 characters, left at the `.env.example` placeholder, or identical for access and refresh tokens.
 
 ## Known Limitations
 
-- Optimized for local Docker Compose deployment and demos rather than production cloud deployment (MongoDB runs without authentication on the internal Docker network).
-- Sending is idempotent but not mathematically exactly-once (see [Idempotent sending](#idempotent-sending)).
+Accepted for this local MVP:
+
+- Sending is idempotent but not exactly-once; after a crash mid-send the draft can stay `APPROVED` although the email was delivered (see [Idempotent sending](#idempotent-sending)).
 - Emails cached before reply all existed have no stored Cc/Reply-To; generating a draft re-fetches the thread, which fills them in.
 - Thread context covers the newest 50 messages of a thread (the prompt uses the latest 20). When Gmail cannot be reached during generation, only cached messages are used.
-- Rate limits are kept in memory per backend process.
-- Refresh tokens are stateless JWTs: logout clears them in the browser, but a copied refresh token stays valid until it expires. Tokens are stored in `localStorage`.
 - Email HTML is sanitized and shown inline (not in a sandboxed iframe). Remote images are hidden until the user clicks **Show images**.
 - The OAuth `state` is signed and expiring but not tied to the browser that started the flow.
+- Google apps in **Testing** mode expire Gmail refresh tokens after 7 days; the user reconnects.
 - The Drafts tab shows the latest 50 drafts. Only draft actions are recorded in the activity log (not logins or Gmail connect/disconnect).
+- The frontend has 16 moderate `npm audit` findings in Angular CLI tooling (not in the built app).
+
+Required before a production deployment (not done):
+
+- **Sessions:** server-side refresh-token storage and revocation (a logout endpoint, rotation that invalidates the old token), and tokens out of `localStorage` (e.g. `HttpOnly` cookies with CSRF protection). Today a copied refresh token can be renewed indefinitely (see [Sessions](#sessions-logout-and-the-two-kinds-of-tokens)).
+- **HTTPS** termination and an HSTS header (the Docker setup serves plain HTTP), with the OAuth redirect URI and `FRONTEND_URL` on HTTPS.
+- **MongoDB** authentication and TLS, backups (it currently runs without authentication on the internal Docker network).
+- **Secrets** from a secrets manager instead of `.env` files; a published (verified) Google OAuth app.
+- **Rate limits** in a shared store (they are kept in memory per backend process, so they reset on restart and do not work across several instances).
+- Monitoring, log shipping, and an automated deployment (CI only tests and builds).
 
 ## Future Improvements
 
-- Cloud deployment (AWS/GCP/Azure) with production-grade secrets management
+- Cloud deployment (AWS/GCP/Azure) with the production requirements above
 - Automated deployment (CI already runs tests and the build)
-- Server-side refresh-token revocation
+- Angular 22 upgrade (clears the remaining CLI audit findings)
+- Recovering a send interrupted by a crash (mark the draft `SENT` when Gmail shows the message was sent)

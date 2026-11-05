@@ -28,9 +28,14 @@ Unit tests use Vitest:
 ```bash
 npm test
 npm run test:coverage
+npm run typecheck:tests   # type-check the suites (Vitest does not)
 ```
 
 Tests live in `tests/*.vitest.ts`.
+
+## Docker
+
+The image installs dependencies with `npm ci` (exact lockfile versions; Angular packages are pinned exactly), builds the app, and serves it with nginx, which also sets the Content-Security-Policy and other security headers (`nginx.conf`). The production build disables critical-CSS inlining, whose inline `onload` handler the CSP would block.
 
 ## Structure
 
