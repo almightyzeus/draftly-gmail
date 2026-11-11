@@ -54,7 +54,6 @@ interface Draft {
   ],
   templateUrl: './draft-detail.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrls: ['./draft-detail.component.css'],
 })
 export class DraftDetailComponent implements OnInit {
   draft: Draft | null = null;

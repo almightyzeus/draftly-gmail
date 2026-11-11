@@ -1,6 +1,6 @@
 <app-top-bar title="Draft reply" [showBack]="true" (back)="goBack()">
   @if (draft) {
-    <span class="status-badge status-badge--{{ draft.status.toLowerCase() }} top-badge">{{ draft.status }}</span>
+    <span class="status-badge status-badge--{{ draft.status.toLowerCase() }} ml-3 bg-[color-mix(in_srgb,var(--mat-sys-surface)_92%,transparent)]">{{ draft.status }}</span>
   }
 </app-top-bar>
 
@@ -20,23 +20,23 @@
     </mat-card>
   } @else if (draft) {
     <mat-card appearance="outlined">
-      <mat-card-content class="draft">
+      <mat-card-content class="grid! gap-3">
         <!-- Who this goes to: visible before anything is approved or sent -->
-        <dl class="meta">
-          <dt>To</dt>
-          <dd>{{ toLine || 'Unknown recipient (original email unavailable)' }}</dd>
+        <dl class="m-0 mb-2 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt class="text-muted">To</dt>
+          <dd class="m-0 wrap-anywhere">{{ toLine || 'Unknown recipient (original email unavailable)' }}</dd>
           @if (ccList.length) {
-            <dt>Cc</dt>
-            <dd>{{ ccList.join(', ') }}</dd>
+            <dt class="text-muted">Cc</dt>
+            <dd class="m-0 wrap-anywhere">{{ ccList.join(', ') }}</dd>
           }
-          <dt>Subject</dt>
-          <dd>{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '—' }}</dd>
-          <dt>Tone</dt>
-          <dd>{{ draft.tone | titlecase }} · created {{ draft.createdAt | date: 'MMM d, h:mm a' }}</dd>
+          <dt class="text-muted">Subject</dt>
+          <dd class="m-0 wrap-anywhere">{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '—' }}</dd>
+          <dt class="text-muted">Tone</dt>
+          <dd class="m-0 wrap-anywhere">{{ draft.tone | titlecase }} · created {{ draft.createdAt | date: 'MMM d, h:mm a' }}</dd>
         </dl>
 
         @if (draft.canReplyAll && isEditable) {
-          <div class="reply-all">
+          <div class="flex flex-wrap items-center gap-x-3 gap-y-1">
             <mat-slide-toggle
               [checked]="!!draft.replyAll"
               (change)="toggleReplyAll($event.checked, $event.source)"
@@ -44,11 +44,11 @@
             >
               Reply all
             </mat-slide-toggle>
-            <span class="muted hint">Copy everyone else on the original email.</span>
+            <span class="text-[13px] text-muted">Copy everyone else on the original email.</span>
           </div>
         }
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="w-full">
           <mat-label>Reply</mat-label>
           <textarea
             matInput
@@ -65,21 +65,21 @@
         </mat-form-field>
 
         @if (actionError) {
-          <p class="inline-error action-error" role="alert">
+          <p class="inline-error" role="alert">
             <mat-icon>error_outline</mat-icon>
             {{ actionError }}
           </p>
         }
 
         @if (isEditable) {
-          <div class="actions">
+          <div class="flex flex-wrap items-center gap-2">
             @if (hasChanges) {
               <button mat-stroked-button (click)="saveDraft()" [disabled]="isBusy()">
                 <mat-icon>save</mat-icon>
                 Save changes
               </button>
             }
-            <span class="spacer"></span>
+            <span class="flex-auto"></span>
             <button mat-stroked-button color="warn" (click)="rejectDraft()" [disabled]="isBusy()">
               <mat-icon>block</mat-icon>
               Reject
@@ -96,7 +96,7 @@
               </button>
             }
           </div>
-          <p class="hint muted">
+          <p class="m-0 text-[13px] text-muted">
             @if (draft.status === 'PENDING') {
               Approving saves this reply to your Gmail drafts. Nothing is sent until you press Send.
             } @else {
@@ -104,7 +104,7 @@
             }
           </p>
         } @else {
-          <p class="final-state muted">
+          <p class="m-0 flex items-center gap-2 text-[14px] text-muted">
             <mat-icon>{{ draft.status === 'SENT' ? 'mark_email_read' : 'block' }}</mat-icon>
             @if (draft.status === 'SENT') {
               Sent{{ draft.sentAt ? ' ' + (draft.sentAt | date: 'MMM d, h:mm a') : '' }}.
