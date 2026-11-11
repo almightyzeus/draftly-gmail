@@ -1,0 +1,64 @@
+<mat-toolbar color="primary" class="top-bar">
+  @if (showBack) {
+    <button mat-icon-button (click)="back.emit()" aria-label="Back">
+      <mat-icon>arrow_back</mat-icon>
+    </button>
+  }
+  <a class="brand" routerLink="/dashboard" aria-label="Draftly home">
+    <mat-icon>auto_awesome</mat-icon>
+    <span class="brand-name">Draftly</span>
+  </a>
+  @if (title) {
+    <span class="title hide-sm">{{ title }}</span>
+  }
+  <ng-content />
+  <span class="spacer"></span>
+
+  @if (user$ | async; as user) {
+    @if (user.googleConnected) {
+      <button
+        mat-button
+        class="gmail-status gmail-status--connected"
+        [matMenuTriggerFor]="gmailMenu"
+        [attr.aria-label]="'Gmail connected' + (user.gmailEmail ? ' as ' + user.gmailEmail : '')"
+        matTooltip="Gmail connection"
+      >
+        <mat-icon>mark_email_read</mat-icon>
+        <span class="hide-sm">{{ user.gmailEmail || 'Gmail connected' }}</span>
+      </button>
+      <mat-menu #gmailMenu="matMenu">
+        <button mat-menu-item (click)="disconnectGmail()">
+          <mat-icon>link_off</mat-icon>
+          <span>Disconnect Gmail</span>
+        </button>
+      </mat-menu>
+    } @else {
+      <button mat-stroked-button class="gmail-status gmail-status--disconnected" (click)="connectGmail()">
+        <mat-icon>add_link</mat-icon>
+        <span>Connect Gmail</span>
+      </button>
+    }
+
+    <button mat-icon-button [matMenuTriggerFor]="accountMenu" aria-label="Account menu">
+      <mat-icon>account_circle</mat-icon>
+    </button>
+    <mat-menu #accountMenu="matMenu">
+      <div class="account-header" mat-menu-item disabled>
+        <span class="account-name">{{ user.name }}</span>
+        <span class="account-email">{{ user.email }}</span>
+      </div>
+      <a mat-menu-item routerLink="/preferences">
+        <mat-icon>tune</mat-icon>
+        <span>Preferences</span>
+      </a>
+      <a mat-menu-item routerLink="/activity">
+        <mat-icon>history</mat-icon>
+        <span>Activity</span>
+      </a>
+      <button mat-menu-item (click)="logout()">
+        <mat-icon>logout</mat-icon>
+        <span>Log out</span>
+      </button>
+    </mat-menu>
+  }
+</mat-toolbar>

@@ -20,84 +20,9 @@ import { ConfirmService } from './confirm.service';
 @Component({
   selector: 'app-top-bar',
   imports: [AsyncPipe, RouterLink, MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule],
-  template: `
-    <mat-toolbar color="primary" class="top-bar">
-      @if (showBack) {
-        <button mat-icon-button (click)="back.emit()" aria-label="Back">
-          <mat-icon>arrow_back</mat-icon>
-        </button>
-      }
-      <a class="brand" routerLink="/dashboard" aria-label="Draftly home">
-        <mat-icon>auto_awesome</mat-icon>
-        <span class="brand-name">Draftly</span>
-      </a>
-      @if (title) {
-        <span class="title hide-sm">{{ title }}</span>
-      }
-      <ng-content />
-      <span class="spacer"></span>
-
-      @if (user$ | async; as user) {
-        @if (user.googleConnected) {
-          <button
-            mat-button
-            class="gmail-status gmail-status--connected"
-            [matMenuTriggerFor]="gmailMenu"
-            [attr.aria-label]="'Gmail connected' + (user.gmailEmail ? ' as ' + user.gmailEmail : '')"
-            matTooltip="Gmail connection"
-          >
-            <mat-icon>mark_email_read</mat-icon>
-            <span class="hide-sm">{{ user.gmailEmail || 'Gmail connected' }}</span>
-          </button>
-          <mat-menu #gmailMenu="matMenu">
-            <button mat-menu-item (click)="disconnectGmail()">
-              <mat-icon>link_off</mat-icon>
-              <span>Disconnect Gmail</span>
-            </button>
-          </mat-menu>
-        } @else {
-          <button mat-stroked-button class="gmail-status gmail-status--disconnected" (click)="connectGmail()">
-            <mat-icon>add_link</mat-icon>
-            <span>Connect Gmail</span>
-          </button>
-        }
-
-        <button mat-icon-button [matMenuTriggerFor]="accountMenu" aria-label="Account menu">
-          <mat-icon>account_circle</mat-icon>
-        </button>
-        <mat-menu #accountMenu="matMenu">
-          <div class="account-header" mat-menu-item disabled>
-            <span class="account-name">{{ user.name }}</span>
-            <span class="account-email">{{ user.email }}</span>
-          </div>
-          <a mat-menu-item routerLink="/preferences">
-            <mat-icon>tune</mat-icon>
-            <span>Preferences</span>
-          </a>
-          <a mat-menu-item routerLink="/activity">
-            <mat-icon>history</mat-icon>
-            <span>Activity</span>
-          </a>
-          <button mat-menu-item (click)="logout()">
-            <mat-icon>logout</mat-icon>
-            <span>Log out</span>
-          </button>
-        </mat-menu>
-      }
-    </mat-toolbar>
-  `,
+  templateUrl: './top-bar.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styles: [`
-    .top-bar { position: sticky; top: 0; z-index: 10; gap: 4px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12); }
-    .brand { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; font-weight: 600; }
-    .title { margin-left: 12px; padding-left: 12px; border-left: 1px solid rgba(255, 255, 255, 0.4); font-weight: 400; font-size: 18px; }
-    .gmail-status { color: inherit; }
-    .gmail-status--disconnected { border-color: rgba(255, 255, 255, 0.7); }
-    .account-header { display: flex; flex-direction: column; line-height: 1.3; height: auto; padding-top: 8px; padding-bottom: 8px; }
-    .account-name { font-weight: 500; color: rgba(0, 0, 0, 0.87); }
-    .account-email { font-size: 12px; color: rgba(0, 0, 0, 0.6); }
-    @media (max-width: 480px) { .brand-name { display: none; } }
-  `],
+  styleUrls: ['./top-bar.component.css'],
 })
 export class TopBarComponent {
   @Input() title = '';

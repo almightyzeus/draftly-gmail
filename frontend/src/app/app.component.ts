@@ -5,9 +5,8 @@ import { RouterOutlet } from '@angular/router';
 @Component({
     selector: 'app-root',
     imports: [RouterOutlet],
-    template: '<router-outlet></router-outlet>',
-    changeDetection: ChangeDetectionStrategy.Eager,
-    styles: []
+    templateUrl: './app.component.html',
+    changeDetection: ChangeDetectionStrategy.Eager
 })
 export class AppComponent {
   title = 'frontend';

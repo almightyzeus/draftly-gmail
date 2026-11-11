@@ -25,7 +25,7 @@ Local checks re-run on 2026-11-05 (Node 24.15.0, Windows):
 | Backend tests | 25 files, **455 passing** (`npm run test:ci`) |
 | Backend coverage | 93.83% statements, 82.69% branches, 96.27% functions, 94.36% lines (Vitest 5 V8 provider, stricter than Vitest 1's; same 36 files) |
 | Frontend dependencies | Lockfile installs with plain `npm ci` (no `--legacy-peer-deps`; last clean install 2026-11-03): Angular 22.2.5 (CLI/build 22.2.6, pinned exactly), Material 22.2.6, TypeScript 6.0.3 (2026-11-11) |
-| Frontend tests | 7 files, **138 passing** |
+| Frontend tests | 8 files, **149 passing** (2026-11-11; includes the component-file convention check) |
 | Frontend coverage | 95.79% statements, 82.67% branches, 96.37% functions, 96.31% lines (2026-11-11, Angular 22) |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` and `npm run typecheck:tests` clean |
 | Production build | `ng build` passes with no warnings; initial bundle 476.77 kB (110.34 kB transferred, 2026-11-11), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74.04 kB, 10.43 kB gzipped) are lazy chunks; the built `index.html` has no inline event handlers (CSP) |

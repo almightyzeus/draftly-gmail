@@ -48,3 +48,7 @@ src/
     services/     # API clients, auth service, interceptor, guard
     shared/       # top bar, confirm dialog, formatting helpers
 ```
+
+## Component conventions
+
+Every component keeps its markup and styles in separate files next to its class: `name.component.ts`, `name.component.html` (`templateUrl`) and, when it has styles, `name.component.css` (`styleUrls`). Inline `template:` and `styles:` are not used. `tests/conventions.vitest.ts` enforces this: `npm test` fails if a component has an inline template or styles, or points to a file that does not exist.

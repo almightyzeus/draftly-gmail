@@ -553,7 +553,7 @@ Last verified locally on 2026-11-05 (Node 24.15.0, Windows), re-running every ch
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
 | Backend | 25 | 455 passing | 93.83% | 82.69% | 96.27% | 94.36% |
-| Frontend | 7 | 138 passing | 95.79% | 82.67% | 96.37% | 96.31% |
+| Frontend | 8 | 149 passing | 95.79% | 82.67% | 96.37% | 96.31% |
 
 Both typechecks (app and tests) are clean on both sides, and the backend and frontend production builds pass. GitHub-hosted CI (Linux, Node 24 from `.nvmrc`) last passed on 2026-11-04 (see [Scripts](#scripts)).
 
