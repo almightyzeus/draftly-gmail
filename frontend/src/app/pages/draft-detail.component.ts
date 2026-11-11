@@ -15,6 +15,7 @@ import { DraftService } from '../services/draft.service';
 import { AuthService } from '../services/auth.service';
 import { ConfirmService } from '../shared/confirm.service';
 import { TopBarComponent } from '../shared/top-bar.component';
+import { BusyOverlayComponent } from '../shared/busy-overlay.component';
 
 interface Draft {
   _id: string;
@@ -49,6 +50,7 @@ interface Draft {
     MatProgressSpinnerModule,
     MatSlideToggleModule,
     TopBarComponent,
+    BusyOverlayComponent,
   ],
   templateUrl: './draft-detail.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
@@ -67,6 +69,15 @@ export class DraftDetailComponent implements OnInit {
   readonly isBusy = computed(
     () => this.isSaving() || this.isApproving() || this.isRejecting() || this.isSending() || this.isUpdatingRecipients()
   );
+  /** Text of the page overlay shown while an action runs. */
+  readonly busyMessage = computed(() => {
+    if (this.isSending()) return 'Sending reply…';
+    if (this.isApproving()) return 'Approving and saving to Gmail…';
+    if (this.isRejecting()) return 'Rejecting draft…';
+    if (this.isSaving()) return 'Saving changes…';
+    if (this.isUpdatingRecipients()) return 'Updating recipients…';
+    return '';
+  });
   /** Failure to load the draft (replaces the page content). */
   error: string | null = null;
   /** Failure of an action (save/approve/reject/send); the editor stays visible. */

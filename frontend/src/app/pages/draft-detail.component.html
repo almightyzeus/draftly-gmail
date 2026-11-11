@@ -75,40 +75,24 @@
           <div class="actions">
             @if (hasChanges) {
               <button mat-stroked-button (click)="saveDraft()" [disabled]="isBusy()">
-                @if (isSaving()) {
-                  <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-                } @else {
-                  <mat-icon>save</mat-icon>
-                }
-                {{ isSaving() ? 'Saving…' : 'Save changes' }}
+                <mat-icon>save</mat-icon>
+                Save changes
               </button>
             }
             <span class="spacer"></span>
             <button mat-stroked-button color="warn" (click)="rejectDraft()" [disabled]="isBusy()">
-              @if (isRejecting()) {
-                <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-              } @else {
-                <mat-icon>block</mat-icon>
-              }
-              {{ isRejecting() ? 'Rejecting…' : 'Reject' }}
+              <mat-icon>block</mat-icon>
+              Reject
             </button>
             @if (draft.status === 'PENDING') {
               <button mat-flat-button color="primary" (click)="approveDraft()" [disabled]="isBusy()">
-                @if (isApproving()) {
-                  <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-                } @else {
-                  <mat-icon>check_circle</mat-icon>
-                }
-                {{ isApproving() ? 'Approving…' : 'Approve' }}
+                <mat-icon>check_circle</mat-icon>
+                Approve
               </button>
             } @else {
               <button mat-flat-button color="primary" (click)="sendDraft()" [disabled]="isBusy()">
-                @if (isSending()) {
-                  <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-                } @else {
-                  <mat-icon>send</mat-icon>
-                }
-                {{ isSending() ? 'Sending…' : 'Send' }}
+                <mat-icon>send</mat-icon>
+                Send
               </button>
             }
           </div>
@@ -133,3 +117,5 @@
     </mat-card>
   }
 </main>
+
+<app-busy-overlay [active]="isBusy()" [message]="busyMessage()" />

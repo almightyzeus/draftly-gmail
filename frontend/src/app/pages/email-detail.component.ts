@@ -15,6 +15,7 @@ import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
 import { PreferenceService } from '../services/preference.service';
 import { TopBarComponent } from '../shared/top-bar.component';
+import { BusyOverlayComponent } from '../shared/busy-overlay.component';
 import { blockRemoteImages } from '../shared/email-html';
 
 interface Email {
@@ -46,6 +47,7 @@ interface Email {
     MatProgressSpinnerModule,
     MatDividerModule,
     TopBarComponent,
+    BusyOverlayComponent,
   ],
   templateUrl: './email-detail.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,

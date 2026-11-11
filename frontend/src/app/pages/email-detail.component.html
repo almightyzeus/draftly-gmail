@@ -94,15 +94,13 @@
 
         <div class="actions">
           <button mat-flat-button color="primary" (click)="generateDraft()" [disabled]="isGenerating">
-            @if (isGenerating) {
-              <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-            } @else {
-              <mat-icon>auto_awesome</mat-icon>
-            }
-            {{ isGenerating ? 'Generating…' : 'Generate draft' }}
+            <mat-icon>auto_awesome</mat-icon>
+            Generate draft
           </button>
         </div>
       </mat-card-content>
     </mat-card>
   }
 </main>
+
+<app-busy-overlay [active]="isGenerating" message="Generating a draft from the thread… This can take a few seconds." />

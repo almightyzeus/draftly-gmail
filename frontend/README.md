@@ -46,7 +46,7 @@ src/
     app.routes.ts # lazy-loaded routes
     pages/        # login, register, dashboard (Inbox/Drafts), email detail, draft detail, preferences, activity
     services/     # API clients, auth service, interceptor, guard
-    shared/       # top bar, confirm dialog, formatting helpers
+    shared/       # top bar, confirm dialog, busy overlay, formatting helpers
 ```
 
 ## Component conventions

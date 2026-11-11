@@ -1,0 +1,19 @@
+<!-- Always present so screen readers announce the message when it appears. -->
+<div class="cdk-visually-hidden" role="status" aria-live="polite">{{ visible ? shownMessage : '' }}</div>
+
+@if (visible) {
+  <div
+    class="busy-overlay"
+    role="dialog"
+    aria-modal="true"
+    aria-busy="true"
+    [attr.aria-label]="shownMessage"
+    cdkTrapFocus
+    [cdkTrapFocusAutoCapture]="true"
+  >
+    <div class="busy-panel" tabindex="-1" cdkFocusInitial>
+      <mat-spinner diameter="40"></mat-spinner>
+      <p class="busy-message">{{ shownMessage }}</p>
+    </div>
+  </div>
+}

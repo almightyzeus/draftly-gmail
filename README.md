@@ -553,7 +553,7 @@ Last verified locally on 2026-11-05 (Node 24.15.0, Windows), re-running every ch
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
 | Backend | 25 | 455 passing | 93.83% | 82.69% | 96.27% | 94.36% |
-| Frontend | 8 | 149 passing | 95.79% | 82.67% | 96.37% | 96.31% |
+| Frontend | 9 | 157 passing | 96.11% | 83.83% | 96.51% | 96.56% |
 
 Both typechecks (app and tests) are clean on both sides, and the backend and frontend production builds pass. GitHub-hosted CI (Linux, Node 24 from `.nvmrc`) last passed on 2026-11-04 (see [Scripts](#scripts)).
 
@@ -590,6 +590,7 @@ Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tes
 - The AI always gets readable text: for HTML-only emails, plain text is derived from the HTML (markup, styles and scripts removed).
 - Remote images in emails (often tracking pixels) are hidden until the user chooses **Show images**, so opening an email does not reveal that it was read.
 - The app keeps the human-in-the-loop requirement by never sending generated text automatically.
+- While an action runs (generate, save, approve, reject, send, reply all), a full-page overlay names the action ("Sending reply…") and blocks the page, top bar included. It appears only if the action takes longer than 300 ms and then stays at least 400 ms, so quick actions do not flash; it traps keyboard focus and is announced to screen readers. Login, register and Preferences keep a spinner in the submit button.
 - Request logs redact OAuth codes, OAuth state, and search queries.
 - Security hardening added on 2026-11-04: the nginx headers and the JWT-secret check (next two items), and the password policy for new accounts (see [Auth](#auth)). The headers were checked with curl on the rebuilt frontend image; a browser-console check for CSP violations has not been recorded.
 - nginx serves the app with a Content-Security-Policy (`script-src 'self'`, no inline scripts; `style-src` allows inline styles because Angular injects component styles; images from any `https:` host for emails after **Show images**; `frame-ancestors 'none'`) plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`. Critical-CSS inlining is off in the production build because its `onload` handler would violate the CSP. No HSTS header: the Docker setup serves plain HTTP.

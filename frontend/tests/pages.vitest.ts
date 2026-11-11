@@ -585,6 +585,26 @@ describe('frontend page classes', () => {
     expect(component.isBusy()).toBe(false);
   });
 
+  it('DraftDetailComponent names the running action for the page overlay', () => {
+    const component = new DraftDetailComponent({ params: of({}) } as any, router as any, {} as any, confirmYes as any, snackBar as any, draftAuth as any);
+    expect(component.busyMessage()).toBe('');
+
+    const cases: [keyof DraftDetailComponent, string][] = [
+      ['isSaving', 'Saving changes…'],
+      ['isApproving', 'Approving and saving to Gmail…'],
+      ['isRejecting', 'Rejecting draft…'],
+      ['isSending', 'Sending reply…'],
+      ['isUpdatingRecipients', 'Updating recipients…'],
+    ];
+    for (const [flag, message] of cases) {
+      (component[flag] as any).set(true);
+      expect(component.busyMessage()).toBe(message);
+      expect(component.isBusy()).toBe(true);
+      (component[flag] as any).set(false);
+    }
+    expect(component.busyMessage()).toBe('');
+  });
+
   describe('DraftDetailComponent saves unsaved edits before approve/send', () => {
     const setup = (status: string, overrides: Record<string, any> = {}) => {
       const draft: any = {
