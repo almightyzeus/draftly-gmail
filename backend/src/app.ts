@@ -37,10 +37,11 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 
 // Middleware: Logging
-// Apache "combined" format, with OAuth codes/state and search queries redacted.
+// Apache "combined" format plus the response time in ms, with OAuth codes/state
+// and search queries redacted.
 morgan.token('redacted-url', (req: Request) => redactUrl(req.originalUrl || req.url));
 app.use(
-  morgan(':remote-addr - :remote-user [:date[clf]] ":method :redacted-url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent"', {
+  morgan(':remote-addr - :remote-user [:date[clf]] ":method :redacted-url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" :response-time ms', {
     stream: {
       write: (message) => logger.info(message.trim()),
     },

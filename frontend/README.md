@@ -35,7 +35,7 @@ Tests live in `tests/*.vitest.ts`.
 
 ## Docker
 
-The image installs dependencies with `npm ci` (exact lockfile versions; Angular packages are pinned exactly), builds the app, and serves it with nginx, which also sets the Content-Security-Policy and other security headers (`nginx.conf`). The production build disables critical-CSS inlining, whose inline `onload` handler the CSP would block.
+The image installs dependencies with `npm ci` (exact lockfile versions; Angular packages are pinned exactly), builds the app, and serves it with nginx, which also sets the Content-Security-Policy and other security headers (`security-headers.conf`, included in each app location of `nginx.conf`) and the caching headers (`index.html` revalidated on every load, hashed build files cached for a year). The production build disables critical-CSS inlining, whose inline `onload` handler the CSP would block.
 
 ## Structure
 
