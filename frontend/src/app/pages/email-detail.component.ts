@@ -51,7 +51,6 @@ interface Email {
   ],
   templateUrl: './email-detail.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrls: ['./email-detail.component.css'],
 })
 export class EmailDetailComponent implements OnInit {
   email: Email | null = null;

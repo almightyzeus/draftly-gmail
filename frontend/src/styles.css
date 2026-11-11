@@ -18,6 +18,7 @@
   --dr-warning: #e65100;
   --dr-brand-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --dr-link: #5b5fc7;
+  --dr-surface-subtle: #f1f3f4;
   --dr-radius: 8px;
   --dr-gap: 16px;
 }

@@ -16,49 +16,49 @@
     </mat-card>
   } @else if (email) {
     <mat-card appearance="outlined">
-      <mat-card-content class="message">
-        <h1 class="subject">{{ email.subject }}</h1>
-        <dl class="meta">
-          <dt>From</dt>
-          <dd>{{ email.from }}</dd>
-          <dt>To</dt>
-          <dd>{{ email.to }}</dd>
-          <dt>Date</dt>
-          <dd>{{ email.internalDate | date: 'EEE, MMM d, y, h:mm a' }}</dd>
+      <mat-card-content class="grid! gap-3">
+        <h1 class="m-0 text-[22px] leading-[1.3] font-medium wrap-anywhere">{{ email.subject }}</h1>
+        <dl class="m-0 grid grid-cols-[auto_1fr] gap-x-4 gap-y-1">
+          <dt class="text-muted">From</dt>
+          <dd class="m-0 wrap-anywhere">{{ email.from }}</dd>
+          <dt class="text-muted">To</dt>
+          <dd class="m-0 wrap-anywhere">{{ email.to }}</dd>
+          <dt class="text-muted">Date</dt>
+          <dd class="m-0 wrap-anywhere">{{ email.internalDate | date: 'EEE, MMM d, y, h:mm a' }}</dd>
         </dl>
         <mat-divider></mat-divider>
         @if (blockedImageCount > 0) {
-          <div class="images-notice" role="status">
+          <div class="flex flex-wrap items-center gap-2 rounded-dr bg-subtle py-1 pr-1 pl-3 text-[14px] text-muted" role="status">
             <mat-icon>image_not_supported</mat-icon>
-            <span>Remote images are hidden to protect your privacy.</span>
+            <span class="flex-[1_1_200px]">Remote images are hidden to protect your privacy.</span>
             <button mat-button (click)="showRemoteImages()">Show images</button>
           </div>
         }
-        <div class="body">
+        <div class="overflow-x-auto leading-[1.6]">
           @if (safeBodyHtml) {
             <div [innerHTML]="safeBodyHtml"></div>
           } @else if (email.bodyPlain) {
-            <p class="plain-body">{{ email.bodyPlain }}</p>
+            <p class="m-0 whitespace-pre-wrap wrap-anywhere">{{ email.bodyPlain }}</p>
           } @else {
-            <p class="muted">No email body available.</p>
+            <p class="text-muted">No email body available.</p>
           }
         </div>
       </mat-card-content>
     </mat-card>
 
     <mat-card appearance="outlined">
-      <mat-card-content class="compose">
-        <h2 class="compose-title">
+      <mat-card-content class="grid! gap-3">
+        <h2 class="m-0 flex items-center gap-2 text-[18px] font-medium">
           <mat-icon>auto_awesome</mat-icon>
           Draft a reply with AI
         </h2>
-        <p class="muted compose-help">
+        <p class="m-0 text-muted">
           Draftly reads the whole thread and replies to the latest message from the other person. You review it before
           anything is sent.
         </p>
 
-        <div class="field">
-          <span class="field-label" id="tone-label">Tone</span>
+        <div class="flex flex-wrap items-center gap-3">
+          <span class="text-muted" id="tone-label">Tone</span>
           <mat-button-toggle-group
             [(ngModel)]="selectedTone"
             (change)="onToneChange()"
@@ -72,7 +72,7 @@
           </mat-button-toggle-group>
         </div>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="w-full">
           <mat-label>Additional context (optional)</mat-label>
           <textarea
             matInput
@@ -86,13 +86,13 @@
         </mat-form-field>
 
         @if (actionError) {
-          <p class="inline-error action-error" role="alert">
+          <p class="inline-error" role="alert">
             <mat-icon>error_outline</mat-icon>
             {{ actionError }}
           </p>
         }
 
-        <div class="actions">
+        <div class="flex justify-end">
           <button mat-flat-button color="primary" (click)="generateDraft()" [disabled]="isGenerating">
             <mat-icon>auto_awesome</mat-icon>
             Generate draft

@@ -41,6 +41,7 @@
   --color-success: var(--dr-success);
   --color-warning: var(--dr-warning);
   --color-link: var(--dr-link);
+  --color-subtle: var(--dr-surface-subtle);
 
   --font-sans: Roboto, 'Helvetica Neue', sans-serif;
   --radius-dr: var(--dr-radius);
