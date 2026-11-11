@@ -79,12 +79,7 @@
           class="full-width"
           [disabled]="registerForm.invalid || isLoading"
           >
-          @if (isLoading) {
-            <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-            Creating account…
-          } @else {
-            Create account
-          }
+          Create account
         </button>
       </form>
 
@@ -94,3 +89,5 @@
     </mat-card-content>
   </mat-card>
 </main>
+
+<app-busy-overlay [active]="isLoading" message="Creating your account…" />

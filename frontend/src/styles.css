@@ -99,13 +99,6 @@ body {
   margin-left: auto;
 }
 
-/* Spinner inside a button label. */
-.btn-spinner {
-  display: inline-block;
-  margin-right: 8px;
-  vertical-align: middle;
-}
-
 /* ---------- Status badges (drafts) ---------- */
 
 .status-badge {

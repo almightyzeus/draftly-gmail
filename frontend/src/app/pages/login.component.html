@@ -39,12 +39,7 @@
           class="full-width"
           [disabled]="loginForm.invalid || isLoading"
           >
-          @if (isLoading) {
-            <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-            Signing in…
-          } @else {
-            Sign in
-          }
+          Sign in
         </button>
       </form>
 
@@ -54,3 +49,5 @@
     </mat-card-content>
   </mat-card>
 </main>
+
+<app-busy-overlay [active]="isLoading" message="Signing in…" />

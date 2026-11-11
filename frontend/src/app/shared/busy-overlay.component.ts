@@ -10,8 +10,8 @@ export const BUSY_OVERLAY_MIN_VISIBLE_MS = 400;
 export const BUSY_OVERLAY_SLOW_AFTER_MS = 4000;
 
 /**
- * Full-page overlay shown while a user action (generate, save, approve,
- * reject, send) is in progress. It blocks every click, including the top bar,
+ * Full-page overlay shown while a user action (sign in, register, generate,
+ * save, approve, reject, send, save preferences) is in progress. It blocks every click, including the top bar,
  * traps keyboard focus and announces the message to screen readers.
  */
 @Component({

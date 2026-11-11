@@ -14,6 +14,7 @@ import { filter } from 'rxjs';
 import { PreferenceService, Tone, UserPreferences } from '../services/preference.service';
 import { ConfirmService } from '../shared/confirm.service';
 import { TopBarComponent } from '../shared/top-bar.component';
+import { BusyOverlayComponent } from '../shared/busy-overlay.component';
 
 /** Limits enforced by the API (PUT /api/preferences). */
 export const MAX_SIGNATURE_LENGTH = 1000;
@@ -39,6 +40,7 @@ export const MAX_STYLE_EXAMPLES = 20;
     MatInputModule,
     MatProgressSpinnerModule,
     TopBarComponent,
+    BusyOverlayComponent,
   ],
   templateUrl: './preferences.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,

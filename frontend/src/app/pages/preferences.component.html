@@ -82,12 +82,8 @@
               <span class="muted">Unsaved changes</span>
             }
             <button mat-flat-button color="primary" type="submit" [disabled]="isSaving || form.pristine || form.invalid">
-              @if (isSaving) {
-                <mat-spinner diameter="18" class="btn-spinner"></mat-spinner>
-              } @else {
-                <mat-icon>save</mat-icon>
-              }
-              {{ isSaving ? 'Saving…' : 'Save preferences' }}
+              <mat-icon>save</mat-icon>
+              Save preferences
             </button>
           </div>
         </form>
@@ -95,3 +91,5 @@
     </mat-card>
   }
 </main>
+
+<app-busy-overlay [active]="isSaving" message="Saving preferences…" />
