@@ -6,8 +6,9 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  background: rgba(244, 245, 249, 0.75);
-  backdrop-filter: blur(2px);
+  /* No backdrop-filter: blurring the whole page while the spinner animates is
+     expensive to repaint and can make the spinner stutter on slower machines. */
+  background: rgba(244, 245, 249, 0.85);
   cursor: progress;
   animation: busy-fade-in 150ms ease-out;
 }

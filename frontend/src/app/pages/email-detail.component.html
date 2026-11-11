@@ -103,4 +103,9 @@
   }
 </main>
 
-<app-busy-overlay [active]="isGenerating" message="Generating a draft from the thread… This can take a few seconds." />
+<app-busy-overlay
+  [active]="isGenerating"
+  [delay]="0"
+  message="Reading the thread and drafting a reply…"
+  slowMessage="Still working: the AI is writing your reply. This can take a few more seconds."
+/>

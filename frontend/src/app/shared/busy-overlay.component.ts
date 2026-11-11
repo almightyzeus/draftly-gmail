@@ -6,6 +6,8 @@ import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 export const BUSY_OVERLAY_SHOW_DELAY_MS = 300;
 /** Once shown, the overlay stays at least this long (avoids a blink). */
 export const BUSY_OVERLAY_MIN_VISIBLE_MS = 400;
+/** Default time after which `slowMessage` replaces `message`. */
+export const BUSY_OVERLAY_SLOW_AFTER_MS = 4000;
 
 /**
  * Full-page overlay shown while a user action (generate, save, approve,
@@ -24,6 +26,15 @@ export class BusyOverlayComponent implements OnChanges, OnDestroy {
   @Input() active = false;
   /** What is happening, e.g. "Sending reply…". */
   @Input() message = '';
+  /**
+   * Wait before showing, so fast actions never flash it. Use 0 for actions
+   * that are always slow (e.g. generating a draft) to show it at once.
+   */
+  @Input() delay = BUSY_OVERLAY_SHOW_DELAY_MS;
+  /** Optional text that replaces `message` once the action runs long, so it does not look stuck. */
+  @Input() slowMessage = '';
+  /** How long the action runs before `slowMessage` is shown. */
+  @Input() slowAfter = BUSY_OVERLAY_SLOW_AFTER_MS;
 
   /** Whether the overlay is on screen (lags `active` by the delays above). */
   visible = false;
@@ -32,28 +43,44 @@ export class BusyOverlayComponent implements OnChanges, OnDestroy {
 
   private showTimer: ReturnType<typeof setTimeout> | null = null;
   private hideTimer: ReturnType<typeof setTimeout> | null = null;
+  private slowTimer: ReturnType<typeof setTimeout> | null = null;
+  /** True once `slowMessage` has replaced `message` for the current action. */
+  private isSlow = false;
   private shownAt = 0;
 
   constructor(private changeDetector: ChangeDetectorRef) {}
 
   ngOnChanges(): void {
     if (this.active) {
-      if (this.message) {
+      if (this.message && !this.isSlow) {
         this.shownMessage = this.message;
       }
       this.clearHideTimer();
       if (!this.visible && !this.showTimer) {
-        this.showTimer = setTimeout(() => {
-          this.showTimer = null;
-          this.visible = true;
-          this.shownAt = Date.now();
+        if (this.delay > 0) {
+          this.showTimer = setTimeout(() => {
+            this.showTimer = null;
+            this.show();
+            this.changeDetector.markForCheck();
+          }, this.delay);
+        } else {
+          this.show();
+        }
+      }
+      if (this.slowMessage && !this.slowTimer && !this.isSlow) {
+        this.slowTimer = setTimeout(() => {
+          this.slowTimer = null;
+          this.isSlow = true;
+          this.shownMessage = this.slowMessage;
           this.changeDetector.markForCheck();
-        }, BUSY_OVERLAY_SHOW_DELAY_MS);
+        }, this.slowAfter);
       }
       return;
     }
 
     this.clearShowTimer();
+    this.clearSlowTimer();
+    this.isSlow = false;
     if (this.visible && !this.hideTimer) {
       const remaining = BUSY_OVERLAY_MIN_VISIBLE_MS - (Date.now() - this.shownAt);
       if (remaining > 0) {
@@ -71,6 +98,19 @@ export class BusyOverlayComponent implements OnChanges, OnDestroy {
   ngOnDestroy(): void {
     this.clearShowTimer();
     this.clearHideTimer();
+    this.clearSlowTimer();
+  }
+
+  private show(): void {
+    this.visible = true;
+    this.shownAt = Date.now();
+  }
+
+  private clearSlowTimer(): void {
+    if (this.slowTimer) {
+      clearTimeout(this.slowTimer);
+      this.slowTimer = null;
+    }
   }
 
   private clearShowTimer(): void {

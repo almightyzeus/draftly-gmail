@@ -2,6 +2,7 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   BUSY_OVERLAY_MIN_VISIBLE_MS,
   BUSY_OVERLAY_SHOW_DELAY_MS,
+  BUSY_OVERLAY_SLOW_AFTER_MS,
   BusyOverlayComponent,
 } from '../src/app/shared/busy-overlay.component';
 
@@ -78,9 +79,48 @@ describe('BusyOverlayComponent', () => {
     expect(overlay.shownMessage).toBe('Sending reply…');
   });
 
+  it('shows at once when the delay is 0 (always-slow actions such as generating)', () => {
+    overlay.delay = 0;
+    set(true, 'Reading the thread and drafting a reply…');
+    expect(overlay.visible).toBe(true);
+    expect(overlay.shownMessage).toBe('Reading the thread and drafting a reply…');
+  });
+
+  it('switches to the slow message when the action runs long, and resets for the next action', () => {
+    overlay.delay = 0;
+    overlay.slowMessage = 'Still working…';
+    set(true, 'Drafting…');
+
+    vi.advanceTimersByTime(BUSY_OVERLAY_SLOW_AFTER_MS - 1);
+    expect(overlay.shownMessage).toBe('Drafting…');
+    vi.advanceTimersByTime(1);
+    expect(overlay.shownMessage).toBe('Still working…');
+
+    // A later input change during the same action does not undo the slow message.
+    set(true, 'Drafting…');
+    expect(overlay.shownMessage).toBe('Still working…');
+
+    set(false, '');
+    vi.advanceTimersByTime(BUSY_OVERLAY_MIN_VISIBLE_MS);
+    set(true, 'Drafting…');
+    expect(overlay.shownMessage).toBe('Drafting…');
+  });
+
+  it('never shows the slow message for an action that finishes in time', () => {
+    overlay.slowMessage = 'Still working…';
+    set(true, 'Saving changes…');
+    vi.advanceTimersByTime(BUSY_OVERLAY_SHOW_DELAY_MS);
+    set(false, '');
+    vi.advanceTimersByTime(BUSY_OVERLAY_SLOW_AFTER_MS * 2);
+    expect(overlay.shownMessage).toBe('Saving changes…');
+    expect(overlay.visible).toBe(false);
+  });
+
   it('clears pending timers when the page is destroyed (e.g. after navigating away)', () => {
+    overlay.slowMessage = 'Still working…';
     set(true, 'Sending reply…');
     overlay.ngOnDestroy();
+    vi.advanceTimersByTime(BUSY_OVERLAY_SLOW_AFTER_MS);
     vi.advanceTimersByTime(BUSY_OVERLAY_SHOW_DELAY_MS);
     expect(overlay.visible).toBe(false);
     expect(changeDetector.markForCheck).not.toHaveBeenCalled();
