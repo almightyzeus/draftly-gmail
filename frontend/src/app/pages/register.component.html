@@ -1,13 +1,13 @@
-<main class="auth-page">
-  <mat-card class="auth-card" appearance="raised">
+<main class="box-border flex min-h-screen items-center justify-center bg-(image:--dr-brand-gradient) p-4">
+  <mat-card class="w-full max-w-[420px] px-2 pt-2 pb-4" appearance="raised">
     <mat-card-header>
-      <mat-card-title class="brand-title">Create your Draftly account</mat-card-title>
+      <mat-card-title class="[--mat-card-title-text-size:24px] [--mat-card-title-text-weight:600]">Create your Draftly account</mat-card-title>
       <mat-card-subtitle>AI-drafted Gmail replies you approve before sending</mat-card-subtitle>
     </mat-card-header>
 
     <mat-card-content>
-      <form [formGroup]="registerForm" (ngSubmit)="onSubmit()">
-        <mat-form-field appearance="outline" class="full-width">
+      <form class="flex flex-col gap-1" [formGroup]="registerForm" (ngSubmit)="onSubmit()">
+        <mat-form-field appearance="outline" class="w-full">
           <mat-label>Full Name</mat-label>
           <input matInput type="text" formControlName="name" autocomplete="name" required />
           @if (registerForm.get('name')?.hasError('required')) {
@@ -22,7 +22,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="w-full">
           <mat-label>Email</mat-label>
           <input matInput type="email" formControlName="email" autocomplete="email" required />
           @if (registerForm.get('email')?.hasError('required')) {
@@ -37,7 +37,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="w-full">
           <mat-label>Password</mat-label>
           <input matInput type="password" formControlName="password" autocomplete="new-password" required />
           @if (registerForm.get('password')?.hasError('required')) {
@@ -57,7 +57,7 @@
           }
         </mat-form-field>
 
-        <mat-form-field appearance="outline" class="full-width">
+        <mat-form-field appearance="outline" class="w-full">
           <mat-label>Confirm Password</mat-label>
           <input matInput type="password" formControlName="confirmPassword" autocomplete="new-password" required />
           @if (registerForm.get('confirmPassword')?.hasError('required')) {
@@ -76,15 +76,15 @@
           mat-flat-button
           color="primary"
           type="submit"
-          class="full-width"
+          class="w-full"
           [disabled]="registerForm.invalid || isLoading"
           >
           Create account
         </button>
       </form>
 
-      <p class="auth-link">
-        Already have an account? <a routerLink="/login">Sign in</a>
+      <p class="mt-4 mb-0 text-center text-muted">
+        Already have an account? <a class="font-semibold text-link no-underline hover:underline" routerLink="/login">Sign in</a>
       </p>
     </mat-card-content>
   </mat-card>

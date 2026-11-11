@@ -40,6 +40,7 @@
   --color-danger: var(--dr-danger);
   --color-success: var(--dr-success);
   --color-warning: var(--dr-warning);
+  --color-link: var(--dr-link);
 
   --font-sans: Roboto, 'Helvetica Neue', sans-serif;
   --radius-dr: var(--dr-radius);

@@ -17,6 +17,7 @@
   --dr-success: #2e7d32;
   --dr-warning: #e65100;
   --dr-brand-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  --dr-link: #5b5fc7;
   --dr-radius: 8px;
   --dr-gap: 16px;
 }
@@ -133,49 +134,6 @@ tr.clickable-row:focus-visible {
 }
 
 /* ---------- Auth pages (login / register) ---------- */
-
-.auth-page {
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: var(--dr-gap);
-  box-sizing: border-box;
-  background: var(--dr-brand-gradient);
-}
-
-.auth-card {
-  width: 100%;
-  max-width: 420px;
-  padding: 8px 8px 16px;
-}
-
-.auth-card form {
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-}
-
-.auth-card .brand-title {
-  font-size: 24px;
-  font-weight: 600;
-}
-
-.auth-link {
-  text-align: center;
-  margin: 16px 0 0;
-  color: var(--dr-text-muted);
-}
-
-.auth-link a {
-  color: #5b5fc7;
-  font-weight: 600;
-  text-decoration: none;
-}
-
-.auth-link a:hover {
-  text-decoration: underline;
-}
 
 .full-width {
   width: 100%;
