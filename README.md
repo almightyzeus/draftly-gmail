@@ -94,6 +94,7 @@ backend/
 frontend/
   nginx.conf
   src/
+    theme.scss          # Angular Material theme (indigo/pink, Material 2 look) and its --mat-sys-* colour variables
     styles.css          # Global design tokens and shared layout/state styles
     app/
       pages/            # Lazy-loaded pages

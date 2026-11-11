@@ -35,7 +35,7 @@ mat-button-toggle-group {
 }
 
 .toggle-on {
-  background: rgba(63, 81, 181, 0.08);
+  background: color-mix(in srgb, var(--mat-sys-primary) 8%, transparent);
 }
 
 /* Fixed layout so long subjects ellipsize instead of widening the table. */

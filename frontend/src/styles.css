@@ -6,11 +6,13 @@
 
 :root {
   --dr-bg: #f4f5f9;
-  --dr-surface: #ffffff;
-  --dr-text: rgba(0, 0, 0, 0.87);
+  /* Material system colours (src/theme.scss) where they match exactly; the
+     rest have no Material equivalent and stay app-specific. */
+  --dr-surface: var(--mat-sys-surface);
+  --dr-text: var(--mat-sys-on-surface);
   --dr-text-muted: rgba(0, 0, 0, 0.6);
-  --dr-border: rgba(0, 0, 0, 0.12);
-  --dr-primary: #3f51b5;
+  --dr-border: var(--mat-sys-outline);
+  --dr-primary: var(--mat-sys-primary);
   --dr-danger: #c62828;
   --dr-success: #2e7d32;
   --dr-warning: #e65100;
@@ -126,7 +128,7 @@ tr.clickable-row {
 
 tr.clickable-row:hover,
 tr.clickable-row:focus-visible {
-  background: rgba(63, 81, 181, 0.06);
+  background: color-mix(in srgb, var(--mat-sys-primary) 6%, transparent);
   outline: none;
 }
 

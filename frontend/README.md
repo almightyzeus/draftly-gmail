@@ -41,6 +41,7 @@ The image installs dependencies with `npm ci` (exact lockfile versions; Angular 
 
 ```text
 src/
+  theme.scss      # Angular Material theme (indigo/pink, Material 2 look) and its --mat-sys-* colour variables
   styles.css      # global design tokens and shared layout/state styles
   app/
     app.routes.ts # lazy-loaded routes
@@ -48,6 +49,10 @@ src/
     services/     # API clients, auth service, interceptor, guard
     shared/       # top bar, confirm dialog, busy overlay, formatting helpers
 ```
+
+## Theme and colours
+
+`src/theme.scss` builds the Angular Material theme from Sass: the classic indigo/pink Material 2 theme, identical to the prebuilt `indigo-pink.css` it replaced (verified by comparing the compiled CSS). It also defines Material's system colour variables (`--mat-sys-primary`, `--mat-sys-on-surface`, `--mat-sys-outline`, `--mat-sys-surface`, …). Custom styles use those variables, or the `--dr-*` tokens in `styles.css` for colours Material has no equivalent for (page background, status badges, success/warning), instead of hard-coded colour values.
 
 ## Component conventions
 

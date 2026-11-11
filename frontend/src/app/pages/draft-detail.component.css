@@ -1,6 +1,6 @@
 .top-badge {
   margin-left: 12px;
-  background: rgba(255, 255, 255, 0.92);
+  background: color-mix(in srgb, var(--mat-sys-surface) 92%, transparent);
 }
 
 .draft {

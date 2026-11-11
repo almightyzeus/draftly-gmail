@@ -8,7 +8,7 @@
   justify-content: center;
   /* No backdrop-filter: blurring the whole page while the spinner animates is
      expensive to repaint and can make the spinner stutter on slower machines. */
-  background: rgba(244, 245, 249, 0.85);
+  background: color-mix(in srgb, var(--dr-bg) 85%, transparent);
   cursor: progress;
   animation: busy-fade-in 150ms ease-out;
 }
