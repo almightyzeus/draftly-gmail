@@ -557,9 +557,9 @@ Last verified locally on 2026-11-05 (Node 24.15.0, Windows), re-running every ch
 
 Both typechecks (app and tests) are clean on both sides, and the backend and frontend production builds pass. GitHub-hosted CI (Linux, Node 24 from `.nvmrc`) last passed on 2026-11-04 (see [Scripts](#scripts)).
 
-Node versions: tests and builds were run locally on Node 24.15.0; the Docker images use `node:24-alpine`, which was Node 24.22.2 when the images were last built (2026-11-03 for both images, 2026-11-04 for the frontend image). The backend image has not been rebuilt since the 2026-11-04 changes (JWT-secret check, Vitest 5 test tooling); those changes are covered by the local runs and hosted CI, not by a Docker build.
+Node versions: tests and builds were run locally on Node 24.15.0; the Docker images use `node:24-alpine`, which was Node 24.22.2 when both images were last built (2026-11-11, after the Angular 22 upgrade). The stack was then started and checked through nginx: app and SPA routes load with the security headers, and API calls without a token return 401.
 
-`npm audit`: backend **0** vulnerabilities (2026-11-05); frontend **0** (2026-11-11, after the Angular 22 upgrade removed the 16 moderate findings in the CLI's packaging libraries). The frontend Docker image has not been rebuilt since that upgrade.
+`npm audit`: backend **0** vulnerabilities (2026-11-05); frontend **0** (2026-11-11, after the Angular 22 upgrade removed the 16 moderate findings in the CLI's packaging libraries).
 
 Backend coverage is measured by Vitest 5's V8 provider, which counts statements and branches more strictly than the Vitest 1 provider used before 2026-11-04 (then 96.41% statements, 87.60% branches); the tests and covered files are the same.
 
