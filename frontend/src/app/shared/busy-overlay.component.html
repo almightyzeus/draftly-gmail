@@ -3,7 +3,7 @@
 
 @if (visible) {
   <div
-    class="busy-overlay"
+    class="fixed inset-0 z-[900] flex animate-fade-in cursor-progress items-center justify-center bg-page/85 motion-reduce:animate-none"
     role="dialog"
     aria-modal="true"
     aria-busy="true"
@@ -11,9 +11,13 @@
     cdkTrapFocus
     [cdkTrapFocusAutoCapture]="true"
   >
-    <div class="busy-panel" tabindex="-1" cdkFocusInitial>
+    <div
+      class="flex max-w-[calc(100vw-32px)] min-w-[220px] flex-col items-center gap-3 rounded-dr bg-surface px-8 py-6 shadow-[0_4px_16px_rgba(0,0,0,0.16)] outline-none"
+      tabindex="-1"
+      cdkFocusInitial
+    >
       <mat-spinner diameter="40"></mat-spinner>
-      <p class="busy-message">{{ shownMessage }}</p>
+      <p class="m-0 text-center font-medium text-on-surface">{{ shownMessage }}</p>
     </div>
   </div>
 }

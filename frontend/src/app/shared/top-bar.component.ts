@@ -22,7 +22,6 @@ import { ConfirmService } from './confirm.service';
   imports: [AsyncPipe, RouterLink, MatToolbarModule, MatButtonModule, MatIconModule, MatMenuModule, MatTooltipModule],
   templateUrl: './top-bar.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrls: ['./top-bar.component.css'],
 })
 export class TopBarComponent {
   @Input() title = '';

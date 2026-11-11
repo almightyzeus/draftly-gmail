@@ -1,15 +1,15 @@
-<mat-toolbar color="primary" class="top-bar">
+<mat-toolbar color="primary" class="sticky top-0 z-10 gap-1 shadow-[0_2px_4px_rgba(0,0,0,0.12)]">
   @if (showBack) {
     <button mat-icon-button (click)="back.emit()" aria-label="Back">
       <mat-icon>arrow_back</mat-icon>
     </button>
   }
-  <a class="brand" routerLink="/dashboard" aria-label="Draftly home">
+  <a class="inline-flex items-center gap-1.5 font-semibold text-inherit no-underline" routerLink="/dashboard" aria-label="Draftly home">
     <mat-icon>auto_awesome</mat-icon>
-    <span class="brand-name">Draftly</span>
+    <span class="[@media(max-width:480px)]:hidden">Draftly</span>
   </a>
   @if (title) {
-    <span class="title hide-sm">{{ title }}</span>
+    <span class="hide-sm ml-3 border-l border-[color-mix(in_srgb,var(--mat-sys-on-primary)_40%,transparent)] pl-3 text-[18px] font-normal">{{ title }}</span>
   }
   <ng-content />
   <span class="spacer"></span>
@@ -18,7 +18,7 @@
     @if (user.googleConnected) {
       <button
         mat-button
-        class="gmail-status gmail-status--connected"
+        class="text-inherit"
         [matMenuTriggerFor]="gmailMenu"
         [attr.aria-label]="'Gmail connected' + (user.gmailEmail ? ' as ' + user.gmailEmail : '')"
         matTooltip="Gmail connection"
@@ -33,7 +33,10 @@
         </button>
       </mat-menu>
     } @else {
-      <button mat-stroked-button class="gmail-status gmail-status--disconnected" (click)="connectGmail()">
+      <button
+      mat-stroked-button
+      class="text-inherit"
+      (click)="connectGmail()">
         <mat-icon>add_link</mat-icon>
         <span>Connect Gmail</span>
       </button>
@@ -43,9 +46,9 @@
       <mat-icon>account_circle</mat-icon>
     </button>
     <mat-menu #accountMenu="matMenu">
-      <div class="account-header" mat-menu-item disabled>
-        <span class="account-name">{{ user.name }}</span>
-        <span class="account-email">{{ user.email }}</span>
+      <div class="flex h-auto flex-col py-2! leading-[1.3]" mat-menu-item disabled>
+        <span class="font-medium text-on-surface">{{ user.name }}</span>
+        <span class="text-[12px] text-muted">{{ user.email }}</span>
       </div>
       <a mat-menu-item routerLink="/preferences">
         <mat-icon>tune</mat-icon>

@@ -44,4 +44,11 @@
 
   --font-sans: Roboto, 'Helvetica Neue', sans-serif;
   --radius-dr: var(--dr-radius);
+
+  /* Busy overlay fade-in */
+  --animate-fade-in: fade-in 150ms ease-out;
+  @keyframes fade-in {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
 }

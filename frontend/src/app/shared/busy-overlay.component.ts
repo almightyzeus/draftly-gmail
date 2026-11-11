@@ -18,7 +18,6 @@ export const BUSY_OVERLAY_SLOW_AFTER_MS = 4000;
   selector: 'app-busy-overlay',
   imports: [CdkTrapFocus, MatProgressSpinnerModule],
   templateUrl: './busy-overlay.component.html',
-  styleUrls: ['./busy-overlay.component.css'],
   changeDetection: ChangeDetectionStrategy.Eager,
 })
 export class BusyOverlayComponent implements OnChanges, OnDestroy {
