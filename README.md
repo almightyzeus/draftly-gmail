@@ -24,7 +24,7 @@ The system supports:
 
 - Backend: Node.js 24, Express 5, TypeScript
 - Database: MongoDB with Mongoose
-- Frontend: Angular 22 (standalone components, lazy-loaded routes) with Angular Material 22, TypeScript 6.0
+- Frontend: Angular 22 (standalone components, lazy-loaded routes) with Angular Material 22 and Tailwind CSS 4 for layout utilities, TypeScript 6.0
 - AI: OpenAI API
 - Gmail: Google OAuth2 and Gmail API
 - Auth: JWT access + refresh tokens
@@ -96,6 +96,7 @@ frontend/
   src/
     theme.scss          # Angular Material theme (indigo/pink, Material 2 look) and its --mat-sys-* colour variables
     styles.css          # Global design tokens and shared layout/state styles
+    tailwind.css        # Tailwind utilities (no base reset), colours mapped to the theme
     app/
       pages/            # Lazy-loaded pages
       services/         # API clients, auth interceptor and guard

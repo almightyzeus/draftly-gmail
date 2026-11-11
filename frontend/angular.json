@@ -37,7 +37,8 @@
             ],
             "styles": [
               "src/theme.scss",
-              "src/styles.css"
+              "src/styles.css",
+              "src/tailwind.css"
             ],
             "scripts": [],
             "browser": "src/main.ts"

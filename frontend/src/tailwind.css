@@ -1,0 +1,46 @@
+/*
+ * Tailwind CSS: layout and spacing utilities next to Angular Material.
+ *
+ * - No preflight (Tailwind's base reset): it would restyle Material components
+ *   and the sanitized email HTML shown on the email page.
+ * - Utilities are imported without a cascade layer on purpose. Material's
+ *   styles are not layered, and unlayered CSS always beats layered CSS, so
+ *   layered utilities could never override a Material default.
+ * - This file is the last entry in angular.json "styles", so a utility wins
+ *   over a global style of the same specificity.
+ * - Colours come only from the Material theme (src/theme.scss) and the --dr-*
+ *   tokens (styles.css); Tailwind's default palette is removed, so there is a
+ *   single source of colour.
+ */
+@layer theme;
+@import 'tailwindcss/theme.css' layer(theme);
+@import 'tailwindcss/utilities.css' source(none);
+
+/* Scan only the HTML templates for class names (Tailwind classes go in
+   templates, never in TypeScript): scanning .ts files turned ordinary words
+   such as "filter", "hidden" or "block" into unused utility classes. */
+@source './app/**/*.html';
+@source './index.html';
+
+@theme inline {
+  --color-*: initial;
+  --color-white: #fff;
+  --color-black: #000;
+
+  /* Material system colours */
+  --color-primary: var(--mat-sys-primary);
+  --color-on-primary: var(--mat-sys-on-primary);
+  --color-surface: var(--dr-surface);
+  --color-on-surface: var(--dr-text);
+  --color-outline: var(--dr-border);
+
+  /* App tokens without a Material equivalent */
+  --color-page: var(--dr-bg);
+  --color-muted: var(--dr-text-muted);
+  --color-danger: var(--dr-danger);
+  --color-success: var(--dr-success);
+  --color-warning: var(--dr-warning);
+
+  --font-sans: Roboto, 'Helvetica Neue', sans-serif;
+  --radius-dr: var(--dr-radius);
+}

@@ -43,6 +43,7 @@ The image installs dependencies with `npm ci` (exact lockfile versions; Angular 
 src/
   theme.scss      # Angular Material theme (indigo/pink, Material 2 look) and its --mat-sys-* colour variables
   styles.css      # global design tokens and shared layout/state styles
+  tailwind.css    # Tailwind utilities (no base reset), colours mapped to the theme
   app/
     app.routes.ts # lazy-loaded routes
     pages/        # login, register, dashboard (Inbox/Drafts), email detail, draft detail, preferences, activity
@@ -54,6 +55,15 @@ src/
 
 `src/theme.scss` builds the Angular Material theme from Sass: the classic indigo/pink Material 2 theme, identical to the prebuilt `indigo-pink.css` it replaced (verified by comparing the compiled CSS). It also defines Material's system colour variables (`--mat-sys-primary`, `--mat-sys-on-surface`, `--mat-sys-outline`, `--mat-sys-surface`, …). Custom styles use those variables, or the `--dr-*` tokens in `styles.css` for colours Material has no equivalent for (page background, status badges, success/warning), instead of hard-coded colour values.
 
+## Tailwind CSS
+
+Layout and spacing use Tailwind CSS 4 utility classes in the templates (`flex gap-4 p-4`); components come from Angular Material. Set up in `src/tailwind.css` (loaded last in `angular.json`) and `.postcssrc.json`, versions pinned exactly:
+
+- **No preflight.** Tailwind's base reset is left out, so it cannot restyle Material components or the email HTML shown on the email page.
+- **Unlayered utilities.** Material's CSS is not in a cascade layer, and unlayered CSS always beats layered CSS, so the utilities are imported without a layer; otherwise they could never override a Material default.
+- **One colour source.** Tailwind's default palette is removed. The available colours are `primary`, `on-primary`, `surface`, `on-surface`, `outline` (Material system variables) and `page`, `muted`, `danger`, `success`, `warning` (`--dr-*` tokens), plus `white`/`black`: e.g. `bg-primary`, `text-muted`, `border-outline`. `rounded-dr` is the app's corner radius.
+- **Templates only.** Tailwind scans `src/app/**/*.html` and `src/index.html` for class names, so utility classes belong in templates, not in TypeScript strings.
+
 ## Component conventions
 
-Every component keeps its markup and styles in separate files next to its class: `name.component.ts`, `name.component.html` (`templateUrl`) and, when it has styles, `name.component.css` (`styleUrls`). Inline `template:` and `styles:` are not used. `tests/conventions.vitest.ts` enforces this: `npm test` fails if a component has an inline template or styles, or points to a file that does not exist.
+Every component keeps its markup and styles in separate files next to its class: `name.component.ts`, `name.component.html` (`templateUrl`) and, when it has styles, `name.component.css` (`styleUrls`). Inline `template:` and `styles:` are not used. Prefer Material components and Tailwind utilities; add a `.css` file only for what they cannot express. `tests/conventions.vitest.ts` enforces this: `npm test` fails if a component has an inline template or styles, or points to a file that does not exist.
