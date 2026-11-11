@@ -1,10 +1,10 @@
 # Draftly: Gmail AI Reply Agent
 
-Draftly is a local MVP for the Airtribe Backend Engineering Launchpad capstone. It connects to Gmail, lists and searches inbox emails, generates AI reply drafts, lets the user review/edit/approve/reject drafts, and sends approved replies through Gmail.
+Draftly is a self-hosted web app that connects to Gmail, lists and searches inbox emails, generates AI reply drafts, lets the user review/edit/approve/reject drafts, and sends approved replies through Gmail.
 
-The project is intentionally scoped as an MVP. The core workflow is implemented, containerized with Docker, and demoable locally using Docker Compose.
+The full workflow is implemented and tested, and the app runs with Docker Compose. It is built for a single-machine setup; the steps still needed for a public production deployment are listed under [Known Limitations](#known-limitations).
 
-## Capstone Objective
+## Why Draftly
 
 Professionals spend time writing routine replies such as acknowledgements, follow-ups, confirmations, and meeting responses. Draftly automates the first draft while keeping the user in control before anything is sent.
 
@@ -175,7 +175,7 @@ docker compose down
 - Frontend API calls use `/api` routes through nginx reverse proxying.
 - The backend image is built in two stages and runs as the non-root `node` user with production dependencies only.
 - On a machine with limited memory, avoid running two `docker compose ... --build` commands at the same time; the Angular build inside the image can stall.
-- The setup is optimized for local MVP/demo workflows rather than production-scale cloud deployment.
+- The setup targets a single machine, not a production-scale cloud deployment.
 
 ## Local Development Setup
 
@@ -597,7 +597,7 @@ Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tes
 
 ## Known Limitations
 
-Accepted for this local MVP:
+Accepted for the current single-machine setup:
 
 - Sending is idempotent but not exactly-once; after a crash mid-send the draft can stay `APPROVED` although the email was delivered (see [Idempotent sending](#idempotent-sending)).
 - Emails cached before reply all existed have no stored Cc/Reply-To; generating a draft re-fetches the thread, which fills them in.

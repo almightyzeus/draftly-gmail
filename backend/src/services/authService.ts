@@ -53,7 +53,7 @@ export class AuthService {
 
   /**
    * Exchange a valid refresh token for a rotated token pair.
-   * Refresh tokens remain stateless for this local MVP, but we still verify that
+   * Refresh tokens are stateless (not stored or revoked server-side), but we still verify that
    * their user exists before issuing new credentials.
    */
   static async refreshTokens(refreshToken: string): Promise<TokenPair> {

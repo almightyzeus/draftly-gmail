@@ -234,7 +234,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 | R2 | Browser-console check of the CSP (H1). | Email with **Show images**, Connect Gmail, fonts/icons; look for "Refused to …" errors. |
 | D5 | Angular CLI 22 (major) for the 16 moderate tooling findings. | Build-time only. |
 
-### 6.2 Accepted MVP limitations
+### 6.2 Accepted limitations
 
 These are known and documented, and acceptable for a local, single-user demo:
 
