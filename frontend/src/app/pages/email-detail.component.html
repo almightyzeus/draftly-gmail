@@ -34,7 +34,9 @@
             <button mat-button (click)="showRemoteImages()">Show images</button>
           </div>
         }
-        <div class="overflow-x-auto leading-[1.6]">
+        <!-- Email HTML (sanitized): images and tables shrink to the card width; inline
+             styles from the email cannot widen them. Anything still wider scrolls. -->
+        <div class="overflow-x-auto leading-[1.6] [&_img]:h-auto! [&_img]:max-w-full! [&_table]:max-w-full!">
           @if (safeBodyHtml) {
             <div [innerHTML]="safeBodyHtml"></div>
           } @else if (email.bodyPlain) {
