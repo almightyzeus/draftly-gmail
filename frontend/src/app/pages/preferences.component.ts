@@ -44,7 +44,6 @@ export const MAX_STYLE_EXAMPLES = 20;
   ],
   templateUrl: './preferences.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrls: ['./preferences.component.css'],
 })
 export class PreferencesComponent implements OnInit {
   readonly toneOptions: Tone[] = ['formal', 'concise', 'friendly'];

@@ -37,7 +37,6 @@ export interface ActivityItem extends ActivityDescription {
   ],
   templateUrl: './activity.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrls: ['./activity.component.css'],
 })
 export class ActivityComponent implements OnInit {
   readonly filters = ACTIVITY_FILTERS;

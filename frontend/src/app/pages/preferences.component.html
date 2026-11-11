@@ -22,9 +22,9 @@
       </mat-card-header>
 
       <mat-card-content>
-        <form class="prefs" [formGroup]="form" (ngSubmit)="save()">
-          <section class="pref">
-            <span class="pref-label" id="tone-label">Default tone</span>
+        <form class="grid gap-5 pt-4" [formGroup]="form" (ngSubmit)="save()">
+          <section class="grid justify-items-start gap-2">
+            <span class="text-muted" id="tone-label">Default tone</span>
             <mat-button-toggle-group
               formControlName="defaultTone"
               aria-labelledby="tone-label"
@@ -34,10 +34,10 @@
                 <mat-button-toggle [value]="tone">{{ tone | titlecase }}</mat-button-toggle>
               }
             </mat-button-toggle-group>
-            <p class="muted pref-help">Preselected when you generate a draft. You can still pick another tone each time.</p>
+            <p class="m-0 text-[13px] text-muted">Preselected when you generate a draft. You can still pick another tone each time.</p>
           </section>
 
-          <mat-form-field appearance="outline" class="full-width">
+          <mat-form-field appearance="outline" class="w-full">
             <mat-label>Signature</mat-label>
             <textarea
               matInput
@@ -53,7 +53,7 @@
             }
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="count-field">
+          <mat-form-field appearance="outline" class="w-full max-w-[420px]">
             <mat-label>Style examples</mat-label>
             <input
               matInput
@@ -77,9 +77,9 @@
             </p>
           }
 
-          <div class="actions">
+          <div class="flex flex-wrap items-center justify-end gap-3">
             @if (form.dirty) {
-              <span class="muted">Unsaved changes</span>
+              <span class="text-muted">Unsaved changes</span>
             }
             <button mat-flat-button color="primary" type="submit" [disabled]="isSaving || form.pristine || form.invalid">
               <mat-icon>save</mat-icon>

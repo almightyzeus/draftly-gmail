@@ -9,7 +9,7 @@
 
     <mat-card-content>
       <mat-chip-listbox
-        class="filters"
+        class="mt-4 mb-2 block!"
         aria-label="Filter activity"
         [value]="action"
         (change)="setFilter($event.value)"
@@ -43,33 +43,33 @@
           </p>
         </div>
       } @else {
-        <ul class="activity-list">
+        <ul class="m-0 list-none p-0">
           @for (item of items; track item.log._id) {
-            <li class="activity" [class.activity--warn]="item.log.level !== 'info'">
-              <mat-icon class="activity-icon" aria-hidden="true">{{ item.icon }}</mat-icon>
-              <div class="activity-body">
+            <li class="grid grid-cols-[auto_1fr_auto] items-center gap-x-3 gap-y-1 border-b border-outline py-2.5 last:border-b-0">
+              <mat-icon [class]="item.log.level === 'info' ? 'text-muted' : 'text-danger'" aria-hidden="true">{{ item.icon }}</mat-icon>
+              <div class="grid min-w-0">
                 <span>{{ item.title }}</span>
                 @if (item.detail) {
-                  <span class="muted activity-detail">{{ item.detail }}</span>
+                  <span class="text-[13px] text-muted">{{ item.detail }}</span>
                 }
               </div>
-              <time class="muted activity-detail" [attr.datetime]="item.log.createdAt">
+              <time class="text-[13px] text-muted" [attr.datetime]="item.log.createdAt">
                 {{ item.log.createdAt | date: 'MMM d, h:mm a' }}
               </time>
               @if (item.draftLink) {
-                <a mat-button [routerLink]="item.draftLink">Open draft</a>
+                <a mat-button class="col-[2/-1] [justify-self:start]" [routerLink]="item.draftLink">Open draft</a>
               }
             </li>
           }
         </ul>
 
         @if (total > pageSize) {
-          <nav class="pager" aria-label="Activity pages">
+          <nav class="mt-3 flex items-center justify-between gap-2" aria-label="Activity pages">
             <button mat-stroked-button (click)="goToPage(pageIndex - 1)" [disabled]="pageIndex === 0">
               <mat-icon>chevron_left</mat-icon>
               Newer
             </button>
-            <span class="muted">{{ rangeLabel }}</span>
+            <span class="text-muted">{{ rangeLabel }}</span>
             <button mat-stroked-button (click)="goToPage(pageIndex + 1)" [disabled]="isLastPage">
               Older
               <mat-icon iconPositionEnd>chevron_right</mat-icon>
