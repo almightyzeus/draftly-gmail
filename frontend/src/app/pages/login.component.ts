@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 
 import { ReactiveFormsModule, FormBuilder, FormGroup, Validators } from '@angular/forms';
 import { RouterModule, Router, ActivatedRoute } from '@angular/router';
@@ -20,6 +20,7 @@ import { AuthService } from '../services/auth.service';
     MatProgressSpinnerModule,
     MatSnackBarModule
 ],
+    changeDetection: ChangeDetectionStrategy.Eager,
     templateUrl: './login.component.html'
 })
 export class LoginComponent {

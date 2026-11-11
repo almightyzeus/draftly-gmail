@@ -1,4 +1,4 @@
-import { Component, EventEmitter, Input, Output } from '@angular/core';
+import { Component, EventEmitter, Input, Output, ChangeDetectionStrategy } from '@angular/core';
 import { AsyncPipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { MatToolbarModule } from '@angular/material/toolbar';
@@ -86,6 +86,7 @@ import { ConfirmService } from './confirm.service';
       }
     </mat-toolbar>
   `,
+  changeDetection: ChangeDetectionStrategy.Eager,
   styles: [`
     .top-bar { position: sticky; top: 0; z-index: 10; gap: 4px; box-shadow: 0 2px 4px rgba(0, 0, 0, 0.12); }
     .brand { display: inline-flex; align-items: center; gap: 6px; color: inherit; text-decoration: none; font-weight: 600; }

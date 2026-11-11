@@ -1,4 +1,4 @@
-import { Component } from '@angular/core';
+import { Component, ChangeDetectionStrategy } from '@angular/core';
 
 import { AbstractControl, ReactiveFormsModule, FormBuilder, FormGroup, ValidationErrors, Validators } from '@angular/forms';
 import { RouterModule, Router } from '@angular/router';
@@ -31,6 +31,7 @@ export function maxUtf8Bytes(max: number) {
     MatProgressSpinnerModule,
     MatSnackBarModule
 ],
+    changeDetection: ChangeDetectionStrategy.Eager,
     templateUrl: './register.component.html'
 })
 export class RegisterComponent {

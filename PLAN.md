@@ -15,7 +15,7 @@ No dependency upgrades and no commits unless explicitly approved.
 All six hardening stages (section 3) are complete. From the 2026-11-03/04 reconciliation, the P1
 items (5.1), quick-win Batch 1 (5.2), verification V1–V3 (5.3), features F1–F7 (5.4), dependency
 items D1–D4 and D6 (5.5), cleanup C-1 to C-3 (5.6) and security quick wins H1–H3 (5.7) are done.
-Open: D5 (Angular CLI 22) and the items in section 6.
+D5 (Angular 22) was done on 2026-11-11. Open: the items in section 6.
 
 Local checks re-run on 2026-11-05 (Node 24.15.0, Windows):
 
@@ -24,12 +24,12 @@ Local checks re-run on 2026-11-05 (Node 24.15.0, Windows):
 | Backend typecheck | `npx tsc --noEmit` and `npm run typecheck:tests` clean; `npm run build` passes |
 | Backend tests | 25 files, **455 passing** (`npm run test:ci`) |
 | Backend coverage | 93.83% statements, 82.69% branches, 96.27% functions, 94.36% lines (Vitest 5 V8 provider, stricter than Vitest 1's; same 36 files) |
-| Frontend dependencies | Lockfile installs with plain `npm ci` (no `--legacy-peer-deps`; last clean install 2026-11-03): Angular 21.2.25 (CLI/build 21.2.29, pinned exactly), Material 21.2.14 |
+| Frontend dependencies | Lockfile installs with plain `npm ci` (no `--legacy-peer-deps`; last clean install 2026-11-03): Angular 22.2.5 (CLI/build 22.2.6, pinned exactly), Material 22.2.6, TypeScript 6.0.3 (2026-11-11) |
 | Frontend tests | 7 files, **138 passing** |
-| Frontend coverage | 95.79% statements, 82.67% branches, 95.87% functions, 96.22% lines |
+| Frontend coverage | 95.79% statements, 82.67% branches, 96.37% functions, 96.31% lines (2026-11-11, Angular 22) |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` and `npm run typecheck:tests` clean |
-| Production build | `ng build` passes with no warnings; initial bundle 464.48 kB (107.36 kB transferred), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74.04 kB, 10.43 kB gzipped) are lazy chunks; the built `index.html` has no inline event handlers (CSP) |
-| `npm audit` | Backend 0; frontend 16 moderate, all in Angular CLI packaging tooling (D5) |
+| Production build | `ng build` passes with no warnings; initial bundle 476.77 kB (110.34 kB transferred, 2026-11-11), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74.04 kB, 10.43 kB gzipped) are lazy chunks; the built `index.html` has no inline event handlers (CSP) |
+| `npm audit` | Backend 0; frontend 0 (2026-11-11, after D5) |
 
 Other verification, with its date:
 
@@ -197,7 +197,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 |---|---|---|
 | D1 | ~~Remove unused `cookie-parser` and `@types/cookie-parser` (backend).~~ | **Done** 2026-11-03 (approved): uninstalled; the lockfile also drops their dependency `cookie-signature@1.0.6` (Express keeps its own 1.2.2) and three optional-peer entries npm 11 no longer records (`zod`, two nested `gcp-metadata`; none are imported). Clean `npm ci`, typecheck, build and all 447 tests pass locally (Node 24.15 / npm 11). **The hosted CI run for this commit (`9f33ab8`) failed** at the backend `npm ci` (CI still used Node 20 / npm 10, which likely expected those pruned entries); it was not re-run, and passed from the next commit (D4, Node 24) on. |
 | D2 | ~~`npm audit` (frontend): 35 vulnerabilities (22 moderate, 10 high, 3 critical).~~ | **Done** 2026-11-03 (approved), no major upgrades. **Frontend 35 → 16** (0 critical, 0 high): Angular framework 21.2.22 → 21.2.25 (fixes the only finding that ships to browsers, three `@angular/router` DoS advisories), CLI/build 21.2.22 → 21.2.29 (undici, vite, piscina), vitest/coverage-v8 4.1.11 → 4.1.12, plus `npm audit fix` for transitive tooling. Angular packages are now pinned exactly (caret ranges let npm mix patch releases, which broke peer resolution; that is why the Dockerfile needed `--legacy-peer-deps`). Removed unused `@angular/animations` and deprecated, unused `@angular/platform-browser-dynamic`. The frontend Dockerfile now uses `npm ci`. **Backend 23 → 9** (lockfile only, within existing ranges): runtime fixes `proxy-addr` 2.0.8 (critical IP spoofing; matters with `TRUST_PROXY=1`), `body-parser` 2.4.0, `qs` 6.17.1, `mongoose` 9.11.4 (prototype pollution), `morgan` 1.12.1, `express-rate-limit` 8.7.3 / `ip-address` 10.7.5. The newer mongoose types needed one `as const` in `DraftService`. Remaining findings: see D5, D6. |
-| D5 | Frontend: 16 moderate findings in npm's packaging internals (`pacote`, `sigstore`, `glob`, `minimatch`, …) under `@angular/cli`. | Build-time only (used by `ng add`/`ng update`, not by the app). Fix needs Angular CLI 22 (major); best done with a planned Angular 22 upgrade. |
+| D5 | ~~Frontend: 16 moderate findings in npm's packaging internals (`pacote`, `sigstore`, `glob`, `minimatch`, …) under `@angular/cli`.~~ | **Done** 2026-11-11 (approved): Angular 21 → 22 with `ng update` (framework 22.2.5, CLI/build 22.2.6, Material/CDK 22.2.6, TypeScript 5.9 → 6.0). Migrations keep the old behaviour: every component is pinned to `ChangeDetectionStrategy.Eager` (Angular 22's default is OnPush), `provideHttpClient` gets `withXhr()`, and two new template diagnostics are suppressed in `tsconfig.app.json`. Removed the unused `baseUrl` from `tsconfig.json` (deprecated in TypeScript 6). Frontend audit 16 → 0; 138 tests pass; build passes with no warnings (initial 476.77 kB). Frontend Docker image not rebuilt (Docker Desktop was not running). |
 | D6 | ~~Backend: 9 findings (3 critical) in test tooling: `vitest` 1.6 (`tinypool`, `vite-node`), `vite` 5 (`esbuild`), `@vitest/coverage-v8` (`glob`, `test-exclude`).~~ | **Done** 2026-11-04 (approved): `vitest` and `@vitest/coverage-v8` 1.6.1 → 5.0.5 (pinned exactly; 5.1.0 was two days old), `vite` 5.4.21 → 8.3.5, and `tsx` 4.21.0 → 4.23.15 (its esbuild 0.27 had the last, low finding). **Backend audit: 0 vulnerabilities.** `vitest.config.ts` needed no changes. Since Vitest 4, a mock called with `new` must have a `function`/`class` implementation (`mockReturnValue` or an arrow throws), so 20 constructor mocks (`ActivityLog`, `Draft`, `User`, `OpenAI`) were converted; one `mock.calls` annotation adjusted for the new mock types. All 455 tests pass; coverage figures dropped (93.83% statements) only because the V8 provider now measures more strictly (same files, thresholds unchanged and met). Hosted CI on `7dd415b` (includes this commit) passed. The backend Docker image has not been rebuilt with this lockfile. |
 | D3 | ~~Initial bundle 527 kB, above the 500 kB warning budget.~~ | **Done** 2026-11-03 (approved): measured with `ng build --stats-json`. Material was already only in lazy chunks; the removable cost was `@angular/animations` (61 kB), pulled in solely by `provideAnimations()`. Angular Material 21 (and the CDK) no longer use it, and the app has no animation triggers, so the provider is removed: initial 527.41 → 463.86 kB (transfer 123.95 → 107.25 kB), no budget warning, budgets unchanged. What remains is Angular core/router/common, zone.js, rxjs and the prebuilt Material theme CSS (106 kB raw, 8 kB transferred). The unused `@angular/animations` package was uninstalled in D2. |
 | D4 | ~~**Move to Node 24 LTS.** Node 20 reached end-of-life on 2026-04-30.~~ | **Done** 2026-11-03 (approved): `.nvmrc` `20.19.5` → `24` (CI's `setup-node` and `nvm use` read it), both Dockerfiles `node:20-alpine` → `node:24-alpine`; docs updated. No dependency changes: every engine range already allows Node 24. Tests and builds pass on 24.15.0; `docker compose build` succeeds (Node 24.22.2 in the image). First GitHub-hosted run on Node 24: `06577ce` (2026-11-03), passed. |
@@ -230,9 +230,8 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 
 | # | Item | Notes |
 |---|---|---|
-| R1 | Rebuild the backend Docker image and start the stack. | Not done since H2 (JWT-secret check) and D6 (new lockfile). Expected to work (same `npm ci` as CI); not verified. |
+| R1 | Rebuild both Docker images and start the stack. | Backend not rebuilt since H2 (JWT-secret check) and D6 (new lockfile); frontend not rebuilt since D5 (Angular 22). Expected to work (same `npm ci` as CI); not verified. |
 | R2 | Browser-console check of the CSP (H1). | Email with **Show images**, Connect Gmail, fonts/icons; look for "Refused to …" errors. |
-| D5 | Angular CLI 22 (major) for the 16 moderate tooling findings. | Build-time only. |
 
 ### 6.2 Accepted limitations
 
@@ -243,7 +242,6 @@ These are known and documented, and acceptable for a local, single-user demo:
 - Sanitized inline email HTML (no sandboxed iframe); OAuth `state` not browser-bound (S5).
 - Google **Testing**-mode refresh tokens expire after 7 days (reconnect).
 - Drafts tab limited to 50; activity log records draft actions only.
-- Frontend `npm audit`: 16 moderate findings in CLI tooling (D5).
 
 ### 6.3 Production deployment requirements (not done)
 

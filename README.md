@@ -24,7 +24,7 @@ The system supports:
 
 - Backend: Node.js 24, Express 5, TypeScript
 - Database: MongoDB with Mongoose
-- Frontend: Angular 21 (standalone components, lazy-loaded routes) with Angular Material 21
+- Frontend: Angular 22 (standalone components, lazy-loaded routes) with Angular Material 22, TypeScript 6.0
 - AI: OpenAI API
 - Gmail: Google OAuth2 and Gmail API
 - Auth: JWT access + refresh tokens
@@ -106,7 +106,7 @@ docker-compose.yml
 
 ## Prerequisites
 
-- Node.js 24 LTS (`.nvmrc` holds `24`, so `nvm use`, CI and the `node:24-alpine` Docker images all take the latest Node 24 release). Node 20 reached end-of-life in April 2026; Angular 21 also supports Node ≥ 20.19 and 22.12.
+- Node.js 24 LTS (`.nvmrc` holds `24`, so `nvm use`, CI and the `node:24-alpine` Docker images all take the latest Node 24 release). Node 20 reached end-of-life in April 2026; Angular 22 needs Node ≥ 24.15.0 on the 24 line (or ≥ 22.22.3).
 - Google Cloud OAuth2 credentials with the Gmail API enabled
 - Docker Desktop / Docker Engine with Docker Compose
 - OpenAI API key
@@ -548,18 +548,18 @@ npm run typecheck:tests   # type-check the Vitest suites (Vitest itself does not
 
 Backend tests cover services, controllers, middleware, models, and API workflows against an in-memory MongoDB — including send idempotency under concurrency, OAuth hardening, rate limits, cross-user access, and reply-header injection attempts. Frontend tests cover services, the auth interceptor, and page/component behaviour (search and pagination, drafts, dialogs, error states).
 
-Last verified locally on 2026-11-05 (Node 24.15.0, Windows), re-running every check below:
+Last verified locally on 2026-11-05 (Node 24.15.0, Windows), re-running every check below; the frontend checks were re-run on 2026-11-11 after the Angular 22 upgrade:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
 | Backend | 25 | 455 passing | 93.83% | 82.69% | 96.27% | 94.36% |
-| Frontend | 7 | 138 passing | 95.79% | 82.67% | 95.87% | 96.22% |
+| Frontend | 7 | 138 passing | 95.79% | 82.67% | 96.37% | 96.31% |
 
 Both typechecks (app and tests) are clean on both sides, and the backend and frontend production builds pass. GitHub-hosted CI (Linux, Node 24 from `.nvmrc`) last passed on 2026-11-04 (see [Scripts](#scripts)).
 
 Node versions: tests and builds were run locally on Node 24.15.0; the Docker images use `node:24-alpine`, which was Node 24.22.2 when the images were last built (2026-11-03 for both images, 2026-11-04 for the frontend image). The backend image has not been rebuilt since the 2026-11-04 changes (JWT-secret check, Vitest 5 test tooling); those changes are covered by the local runs and hosted CI, not by a Docker build.
 
-`npm audit` (2026-11-05): backend **0** vulnerabilities; frontend **16 moderate**, all inside npm's packaging libraries used by `@angular/cli` (`pacote`, `sigstore`, `glob`, `minimatch`, …) for commands such as `ng add`/`ng update`. None of them are in the built app; fixing them requires Angular CLI 22 (a major upgrade, PLAN.md D5).
+`npm audit`: backend **0** vulnerabilities (2026-11-05); frontend **0** (2026-11-11, after the Angular 22 upgrade removed the 16 moderate findings in the CLI's packaging libraries). The frontend Docker image has not been rebuilt since that upgrade.
 
 Backend coverage is measured by Vitest 5's V8 provider, which counts statements and branches more strictly than the Vitest 1 provider used before 2026-11-04 (then 96.41% statements, 87.60% branches); the tests and covered files are the same.
 
@@ -574,7 +574,7 @@ cd frontend && npm run typecheck:tests && npm run test:coverage && npm run build
 docker compose up --build
 ```
 
-`npm run build` passes without warnings: the initial bundle is ≈464 kB (≈107 kB transferred), under Angular's 500 kB warning budget (hard limit 1 MB). Pages are lazy-loaded, and `@angular/animations` is not loaded (Angular Material 21 animates with CSS).
+`npm run build` passes without warnings: the initial bundle is ≈477 kB (≈110 kB transferred), under Angular's 500 kB warning budget (hard limit 1 MB). Pages are lazy-loaded, and `@angular/animations` is not loaded (Angular Material animates with CSS).
 
 Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tests exercise on purpose print nothing. Run `LOG_LEVEL=debug npm test` to see them.
 
@@ -606,7 +606,6 @@ Accepted for the current single-machine setup:
 - The OAuth `state` is signed and expiring but not tied to the browser that started the flow.
 - Google apps in **Testing** mode expire Gmail refresh tokens after 7 days; the user reconnects.
 - The Drafts tab shows the latest 50 drafts. Only draft actions are recorded in the activity log (not logins or Gmail connect/disconnect).
-- The frontend has 16 moderate `npm audit` findings in Angular CLI tooling (not in the built app).
 
 Required before a production deployment (not done):
 

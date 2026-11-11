@@ -1,8 +1,8 @@
 # Draftly frontend
 
-Angular 21 single-page app for Draftly (standalone components, lazy-loaded routes, Angular Material 21). See the [project README](../README.md) for the full setup, API, and Docker instructions.
+Angular 22 single-page app for Draftly (standalone components, lazy-loaded routes, Angular Material 22). See the [project README](../README.md) for the full setup, API, and Docker instructions.
 
-Requires Node.js 24 LTS (`.nvmrc` holds `24`; run `nvm use`). Angular 21 also runs on Node ≥ 20.19 and 22.12.
+Requires Node.js 24 LTS (`.nvmrc` holds `24`; run `nvm use`). Angular 22 also runs on Node ≥ 22.22.3 (Node 24 needs ≥ 24.15.0).
 
 ## Development server
 

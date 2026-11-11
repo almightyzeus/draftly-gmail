@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { TitleCasePipe } from '@angular/common';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { Router } from '@angular/router';
@@ -41,6 +41,7 @@ export const MAX_STYLE_EXAMPLES = 20;
     TopBarComponent,
   ],
   templateUrl: './preferences.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./preferences.component.css'],
 })
 export class PreferencesComponent implements OnInit {

@@ -1,4 +1,4 @@
-import { Component, OnInit } from '@angular/core';
+import { Component, OnInit, ChangeDetectionStrategy } from '@angular/core';
 import { DatePipe } from '@angular/common';
 import { Router, RouterLink } from '@angular/router';
 import { MatButtonModule } from '@angular/material/button';
@@ -36,6 +36,7 @@ export interface ActivityItem extends ActivityDescription {
     TopBarComponent,
   ],
   templateUrl: './activity.component.html',
+  changeDetection: ChangeDetectionStrategy.Eager,
   styleUrls: ['./activity.component.css'],
 })
 export class ActivityComponent implements OnInit {
