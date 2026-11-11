@@ -35,7 +35,7 @@
     } @else {
       <button
       mat-stroked-button
-      class="text-inherit"
+      class="text-inherit [--mat-button-outlined-outline-color:color-mix(in_srgb,var(--mat-sys-on-primary)_70%,transparent)]"
       (click)="connectGmail()">
         <mat-icon>add_link</mat-icon>
         <span>Connect Gmail</span>
@@ -46,8 +46,9 @@
       <mat-icon>account_circle</mat-icon>
     </button>
     <mat-menu #accountMenu="matMenu">
-      <div class="flex h-auto flex-col py-2! leading-[1.3]" mat-menu-item disabled>
-        <span class="font-medium text-on-surface">{{ user.name }}</span>
+      <!-- Who is signed in: plain text, not a menu item (not focusable, not greyed out). -->
+      <div class="mb-2 flex flex-col border-b border-outline px-4 pt-1 pb-3 leading-[1.3]">
+        <span class="text-[16px] font-medium text-on-surface">{{ user.name }}</span>
         <span class="text-[12px] text-muted">{{ user.email }}</span>
       </div>
       <a mat-menu-item routerLink="/preferences">
