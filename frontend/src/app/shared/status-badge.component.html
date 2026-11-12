@@ -1,0 +1,7 @@
+<!-- Neutral colours by default (REJECTED); data-status picks the others.
+     On the top bar the light background replaces the status tint. -->
+<span
+  class="inline-block rounded-full bg-neutral-subtle px-2.5 py-0.5 text-[12px] font-medium tracking-[0.02em] text-neutral uppercase data-[status=APPROVED]:bg-success-subtle data-[status=APPROVED]:text-success data-[status=PENDING]:bg-warning-subtle data-[status=PENDING]:text-warning data-[status=SENT]:bg-primary-subtle data-[status=SENT]:text-primary data-on-primary:bg-[color-mix(in_srgb,var(--mat-sys-surface)_92%,transparent)]!"
+  [attr.data-status]="status"
+  [attr.data-on-primary]="onPrimary || null"
+>{{ status }}</span>

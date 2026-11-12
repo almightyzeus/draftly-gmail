@@ -8,12 +8,12 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatDividerModule } from '@angular/material/divider';
 import { DomSanitizer } from '@angular/platform-browser';
 import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
 import { PreferenceService } from '../services/preference.service';
+import { StateComponent } from '../shared/state.component';
 import { TopBarComponent } from '../shared/top-bar.component';
 import { BusyOverlayComponent } from '../shared/busy-overlay.component';
 import { blockRemoteImages } from '../shared/email-html';
@@ -44,8 +44,8 @@ interface Email {
     MatIconModule,
     MatFormFieldModule,
     MatInputModule,
-    MatProgressSpinnerModule,
     MatDividerModule,
+    StateComponent,
     TopBarComponent,
     BusyOverlayComponent,
   ],

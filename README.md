@@ -95,12 +95,12 @@ frontend/
   nginx.conf
   src/
     theme.scss          # Angular Material theme (indigo/pink, Material 2 look) and its --mat-sys-* colour variables
-    styles.css          # Global design tokens and shared layout/state styles
+    styles.css          # Design tokens (--dr-* colours), used through Tailwind colour names
     tailwind.css        # Tailwind utilities (no base reset), colours mapped to the theme
     app/
       pages/            # Lazy-loaded pages
       services/         # API clients, auth interceptor and guard
-      shared/           # Top bar, confirm dialog, formatting helpers
+      shared/           # Top bar, confirm dialog, busy overlay, state message, status badge, formatting helpers
   tests/
 
 docker-compose.yml

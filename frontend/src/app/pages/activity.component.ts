@@ -5,9 +5,9 @@ import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatChipsModule } from '@angular/material/chips';
 import { MatIconModule } from '@angular/material/icon';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { ActivityLog, ActivityService } from '../services/activity.service';
 import { ACTIVITY_FILTERS, ActivityDescription, describeActivity } from '../shared/activity-format';
+import { StateComponent } from '../shared/state.component';
 import { TopBarComponent } from '../shared/top-bar.component';
 
 export const ACTIVITY_PAGE_SIZE = 25;
@@ -32,7 +32,7 @@ export interface ActivityItem extends ActivityDescription {
     MatCardModule,
     MatChipsModule,
     MatIconModule,
-    MatProgressSpinnerModule,
+    StateComponent,
     TopBarComponent,
   ],
   templateUrl: './activity.component.html',

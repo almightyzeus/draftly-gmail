@@ -8,13 +8,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatTableModule } from '@angular/material/table';
 import { MatTabsModule } from '@angular/material/tabs';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { AuthService, User } from '../services/auth.service';
 import { GmailService } from '../services/gmail.service';
 import { DraftService } from '../services/draft.service';
+import { StateComponent } from '../shared/state.component';
+import { StatusBadgeComponent } from '../shared/status-badge.component';
 import { TopBarComponent } from '../shared/top-bar.component';
 import { formatListDate, senderName } from '../shared/format';
 import { gmailConnectErrorMessage } from '../shared/gmail-connect-error';
@@ -53,10 +54,11 @@ export type DraftFilter = '' | DraftSummary['status'];
     MatIconModule,
     MatTableModule,
     MatTabsModule,
-    MatProgressSpinnerModule,
     MatFormFieldModule,
     MatInputModule,
     MatTooltipModule,
+    StateComponent,
+    StatusBadgeComponent,
     TopBarComponent,
   ],
   templateUrl: './dashboard.component.html',

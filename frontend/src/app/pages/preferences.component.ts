@@ -8,11 +8,11 @@ import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
 import { MatInputModule } from '@angular/material/input';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { filter } from 'rxjs';
 import { PreferenceService, Tone, UserPreferences } from '../services/preference.service';
 import { ConfirmService } from '../shared/confirm.service';
+import { StateComponent } from '../shared/state.component';
 import { TopBarComponent } from '../shared/top-bar.component';
 import { BusyOverlayComponent } from '../shared/busy-overlay.component';
 
@@ -38,7 +38,7 @@ export const MAX_STYLE_EXAMPLES = 20;
     MatFormFieldModule,
     MatIconModule,
     MatInputModule,
-    MatProgressSpinnerModule,
+    StateComponent,
     TopBarComponent,
     BusyOverlayComponent,
   ],

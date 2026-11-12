@@ -44,8 +44,14 @@
   --color-danger: var(--dr-danger);
   --color-success: var(--dr-success);
   --color-warning: var(--dr-warning);
+  --color-neutral: var(--dr-neutral);
   --color-link: var(--dr-link);
   --color-subtle: var(--dr-surface-subtle);
+  --color-danger-subtle: var(--dr-danger-subtle);
+  --color-success-subtle: var(--dr-success-subtle);
+  --color-warning-subtle: var(--dr-warning-subtle);
+  --color-primary-subtle: var(--dr-primary-subtle);
+  --color-neutral-subtle: var(--dr-neutral-subtle);
 
   --font-sans: Roboto, 'Helvetica Neue', sans-serif;
   --radius-dr: var(--dr-radius);

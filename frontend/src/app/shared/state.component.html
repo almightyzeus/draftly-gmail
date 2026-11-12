@@ -1,0 +1,12 @@
+<div
+  class="flex flex-col items-center justify-center gap-3 px-4 py-12 text-center [&_p]:m-0 [&_p]:max-w-[480px]"
+  [class.text-muted]="!error"
+  [class.text-danger]="error"
+>
+  @if (spinner) {
+    <mat-spinner diameter="40" />
+  } @else if (icon) {
+    <mat-icon class="size-12! text-[48px] opacity-60">{{ icon }}</mat-icon>
+  }
+  <ng-content />
+</div>

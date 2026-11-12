@@ -1,32 +1,30 @@
 <app-top-bar />
 
-<main class="page-content">
+<main class="mx-auto my-6 grid max-w-[1100px] gap-4 px-4">
   @if (gmailConnectError) {
-    <p class="inline-error page-alert" role="alert">
+    <p class="mx-0 mt-0 mb-4 flex items-center gap-2 rounded-dr bg-danger-subtle px-3 py-2.5 text-danger" role="alert">
       <mat-icon>error_outline</mat-icon>
       <span>{{ gmailConnectError }}</span>
-      <button mat-icon-button class="page-alert__dismiss" aria-label="Dismiss" (click)="dismissGmailConnectError()">
+      <button mat-icon-button class="ml-auto" aria-label="Dismiss" (click)="dismissGmailConnectError()">
         <mat-icon>close</mat-icon>
       </button>
     </p>
   }
   @if (!currentUser) {
-    <div class="state">
-      <mat-spinner diameter="40"></mat-spinner>
+    <app-state spinner>
       <p>Loading your account…</p>
-    </div>
+    </app-state>
   } @else if (!currentUser.googleConnected) {
     <!-- Gmail not connected: one clear next step instead of an empty inbox -->
     <mat-card appearance="outlined">
-      <div class="state">
-        <mat-icon>mail_outline</mat-icon>
+      <app-state icon="mail_outline">
         <h1 class="m-0 text-[22px] font-medium text-on-surface">Connect your Gmail</h1>
         <p>{{ emailsError || 'Draftly reads your inbox, drafts replies with AI, and sends only what you approve.' }}</p>
         <button mat-flat-button color="primary" (click)="connectGmail()">
           <mat-icon>add_link</mat-icon>
           Connect Gmail
         </button>
-      </div>
+      </app-state>
     </mat-card>
   } @else {
     <mat-card appearance="outlined" class="overflow-hidden">
@@ -81,21 +79,18 @@
             </div>
 
             @if (emailsError) {
-              <div class="state state--error" role="alert">
-                <mat-icon>error_outline</mat-icon>
+              <app-state icon="error_outline" error role="alert">
                 <p>{{ emailsError }}</p>
                 <button mat-stroked-button (click)="fetchEmails()">Try again</button>
-              </div>
+              </app-state>
             } @else if (isLoadingEmails) {
-              <div class="state">
-                <mat-spinner diameter="40"></mat-spinner>
+              <app-state spinner>
                 <p>Loading emails…</p>
-              </div>
+              </app-state>
             } @else if (showEmptyState) {
-              <div class="state">
-                <mat-icon>{{ activeQuery ? 'search_off' : 'inbox' }}</mat-icon>
+              <app-state [icon]="activeQuery ? 'search_off' : 'inbox'">
                 <p>{{ emptyStateMessage }}</p>
-              </div>
+              </app-state>
             } @else {
               <table mat-table [dataSource]="emails" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
                 <ng-container matColumnDef="from">
@@ -117,7 +112,7 @@
                 <tr
                   mat-row
                   *matRowDef="let email; columns: displayedColumns"
-                  class="clickable-row"
+                  class="cursor-pointer hover:bg-[color-mix(in_srgb,var(--mat-sys-primary)_6%,transparent)] focus-visible:bg-[color-mix(in_srgb,var(--mat-sys-primary)_6%,transparent)] focus-visible:outline-none"
                   [class.unread]="isUnread(email)"
                   tabindex="0"
                   [attr.aria-label]="(isUnread(email) ? 'Unread. ' : '') + 'From ' + senderName(email.from) + ': ' + email.subject"
@@ -158,7 +153,7 @@
                   <mat-button-toggle [value]="filter.value">{{ filter.label }}</mat-button-toggle>
                 }
               </mat-button-toggle-group>
-              <span class="spacer"></span>
+              <span class="flex-auto"></span>
               <button
                 mat-icon-button
                 type="button"
@@ -172,21 +167,18 @@
             </div>
 
             @if (draftsError) {
-              <div class="state state--error" role="alert">
-                <mat-icon>error_outline</mat-icon>
+              <app-state icon="error_outline" error role="alert">
                 <p>{{ draftsError }}</p>
                 <button mat-stroked-button (click)="loadDrafts()">Try again</button>
-              </div>
+              </app-state>
             } @else if (isLoadingDrafts) {
-              <div class="state">
-                <mat-spinner diameter="40"></mat-spinner>
+              <app-state spinner>
                 <p>Loading drafts…</p>
-              </div>
+              </app-state>
             } @else if (showDraftsEmptyState) {
-              <div class="state">
-                <mat-icon>edit_note</mat-icon>
+              <app-state icon="edit_note">
                 <p>{{ draftsEmptyMessage }}</p>
-              </div>
+              </app-state>
             } @else {
               <table mat-table [dataSource]="drafts" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
                 <ng-container matColumnDef="to">
@@ -204,7 +196,7 @@
                 <ng-container matColumnDef="status">
                   <th mat-header-cell *matHeaderCellDef class="w-[120px] phone:w-[100px]">Status</th>
                   <td mat-cell *matCellDef="let draft" class="w-[120px] phone:w-[100px]">
-                    <span class="status-badge status-badge--{{ draft.status.toLowerCase() }}">{{ draft.status }}</span>
+                    <app-status-badge [status]="draft.status" />
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="updatedAt">
@@ -215,7 +207,7 @@
                 <tr
                   mat-row
                   *matRowDef="let draft; columns: draftColumns"
-                  class="clickable-row"
+                  class="cursor-pointer hover:bg-[color-mix(in_srgb,var(--mat-sys-primary)_6%,transparent)] focus-visible:bg-[color-mix(in_srgb,var(--mat-sys-primary)_6%,transparent)] focus-visible:outline-none"
                   tabindex="0"
                   [attr.aria-label]="draft.status + ' draft to ' + (draft.replyTo ? senderName(draft.replyTo.from) : 'unknown recipient')"
                   (click)="openDraft(draft)"

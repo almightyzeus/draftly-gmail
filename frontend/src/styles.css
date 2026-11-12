@@ -1,6 +1,8 @@
 /*
- * Global styles: design tokens and the few layout/state patterns shared by
- * every page. Components keep only what is specific to them.
+ * Design tokens shared by Tailwind (src/tailwind.css maps them to colour
+ * utilities such as bg-page or text-muted) and the few templates that use a
+ * variable directly. All styling is done with Material and Tailwind classes
+ * in the templates; shared patterns are components (src/app/shared).
  * Colours follow the Material indigo-pink theme plus Draftly's brand gradient.
  */
 
@@ -12,138 +14,18 @@
   --dr-text: var(--mat-sys-on-surface);
   --dr-text-muted: rgba(0, 0, 0, 0.6);
   --dr-border: var(--mat-sys-outline);
-  --dr-primary: var(--mat-sys-primary);
   --dr-danger: #c62828;
   --dr-success: #2e7d32;
   --dr-warning: #e65100;
+  --dr-neutral: #546e7a;
+  /* Light tints behind status badges and inline errors */
+  --dr-danger-subtle: #fdecea;
+  --dr-success-subtle: #e8f5e9;
+  --dr-warning-subtle: #fff3e0;
+  --dr-primary-subtle: #e8eaf6;
+  --dr-neutral-subtle: #eceff1;
   --dr-brand-gradient: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
   --dr-link: #5b5fc7;
   --dr-surface-subtle: #f1f3f4;
   --dr-radius: 8px;
-  --dr-gap: 16px;
-}
-
-html, body { height: 100%; }
-body {
-  margin: 0;
-  font-family: Roboto, "Helvetica Neue", sans-serif;
-  background: var(--dr-bg);
-  color: var(--dr-text);
-}
-
-/* ---------- Page layout ---------- */
-
-.page-content {
-  max-width: 1100px;
-  margin: 24px auto;
-  padding: 0 var(--dr-gap);
-  display: grid;
-  gap: var(--dr-gap);
-}
-
-.page-content--narrow {
-  max-width: 860px;
-}
-
-.spacer {
-  flex: 1 1 auto;
-}
-
-.muted {
-  color: var(--dr-text-muted);
-}
-
-/* ---------- Loading / empty / error states ---------- */
-
-.state {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 12px;
-  padding: 48px var(--dr-gap);
-  text-align: center;
-  color: var(--dr-text-muted);
-}
-
-.state > mat-icon {
-  font-size: 48px;
-  width: 48px;
-  height: 48px;
-  opacity: 0.6;
-}
-
-.state p {
-  margin: 0;
-  max-width: 480px;
-}
-
-.state--error {
-  color: var(--dr-danger);
-}
-
-/* Inline failure of an action; the page content stays visible. */
-.inline-error {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin: 0;
-  padding: 10px 12px;
-  border-radius: var(--dr-radius);
-  background: #fdecea;
-  color: var(--dr-danger);
-}
-
-/* A page-level alert above the main content, with an optional dismiss button. */
-.page-alert {
-  margin-bottom: var(--dr-gap);
-}
-
-.page-alert__dismiss {
-  margin-left: auto;
-}
-
-/* ---------- Status badges (drafts) ---------- */
-
-.status-badge {
-  display: inline-block;
-  padding: 2px 10px;
-  border-radius: 999px;
-  font-size: 12px;
-  font-weight: 500;
-  letter-spacing: 0.02em;
-  text-transform: uppercase;
-  background: #eceff1;
-  color: #455a64;
-}
-
-.status-badge--pending { background: #fff3e0; color: var(--dr-warning); }
-.status-badge--approved { background: #e8f5e9; color: var(--dr-success); }
-.status-badge--sent { background: #e8eaf6; color: var(--dr-primary); }
-.status-badge--rejected { background: #eceff1; color: #546e7a; }
-
-/* ---------- Clickable table rows ---------- */
-
-tr.clickable-row {
-  cursor: pointer;
-}
-
-tr.clickable-row:hover,
-tr.clickable-row:focus-visible {
-  background: color-mix(in srgb, var(--mat-sys-primary) 6%, transparent);
-  outline: none;
-}
-
-/* ---------- Auth pages (login / register) ---------- */
-
-.full-width {
-  width: 100%;
-}
-
-/* ---------- Responsive helpers ---------- */
-
-@media (max-width: 700px) {
-  .hide-sm {
-    display: none !important;
-  }
 }

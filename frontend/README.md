@@ -42,13 +42,13 @@ The image installs dependencies with `npm ci` (exact lockfile versions; Angular 
 ```text
 src/
   theme.scss      # Angular Material theme (indigo/pink, Material 2 look) and its --mat-sys-* colour variables
-  styles.css      # global design tokens and shared layout/state styles
+  styles.css      # design tokens (--dr-* colours), used through Tailwind colour names
   tailwind.css    # Tailwind utilities (no base reset), colours mapped to the theme
   app/
     app.routes.ts # lazy-loaded routes
     pages/        # login, register, dashboard (Inbox/Drafts), email detail, draft detail, preferences, activity
     services/     # API clients, auth service, interceptor, guard
-    shared/       # top bar, confirm dialog, busy overlay, formatting helpers
+    shared/       # top bar, confirm dialog, busy overlay, loading/empty/error state, status badge, formatting helpers
 ```
 
 ## Theme and colours
@@ -62,10 +62,10 @@ Layout and spacing use Tailwind CSS 4 utility classes in the templates (`flex ga
 - **No preflight.** Tailwind's base reset is left out, so it cannot restyle Material components or the email HTML shown on the email page.
 - **Unlayered utilities.** Material's CSS is not in a cascade layer, and unlayered CSS always beats layered CSS, so the utilities are imported without a layer; otherwise they could never override a Material default.
 - **Overriding Material.** Material's component styles load after the utilities, so on equal specificity Material wins. Set a Material token instead where one exists (`[--mat-card-title-text-size:24px]`), or add Tailwind's important suffix (`table-fixed!`, `text-right!`).
-- **One colour source.** Tailwind's default palette is removed. The available colours are `primary`, `on-primary`, `surface`, `on-surface`, `outline` (Material system variables) and `page`, `muted`, `danger`, `success`, `warning`, `link`, `subtle` (`--dr-*` tokens), plus `white`/`black`: e.g. `bg-primary`, `text-muted`, `border-outline`. `rounded-dr` is the app's corner radius.
+- **One colour source.** Tailwind's default palette is removed. The available colours are `primary`, `on-primary`, `surface`, `on-surface`, `outline` (Material system variables) and `page`, `muted`, `danger`, `success`, `warning`, `neutral`, `link`, `subtle` and the light tints `danger-subtle`, `success-subtle`, `warning-subtle`, `primary-subtle`, `neutral-subtle` (`--dr-*` tokens), plus `white`/`black`: e.g. `bg-primary`, `text-muted`, `border-outline`. `rounded-dr` is the app's corner radius.
 - **Phone layout.** The `phone:` variant applies up to and including 600px wide (`phone:hidden`, `phone:px-2`), the same breakpoint as the app's CSS. Tailwind's `max-[600px]:` would stop just below 600px.
 - **Templates only.** Tailwind scans `src/app/**/*.html` and `src/index.html` for class names, so utility classes belong in templates, not in TypeScript strings.
 
 ## Component conventions
 
-Every component keeps its markup and styles in separate files next to its class: `name.component.ts`, `name.component.html` (`templateUrl`) and, when it has styles, `name.component.css` (`styleUrls`). Inline `template:` and `styles:` are not used. Prefer Material components and Tailwind utilities; add a `.css` file only for what they cannot express. `tests/conventions.vitest.ts` enforces this: `npm test` fails if a component has an inline template or styles, or points to a file that does not exist.
+Every component keeps its markup and styles in separate files next to its class: `name.component.ts`, `name.component.html` (`templateUrl`) and, when it has styles, `name.component.css` (`styleUrls`). Inline `template:` and `styles:` are not used. Prefer Material components and Tailwind utilities; add a `.css` file only for what they cannot express. A styled pattern repeated across pages becomes a small shared component (`<app-state>`, `<app-status-badge>`), not a global CSS class. `tests/conventions.vitest.ts` enforces this: `npm test` fails if a component has an inline template or styles, or points to a file that does not exist.

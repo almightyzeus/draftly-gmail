@@ -1,22 +1,20 @@
 <app-top-bar title="Draft reply" [showBack]="true" (back)="goBack()">
   @if (draft) {
-    <span class="status-badge status-badge--{{ draft.status.toLowerCase() }} ml-3 bg-[color-mix(in_srgb,var(--mat-sys-surface)_92%,transparent)]">{{ draft.status }}</span>
+    <app-status-badge class="ml-3 flex" [status]="draft.status" onPrimary />
   }
 </app-top-bar>
 
-<main class="page-content page-content--narrow">
+<main class="mx-auto my-6 grid max-w-[860px] gap-4 px-4">
   @if (isLoading) {
-    <div class="state">
-      <mat-spinner diameter="40"></mat-spinner>
+    <app-state spinner>
       <p>Loading draft…</p>
-    </div>
+    </app-state>
   } @else if (error) {
     <mat-card appearance="outlined">
-      <div class="state state--error" role="alert">
-        <mat-icon>error_outline</mat-icon>
+      <app-state icon="error_outline" error role="alert">
         <p>{{ error }}</p>
         <button mat-stroked-button (click)="goBack()">Back to drafts</button>
-      </div>
+      </app-state>
     </mat-card>
   } @else if (draft) {
     <mat-card appearance="outlined">
@@ -65,7 +63,7 @@
         </mat-form-field>
 
         @if (actionError) {
-          <p class="inline-error" role="alert">
+          <p class="m-0 flex items-center gap-2 rounded-dr bg-danger-subtle px-3 py-2.5 text-danger" role="alert">
             <mat-icon>error_outline</mat-icon>
             {{ actionError }}
           </p>

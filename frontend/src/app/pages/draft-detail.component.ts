@@ -7,13 +7,14 @@ import { MatCardModule } from '@angular/material/card';
 import { MatIconModule } from '@angular/material/icon';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatInputModule } from '@angular/material/input';
-import { MatProgressSpinnerModule } from '@angular/material/progress-spinner';
 import { MatSlideToggleModule } from '@angular/material/slide-toggle';
 import { MatSnackBar } from '@angular/material/snack-bar';
 import { Observable, filter, of, switchMap, tap } from 'rxjs';
 import { DraftService } from '../services/draft.service';
 import { AuthService } from '../services/auth.service';
 import { ConfirmService } from '../shared/confirm.service';
+import { StateComponent } from '../shared/state.component';
+import { StatusBadgeComponent } from '../shared/status-badge.component';
 import { TopBarComponent } from '../shared/top-bar.component';
 import { BusyOverlayComponent } from '../shared/busy-overlay.component';
 
@@ -47,8 +48,9 @@ interface Draft {
     MatIconModule,
     MatFormFieldModule,
     MatInputModule,
-    MatProgressSpinnerModule,
     MatSlideToggleModule,
+    StateComponent,
+    StatusBadgeComponent,
     TopBarComponent,
     BusyOverlayComponent,
   ],

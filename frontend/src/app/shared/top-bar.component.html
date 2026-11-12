@@ -9,10 +9,10 @@
     <span class="[@media(max-width:480px)]:hidden">Draftly</span>
   </a>
   @if (title) {
-    <span class="hide-sm ml-3 border-l border-[color-mix(in_srgb,var(--mat-sys-on-primary)_40%,transparent)] pl-3 text-[18px] font-normal">{{ title }}</span>
+    <span class="[@media(max-width:700px)]:hidden! ml-3 border-l border-[color-mix(in_srgb,var(--mat-sys-on-primary)_40%,transparent)] pl-3 text-[18px] font-normal">{{ title }}</span>
   }
   <ng-content />
-  <span class="spacer"></span>
+  <span class="flex-auto"></span>
 
   @if (user$ | async; as user) {
     @if (user.googleConnected) {
@@ -24,7 +24,7 @@
         matTooltip="Gmail connection"
       >
         <mat-icon>mark_email_read</mat-icon>
-        <span class="hide-sm">{{ user.gmailEmail || 'Gmail connected' }}</span>
+        <span class="[@media(max-width:700px)]:hidden!">{{ user.gmailEmail || 'Gmail connected' }}</span>
       </button>
       <mat-menu #gmailMenu="matMenu">
         <button mat-menu-item (click)="disconnectGmail()">

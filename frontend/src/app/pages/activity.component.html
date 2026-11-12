@@ -1,6 +1,6 @@
 <app-top-bar title="Activity" [showBack]="true" (back)="goBack()" />
 
-<main class="page-content page-content--narrow">
+<main class="mx-auto my-6 grid max-w-[860px] gap-4 px-4">
   <mat-card appearance="outlined">
     <mat-card-header>
       <mat-card-title>Your activity</mat-card-title>
@@ -21,19 +21,16 @@
       </mat-chip-listbox>
 
       @if (isLoading) {
-        <div class="state">
-          <mat-spinner diameter="40"></mat-spinner>
+        <app-state spinner>
           <p>Loading activity…</p>
-        </div>
+        </app-state>
       } @else if (error) {
-        <div class="state state--error" role="alert">
-          <mat-icon>error_outline</mat-icon>
+        <app-state icon="error_outline" error role="alert">
           <p>{{ error }}</p>
           <button mat-stroked-button (click)="load()">Try again</button>
-        </div>
+        </app-state>
       } @else if (items.length === 0) {
-        <div class="state">
-          <mat-icon>history</mat-icon>
+        <app-state icon="history">
           <p>
             @if (action) {
               No “{{ filterLabel }}” activity yet.
@@ -41,7 +38,7 @@
               No activity yet. Generate a draft from an email to get started.
             }
           </p>
-        </div>
+        </app-state>
       } @else {
         <ul class="m-0 list-none p-0">
           @for (item of items; track item.log._id) {
