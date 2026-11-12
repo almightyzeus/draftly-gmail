@@ -3,7 +3,7 @@ import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { FormBuilder } from '@angular/forms';
 import { LoginComponent } from '../src/app/pages/login.component';
 import { RegisterComponent } from '../src/app/pages/register.component';
-import { DashboardComponent } from '../src/app/pages/dashboard.component';
+import { DEFAULT_PLACEHOLDER_ROWS, DashboardComponent } from '../src/app/pages/dashboard.component';
 import { EmailDetailComponent } from '../src/app/pages/email-detail.component';
 import { DraftDetailComponent } from '../src/app/pages/draft-detail.component';
 
@@ -398,6 +398,27 @@ describe('frontend page classes', () => {
       pending.next(page(['m2'], null));
       expect(component.isLoadingEmails).toBe(false);
       expect(component.pageIndex).toBe(1);
+    });
+
+    it('shows placeholder rows while a page loads: the default number first, then as many as the list had', () => {
+      const first = new Subject<any>();
+      const refresh = new Subject<any>();
+      const gmail = { fetchEmailPage: vi.fn().mockReturnValueOnce(first).mockReturnValueOnce(refresh) };
+      const component = create(gmail);
+      const allPlaceholders = () => component.emailRows.every((row, i) => component.isPlaceholder(i, row));
+
+      expect(component.emailRows).toHaveLength(DEFAULT_PLACEHOLDER_ROWS);
+      expect(allPlaceholders()).toBe(true);
+
+      first.next(page(['m1', 'm2', 'm3'], null));
+      expect(component.emailRows).toBe(component.emails);
+      expect(component.isPlaceholder(0, component.emailRows[0])).toBe(false);
+
+      component.fetchEmails();
+      expect(component.emailRows).toHaveLength(3);
+      expect(allPlaceholders()).toBe(true);
+      // The same array on every read, so the table does not re-render each change detection.
+      expect(component.emailRows).toBe(component.emailRows);
     });
 
     it('drops a slow response that a newer request has superseded', () => {

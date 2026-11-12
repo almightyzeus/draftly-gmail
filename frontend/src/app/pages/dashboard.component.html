@@ -1,6 +1,8 @@
+<!-- Full window height, so the list card can fill the space below the top bar. -->
+<div class="flex min-h-dvh flex-col">
 <app-top-bar />
 
-<main class="mx-auto my-6 grid max-w-[1600px] gap-4 px-4">
+<main class="mx-auto my-6 box-border flex w-full max-w-[1632px] shrink-0 grow flex-col gap-4 px-4">
   @if (gmailConnectError) {
     <p class="mx-0 mt-0 mb-4 flex items-center gap-2 rounded-dr bg-danger-subtle px-3 py-2.5 text-danger" role="alert">
       <mat-icon>error_outline</mat-icon>
@@ -27,7 +29,8 @@
       </app-state>
     </mat-card>
   } @else {
-    <mat-card appearance="outlined" class="overflow-hidden">
+    <!-- Grows to the bottom of the window; shrink-0 so a long list makes it taller instead of clipping it. -->
+    <mat-card appearance="outlined" class="shrink-0 grow overflow-hidden">
       <mat-tab-group
         [selectedIndex]="selectedTab"
         (selectedIndexChange)="onTabChange($event)"
@@ -83,32 +86,47 @@
                 <p>{{ emailsError }}</p>
                 <button mat-stroked-button (click)="fetchEmails()">Try again</button>
               </app-state>
-            } @else if (isLoadingEmails) {
-              <app-state spinner>
-                <p>Loading emails…</p>
-              </app-state>
             } @else if (showEmptyState) {
               <app-state [icon]="activeQuery ? 'search_off' : 'inbox'">
                 <p>{{ emptyStateMessage }}</p>
               </app-state>
             } @else {
-              <table mat-table [dataSource]="emails" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
+              <!-- While a page loads, placeholder rows stand in for the emails (same columns and row height). -->
+              <span class="cdk-visually-hidden" role="status">{{ isLoadingEmails ? 'Loading emails…' : '' }}</span>
+              <table mat-table [dataSource]="emailRows" [attr.aria-busy]="isLoadingEmails" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
                 <ng-container matColumnDef="from">
                   <th mat-header-cell *matHeaderCellDef class="w-[24%] phone:w-[34%]">From</th>
-                  <td mat-cell *matCellDef="let email" class="w-[24%] phone:w-[34%]" [title]="email.from">{{ senderName(email.from) }}</td>
+                  <td mat-cell *matCellDef="let email" class="w-[24%] phone:w-[34%]" [title]="email.from ?? ''">
+                    @if (email.placeholder) {
+                      <span class="block h-3 animate-pulse rounded-full bg-outline motion-reduce:animate-none w-3/5 group-even:w-2/5"></span>
+                    } @else {
+                      {{ senderName(email.from) }}
+                    }
+                  </td>
                 </ng-container>
                 <ng-container matColumnDef="subject">
                   <th mat-header-cell *matHeaderCellDef>Subject</th>
                   <td mat-cell *matCellDef="let email">
-                    <span>{{ email.subject }}</span>
-                    <span class="font-normal text-muted phone:hidden"> — {{ email.snippet }}</span>
+                    @if (email.placeholder) {
+                      <span class="block h-3 animate-pulse rounded-full bg-outline motion-reduce:animate-none w-4/5 group-even:w-3/5"></span>
+                    } @else {
+                      <span>{{ email.subject }}</span>
+                      <span class="font-normal text-muted phone:hidden"> — {{ email.snippet }}</span>
+                    }
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="internalDate">
                   <th mat-header-cell *matHeaderCellDef class="w-24 text-right! text-muted phone:w-[84px]">Date</th>
-                  <td mat-cell *matCellDef="let email" class="w-24 text-right! text-muted phone:w-[84px]" [title]="formatFullDate(email.internalDate)">{{ formatDate(email.internalDate) }}</td>
+                  <td mat-cell *matCellDef="let email" class="w-24 text-right! text-muted phone:w-[84px]" [title]="formatFullDate(email.internalDate)">
+                    @if (email.placeholder) {
+                      <span class="block h-3 animate-pulse rounded-full bg-outline motion-reduce:animate-none ml-auto w-12"></span>
+                    } @else {
+                      {{ formatDate(email.internalDate) }}
+                    }
+                  </td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: displayedColumns; when: isPlaceholder" class="group" aria-hidden="true"></tr>
                 <tr
                   mat-row
                   *matRowDef="let email; columns: displayedColumns"
@@ -171,39 +189,55 @@
                 <p>{{ draftsError }}</p>
                 <button mat-stroked-button (click)="loadDrafts()">Try again</button>
               </app-state>
-            } @else if (isLoadingDrafts) {
-              <app-state spinner>
-                <p>Loading drafts…</p>
-              </app-state>
             } @else if (showDraftsEmptyState) {
               <app-state icon="edit_note">
                 <p>{{ draftsEmptyMessage }}</p>
               </app-state>
             } @else {
-              <table mat-table [dataSource]="drafts" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
+              <span class="cdk-visually-hidden" role="status">{{ isLoadingDrafts ? 'Loading drafts…' : '' }}</span>
+              <table mat-table [dataSource]="draftRows" [attr.aria-busy]="isLoadingDrafts" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
                 <ng-container matColumnDef="to">
                   <th mat-header-cell *matHeaderCellDef class="w-[24%] phone:w-[34%]">To</th>
                   <td mat-cell *matCellDef="let draft" class="w-[24%] phone:w-[34%]" [title]="draft.replyTo?.from || ''">
-                    {{ draft.replyTo ? senderName(draft.replyTo.from) : '—' }}
+                    @if (draft.placeholder) {
+                      <span class="block h-3 animate-pulse rounded-full bg-outline motion-reduce:animate-none w-3/5 group-even:w-2/5"></span>
+                    } @else {
+                      {{ draft.replyTo ? senderName(draft.replyTo.from) : '—' }}
+                    }
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="subject">
                   <th mat-header-cell *matHeaderCellDef>Subject</th>
                   <td mat-cell *matCellDef="let draft">
-                    <span>{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '(original email unavailable)' }}</span>
+                    @if (draft.placeholder) {
+                      <span class="block h-3 animate-pulse rounded-full bg-outline motion-reduce:animate-none w-4/5 group-even:w-3/5"></span>
+                    } @else {
+                      <span>{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '(original email unavailable)' }}</span>
+                    }
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="status">
                   <th mat-header-cell *matHeaderCellDef class="w-[120px] phone:w-[100px]">Status</th>
                   <td mat-cell *matCellDef="let draft" class="w-[120px] phone:w-[100px]">
-                    <app-status-badge [status]="draft.status" />
+                    @if (draft.placeholder) {
+                      <span class="block h-5 w-20 animate-pulse rounded-full bg-outline motion-reduce:animate-none"></span>
+                    } @else {
+                      <app-status-badge [status]="draft.status" />
+                    }
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="updatedAt">
                   <th mat-header-cell *matHeaderCellDef class="w-24 text-right! text-muted phone:w-[84px] phone:hidden">Updated</th>
-                  <td mat-cell *matCellDef="let draft" class="w-24 text-right! text-muted phone:w-[84px] phone:hidden" [title]="formatFullDate(draft.updatedAt)">{{ formatDate(draft.updatedAt) }}</td>
+                  <td mat-cell *matCellDef="let draft" class="w-24 text-right! text-muted phone:w-[84px] phone:hidden" [title]="formatFullDate(draft.updatedAt)">
+                    @if (draft.placeholder) {
+                      <span class="block h-3 animate-pulse rounded-full bg-outline motion-reduce:animate-none ml-auto w-12"></span>
+                    } @else {
+                      {{ formatDate(draft.updatedAt) }}
+                    }
+                  </td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="draftColumns"></tr>
+                <tr mat-row *matRowDef="let row; columns: draftColumns; when: isPlaceholder" class="group" aria-hidden="true"></tr>
                 <tr
                   mat-row
                   *matRowDef="let draft; columns: draftColumns"
@@ -221,3 +255,4 @@
     </mat-card>
   }
 </main>
+</div>

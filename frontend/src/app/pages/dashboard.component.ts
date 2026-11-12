@@ -44,6 +44,18 @@ export interface DraftSummary {
 
 export type DraftFilter = '' | DraftSummary['status'];
 
+/** Stand-in row shown in a list table while it loads. */
+export interface PlaceholderRow {
+  placeholder: true;
+}
+
+/** Placeholder rows for a first load, before the list's length is known. */
+export const DEFAULT_PLACEHOLDER_ROWS = 10;
+
+function placeholderRows(count: number): PlaceholderRow[] {
+  return Array.from({ length: count }, () => ({ placeholder: true }));
+}
+
 @Component({
   selector: 'app-dashboard',
   imports: [
@@ -74,6 +86,10 @@ export class DashboardComponent implements OnInit, OnDestroy {
   readonly formatDate = formatListDate;
   readonly formatFullDate = formatFullDate;
   readonly senderName = senderName;
+  /** Row template switch for the list tables: placeholder rows use their own, non-interactive row. */
+  readonly isPlaceholder = (_index: number, row: unknown): boolean => (row as PlaceholderRow | null)?.placeholder === true;
+  /** Shown instead of the emails while a page loads; as many rows as the list had, so it keeps its height. */
+  emailPlaceholders = placeholderRows(DEFAULT_PLACEHOLDER_ROWS);
 
   /** Why the last Gmail connection attempt failed (from the OAuth callback redirect). */
   gmailConnectError: string | null = null;
@@ -93,6 +109,8 @@ export class DashboardComponent implements OnInit, OnDestroy {
   draftColumns: string[] = ['to', 'subject', 'status', 'updatedAt'];
   isLoadingDrafts = false;
   draftsError: string | null = null;
+  /** Shown instead of the drafts while they load. */
+  draftPlaceholders = placeholderRows(DEFAULT_PLACEHOLDER_ROWS);
   private draftsLoaded = false;
   private draftsSubscription?: Subscription;
   /** The startup inbox load happens once, when a Gmail-connected user is known. */
@@ -177,6 +195,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
 
   loadDrafts(): void {
     this.draftsSubscription?.unsubscribe();
+    this.draftPlaceholders = placeholderRows(this.drafts.length || DEFAULT_PLACEHOLDER_ROWS);
     this.isLoadingDrafts = true;
     this.draftsError = null;
     this.draftsLoaded = true;
@@ -193,6 +212,16 @@ export class DashboardComponent implements OnInit, OnDestroy {
         this.isLoadingDrafts = false;
       },
     });
+  }
+
+  /** Rows for the inbox table: the emails, or placeholders while a page loads. */
+  get emailRows(): (Email | PlaceholderRow)[] {
+    return this.isLoadingEmails ? this.emailPlaceholders : this.emails;
+  }
+
+  /** Rows for the drafts table: the drafts, or placeholders while they load. */
+  get draftRows(): (DraftSummary | PlaceholderRow)[] {
+    return this.isLoadingDrafts ? this.draftPlaceholders : this.drafts;
   }
 
   get showDraftsEmptyState(): boolean {
@@ -296,6 +325,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
     // A newer request supersedes any in-flight one, so a slow response can't
     // overwrite the page the user asked for last.
     this.listSubscription?.unsubscribe();
+    this.emailPlaceholders = placeholderRows(this.emails.length || DEFAULT_PLACEHOLDER_ROWS);
     this.isLoadingEmails = true;
     this.emailsError = null;
 

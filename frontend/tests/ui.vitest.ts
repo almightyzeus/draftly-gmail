@@ -197,6 +197,19 @@ describe('DashboardComponent drafts tab', () => {
     expect(component.draftsEmptyMessage).toContain('No drafts yet');
   });
 
+  it('shows as many placeholder rows as drafts were listed while they reload', () => {
+    const { component } = create('drafts');
+    const pending = new Subject<any>();
+    draftsApi.getDrafts.mockReturnValue(pending);
+
+    component.loadDrafts();
+
+    expect(component.draftRows).toHaveLength(draftsList.length);
+    expect(component.draftRows.every((row, i) => component.isPlaceholder(i, row))).toBe(true);
+    pending.next(draftsList);
+    expect(component.draftRows).toBe(component.drafts);
+  });
+
   it('shows the API error for drafts, not the empty state', () => {
     draftsApi.getDrafts.mockReturnValue(throwError(() => ({ status: 500, error: { error: 'Failed to process draft request' } })));
     const { component } = create('drafts');
