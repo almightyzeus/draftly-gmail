@@ -53,7 +53,7 @@
   --color-primary-subtle: var(--dr-primary-subtle);
   --color-neutral-subtle: var(--dr-neutral-subtle);
 
-  --font-sans: Roboto, 'Helvetica Neue', sans-serif;
+  --font-sans: 'Roboto Variable', sans-serif;
   --radius-dr: var(--dr-radius);
 
   /* Busy overlay fade-in */

@@ -55,6 +55,8 @@ src/
 
 `src/theme.scss` builds the Angular Material theme from Sass: the classic indigo/pink Material 2 theme, identical to the prebuilt `indigo-pink.css` it replaced (verified by comparing the compiled CSS). It also defines Material's system colour variables (`--mat-sys-primary`, `--mat-sys-on-surface`, `--mat-sys-outline`, `--mat-sys-surface`, …). Custom styles use those variables, or the `--dr-*` tokens in `styles.css` for colours Material has no equivalent for (page background, status badges, success/warning), instead of hard-coded colour values.
 
+Fonts are self-hosted from npm packages, pinned exactly and listed first in `angular.json` "styles": Roboto as a variable font (`@fontsource-variable/roboto`, family `'Roboto Variable'`, the same file Google Fonts serves) and the Material Icons font with its `.material-icons` class (`material-icons`). The build and the running app make no requests to Google Fonts, so a Docker build needs no font download and the CSP allows fonts from `'self'` only.
+
 ## Tailwind CSS
 
 Layout and spacing use Tailwind CSS 4 utility classes in the templates (`flex gap-4 p-4`); components come from Angular Material. Set up in `src/tailwind.css` (loaded last in `angular.json`) and `.postcssrc.json`, versions pinned exactly:
