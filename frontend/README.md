@@ -61,7 +61,9 @@ Layout and spacing use Tailwind CSS 4 utility classes in the templates (`flex ga
 
 - **No preflight.** Tailwind's base reset is left out, so it cannot restyle Material components or the email HTML shown on the email page.
 - **Unlayered utilities.** Material's CSS is not in a cascade layer, and unlayered CSS always beats layered CSS, so the utilities are imported without a layer; otherwise they could never override a Material default.
-- **One colour source.** Tailwind's default palette is removed. The available colours are `primary`, `on-primary`, `surface`, `on-surface`, `outline` (Material system variables) and `page`, `muted`, `danger`, `success`, `warning` (`--dr-*` tokens), plus `white`/`black`: e.g. `bg-primary`, `text-muted`, `border-outline`. `rounded-dr` is the app's corner radius.
+- **Overriding Material.** Material's component styles load after the utilities, so on equal specificity Material wins. Set a Material token instead where one exists (`[--mat-card-title-text-size:24px]`), or add Tailwind's important suffix (`table-fixed!`, `text-right!`).
+- **One colour source.** Tailwind's default palette is removed. The available colours are `primary`, `on-primary`, `surface`, `on-surface`, `outline` (Material system variables) and `page`, `muted`, `danger`, `success`, `warning`, `link`, `subtle` (`--dr-*` tokens), plus `white`/`black`: e.g. `bg-primary`, `text-muted`, `border-outline`. `rounded-dr` is the app's corner radius.
+- **Phone layout.** The `phone:` variant applies up to and including 600px wide (`phone:hidden`, `phone:px-2`), the same breakpoint as the app's CSS. Tailwind's `max-[600px]:` would stop just below 600px.
 - **Templates only.** Tailwind scans `src/app/**/*.html` and `src/index.html` for class names, so utility classes belong in templates, not in TypeScript strings.
 
 ## Component conventions

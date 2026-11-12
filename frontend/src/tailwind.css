@@ -22,6 +22,10 @@
 @source './app/**/*.html';
 @source './index.html';
 
+/* Phone layout: up to and including 600px, the same breakpoint as the app's
+   CSS media queries. Tailwind's own max-[600px] stops just below 600px. */
+@custom-variant phone (@media (max-width: 600px));
+
 @theme inline {
   --color-*: initial;
   --color-white: #fff;

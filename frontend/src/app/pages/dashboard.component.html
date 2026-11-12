@@ -18,9 +18,9 @@
   } @else if (!currentUser.googleConnected) {
     <!-- Gmail not connected: one clear next step instead of an empty inbox -->
     <mat-card appearance="outlined">
-      <div class="state connect-cta">
+      <div class="state">
         <mat-icon>mail_outline</mat-icon>
-        <h1 class="connect-title">Connect your Gmail</h1>
+        <h1 class="m-0 text-[22px] font-medium text-on-surface">Connect your Gmail</h1>
         <p>{{ emailsError || 'Draftly reads your inbox, drafts replies with AI, and sends only what you approve.' }}</p>
         <button mat-flat-button color="primary" (click)="connectGmail()">
           <mat-icon>add_link</mat-icon>
@@ -29,7 +29,7 @@
       </div>
     </mat-card>
   } @else {
-    <mat-card appearance="outlined" class="workspace">
+    <mat-card appearance="outlined" class="overflow-hidden">
       <mat-tab-group
         [selectedIndex]="selectedTab"
         (selectedIndexChange)="onTabChange($event)"
@@ -38,10 +38,10 @@
       >
         <!-- Inbox -->
         <mat-tab label="Inbox">
-          <div class="tab-body">
-            <div class="controls">
-              <form class="search" role="search" (ngSubmit)="search()">
-                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="search-field">
+          <div class="grid grid-cols-[minmax(0,1fr)] gap-3 p-4 phone:px-2 phone:py-3">
+            <div class="flex flex-wrap items-center gap-2">
+              <form class="flex flex-[1_1_360px] flex-wrap items-center gap-2" role="search" (ngSubmit)="search()">
+                <mat-form-field appearance="outline" subscriptSizing="dynamic" class="flex-[1_1_220px]">
                   <mat-icon matPrefix>search</mat-icon>
                   <input
                     matInput
@@ -61,7 +61,7 @@
               <button
                 mat-stroked-button
                 type="button"
-                [class.toggle-on]="unreadOnly"
+                class="aria-pressed:bg-[color-mix(in_srgb,var(--mat-sys-primary)_8%,transparent)]"
                 [attr.aria-pressed]="unreadOnly"
                 (click)="toggleUnreadOnly()"
               >
@@ -97,21 +97,21 @@
                 <p>{{ emptyStateMessage }}</p>
               </div>
             } @else {
-              <table mat-table [dataSource]="emails" class="list-table">
+              <table mat-table [dataSource]="emails" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
                 <ng-container matColumnDef="from">
-                  <th mat-header-cell *matHeaderCellDef>From</th>
-                  <td mat-cell *matCellDef="let email" [title]="email.from">{{ senderName(email.from) }}</td>
+                  <th mat-header-cell *matHeaderCellDef class="w-[24%] phone:w-[34%]">From</th>
+                  <td mat-cell *matCellDef="let email" class="w-[24%] phone:w-[34%]" [title]="email.from">{{ senderName(email.from) }}</td>
                 </ng-container>
                 <ng-container matColumnDef="subject">
                   <th mat-header-cell *matHeaderCellDef>Subject</th>
                   <td mat-cell *matCellDef="let email">
-                    <span class="subject">{{ email.subject }}</span>
-                    <span class="snippet"> — {{ email.snippet }}</span>
+                    <span>{{ email.subject }}</span>
+                    <span class="font-normal text-muted phone:hidden"> — {{ email.snippet }}</span>
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="internalDate">
-                  <th mat-header-cell *matHeaderCellDef class="date-cell">Date</th>
-                  <td mat-cell *matCellDef="let email" class="date-cell">{{ formatDate(email.internalDate) }}</td>
+                  <th mat-header-cell *matHeaderCellDef class="w-24 text-right! text-muted phone:w-[76px]">Date</th>
+                  <td mat-cell *matCellDef="let email" class="w-24 text-right! text-muted phone:w-[76px]">{{ formatDate(email.internalDate) }}</td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="displayedColumns"></tr>
                 <tr
@@ -128,7 +128,7 @@
             }
 
             @if (hasPreviousPage || hasNextPage) {
-              <nav class="pagination" aria-label="Inbox pages">
+              <nav class="flex items-center justify-end gap-2" aria-label="Inbox pages">
                 <button mat-button (click)="previousPage()" [disabled]="!hasPreviousPage || isLoadingEmails">
                   <mat-icon>chevron_left</mat-icon>
                   Previous
@@ -145,12 +145,13 @@
 
         <!-- Drafts -->
         <mat-tab label="Drafts">
-          <div class="tab-body">
-            <div class="controls">
+          <div class="grid grid-cols-[minmax(0,1fr)] gap-3 p-4 phone:px-2 phone:py-3">
+            <div class="flex flex-wrap items-center gap-2">
               <mat-button-toggle-group
                 [value]="draftsFilter"
                 (change)="setDraftsFilter($event.value)"
                 aria-label="Filter drafts by status"
+                class="max-w-full min-w-0 overflow-x-auto!"
                 hideSingleSelectionIndicator
               >
                 @for (filter of draftFilters; track filter.value) {
@@ -187,28 +188,28 @@
                 <p>{{ draftsEmptyMessage }}</p>
               </div>
             } @else {
-              <table mat-table [dataSource]="drafts" class="list-table">
+              <table mat-table [dataSource]="drafts" class="w-full table-fixed! [&_td]:overflow-hidden [&_td]:text-ellipsis [&_td]:whitespace-nowrap [&_tr.unread_td]:font-semibold phone:[&_:is(td,th)]:px-2">
                 <ng-container matColumnDef="to">
-                  <th mat-header-cell *matHeaderCellDef>To</th>
-                  <td mat-cell *matCellDef="let draft" [title]="draft.replyTo?.from || ''">
+                  <th mat-header-cell *matHeaderCellDef class="w-[24%] phone:w-[34%]">To</th>
+                  <td mat-cell *matCellDef="let draft" class="w-[24%] phone:w-[34%]" [title]="draft.replyTo?.from || ''">
                     {{ draft.replyTo ? senderName(draft.replyTo.from) : '—' }}
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="subject">
                   <th mat-header-cell *matHeaderCellDef>Subject</th>
                   <td mat-cell *matCellDef="let draft">
-                    <span class="subject">{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '(original email unavailable)' }}</span>
+                    <span>{{ draft.replyTo ? 'Re: ' + draft.replyTo.subject : '(original email unavailable)' }}</span>
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="status">
-                  <th mat-header-cell *matHeaderCellDef>Status</th>
-                  <td mat-cell *matCellDef="let draft">
+                  <th mat-header-cell *matHeaderCellDef class="w-[120px] phone:w-[100px]">Status</th>
+                  <td mat-cell *matCellDef="let draft" class="w-[120px] phone:w-[100px]">
                     <span class="status-badge status-badge--{{ draft.status.toLowerCase() }}">{{ draft.status }}</span>
                   </td>
                 </ng-container>
                 <ng-container matColumnDef="updatedAt">
-                  <th mat-header-cell *matHeaderCellDef class="date-cell">Updated</th>
-                  <td mat-cell *matCellDef="let draft" class="date-cell">{{ formatDate(draft.updatedAt) }}</td>
+                  <th mat-header-cell *matHeaderCellDef class="w-24 text-right! text-muted phone:w-[76px] phone:hidden">Updated</th>
+                  <td mat-cell *matCellDef="let draft" class="w-24 text-right! text-muted phone:w-[76px] phone:hidden">{{ formatDate(draft.updatedAt) }}</td>
                 </ng-container>
                 <tr mat-header-row *matHeaderRowDef="draftColumns"></tr>
                 <tr

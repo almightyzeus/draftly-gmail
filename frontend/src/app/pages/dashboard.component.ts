@@ -61,7 +61,6 @@ export type DraftFilter = '' | DraftSummary['status'];
   ],
   templateUrl: './dashboard.component.html',
   changeDetection: ChangeDetectionStrategy.Eager,
-  styleUrls: ['./dashboard.component.css'],
 })
 export class DashboardComponent implements OnInit, OnDestroy {
   readonly pageSize = 20;
