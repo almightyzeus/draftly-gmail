@@ -16,7 +16,8 @@ All six hardening stages (section 3) are complete. From the 2026-11-03/04 reconc
 items (5.1), quick-win Batch 1 (5.2), verification V1–V3 (5.3), features F1–F7 (5.4), dependency
 items D1–D4 and D6 (5.5), cleanup C-1 to C-3 (5.6) and security quick wins H1–H3 (5.7) are done.
 D5 (Angular 22) was done on 2026-11-11, and the UI and frontend-structure work in 5.8 on
-2026-11-11/12. Open: the items in section 6.
+2026-11-11/12. The last release item, R2, was closed on 2026-11-12; nothing is open. Section 6
+lists the accepted limitations and what a production deployment would still need.
 
 Local checks re-run on 2026-11-12 (Node 24.15.0, Windows):
 
@@ -39,7 +40,7 @@ Other verification, with its date:
 | CI, GitHub-hosted | Checked 2026-11-12 via the GitHub API: the five latest runs passed, the newest on `9f4e9fd` (2026-11-12). Checked 2026-11-05: 12 runs since 2026-11-03; `7dd415b` (2026-11-04) passed. One failure: `9f33ab8` (2026-11-03), backend `npm ci` on Node 20 / npm 10, likely the npm 11-written lockfile (the log needs a login and was not read); all runs since `06577ce` (Node 24) passed. |
 | CI, local simulation | 2026-11-03: workflow steps in a clean worktree (fresh `npm ci`, no `.env`, placeholder env values), before the first hosted run |
 | Docker | 2026-11-03: both images built on `node:24-alpine` (Node 24.22.2); the backend loaded its compiled app; the frontend nginx config is valid inside compose. 2026-11-04: frontend image rebuilt, security headers checked with curl. 2026-11-11 (R1): both images rebuilt from `a417265` (Node 24.22.2, npm 11.19.1) and the stack started: the backend passed the JWT-secret check (H2) and connected to MongoDB; through nginx the app, a deep link (`/drafts/abc`) and the JS chunks return 200 with all security headers, `/api/drafts` without a token returns 401, and a login with unknown credentials returns 401. The frontend bundle hashes match the local build. Not checked: a browser session (R2). 2026-11-11/12: the frontend image was rebuilt after every 5.8 step and its served bundle hashes matched the local build each time; since U8 the build downloads no fonts (the Google Fonts inlining step had failed intermittently with exit 127). |
-| Browser | 2026-11-03: smoke test (V3) confirmed by the user. 2026-11-04: user re-checked the rebuilt stack after D2/D3 (menus, dialogs, snackbars). 2026-11-11/12: every page captured in headless Edge at desktop and phone widths before and after each 5.8 step and compared pixel by pixel, with computed-style probes (Gmail list responses served from a fixture in the browser; no Gmail or OpenAI calls). 2026-11-12: CSP checked in headless Edge on every page, including email images (R2; Connect Gmail still to check manually) |
+| Browser | 2026-11-03: smoke test (V3) confirmed by the user. 2026-11-04: user re-checked the rebuilt stack after D2/D3 (menus, dialogs, snackbars). 2026-11-11/12: every page captured in headless Edge at desktop and phone widths before and after each 5.8 step and compared pixel by pixel, with computed-style probes (Gmail list responses served from a fixture in the browser; no Gmail or OpenAI calls). 2026-11-12: CSP checked in headless Edge on every page, including email images, and by the user through the Connect Gmail flow (R2) |
 
 Node: local runs use 24.15.0; the Docker image ran 24.22.2 when built; `.nvmrc` holds `24`
 since D4 (Node 20 reached end-of-life on 2026-04-30).
@@ -244,11 +245,11 @@ at desktop and phone widths plus computed-style probes); intended changes are li
 
 ## 6. Release readiness (reviewed 2026-11-05)
 
-### 6.1 Open items
+### 6.1 Release items
 
 | # | Item | Notes |
 |---|---|---|
-| R2 | Browser-console check of the CSP (H1; tightened in U8). | **Automated part done 2026-11-12** (headless Edge over CDP against the Docker stack, temporary user deleted afterwards): sign in, register, dashboard (inbox, drafts, account menu), an HTML email before and after **Show images** (remote https image loaded; the only cross-origin request, made only after the click), draft page, preferences with the discard dialog, activity. No `securitypolicyviolation` events, no CSP or other console errors or warnings, no blocked requests, no exceptions; `Roboto Variable` and `Material Icons` loaded from the app itself. **Still open:** Connect Gmail (goes through Google sign-in; check manually in a browser with the console open). |
+| R2 | ~~Browser-console check of the CSP (H1; tightened in U8).~~ | **Done** 2026-11-12. Automated part (headless Edge over CDP against the Docker stack, temporary user deleted afterwards): sign in, register, dashboard (inbox, drafts, account menu), an HTML email before and after **Show images** (remote https image loaded; the only cross-origin request, made only after the click), draft page, preferences with the discard dialog, activity. No `securitypolicyviolation` events, no CSP or other console errors or warnings, no blocked requests, no exceptions; `Roboto Variable` and `Material Icons` loaded from the app itself. Connect Gmail checked manually by the user in Edge with the console open, through Google sign-in and back to the dashboard: no CSP errors from the app; the only messages came from a browser extension (its content script, and an injected `antd` stylesheet whose source map DevTools could not fetch under `connect-src 'self'`). |
 
 ### 6.2 Accepted limitations
 
