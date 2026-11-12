@@ -17,7 +17,7 @@ import { DraftService } from '../services/draft.service';
 import { StateComponent } from '../shared/state.component';
 import { StatusBadgeComponent } from '../shared/status-badge.component';
 import { TopBarComponent } from '../shared/top-bar.component';
-import { formatListDate, senderName } from '../shared/format';
+import { formatFullDate, formatListDate, senderName } from '../shared/format';
 import { gmailConnectErrorMessage } from '../shared/gmail-connect-error';
 
 interface Email {
@@ -72,6 +72,7 @@ export class DashboardComponent implements OnInit, OnDestroy {
   emailsError: string | null = null;
   displayedColumns: string[] = ['from', 'subject', 'internalDate'];
   readonly formatDate = formatListDate;
+  readonly formatFullDate = formatFullDate;
   readonly senderName = senderName;
 
   /** Why the last Gmail connection attempt failed (from the OAuth callback redirect). */

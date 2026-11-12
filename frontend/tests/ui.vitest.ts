@@ -2,7 +2,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { BehaviorSubject, Subject, of, throwError } from 'rxjs';
 import { TopBarComponent } from '../src/app/shared/top-bar.component';
 import { ConfirmService } from '../src/app/shared/confirm.service';
-import { formatListDate, senderName } from '../src/app/shared/format';
+import { formatFullDate, formatListDate, senderName } from '../src/app/shared/format';
 import { AuthService } from '../src/app/services/auth.service';
 import { DashboardComponent } from '../src/app/pages/dashboard.component';
 import { DraftDetailComponent } from '../src/app/pages/draft-detail.component';
@@ -128,11 +128,18 @@ describe('format helpers', () => {
     expect(senderName(input)).toBe(expected);
   });
 
+  it('formats the full date for list tooltips', () => {
+    expect(formatFullDate(new Date(2024, 2, 7, 9, 5))).toBe('Mar 7, 2024, 9:05 AM');
+    expect(formatFullDate('not a date')).toBe('');
+    expect(formatFullDate(null)).toBe('');
+  });
+
   it('formats list dates relative to today', () => {
     const now = new Date(2026, 9, 4, 15, 0);
     expect(formatListDate(new Date(2026, 9, 4, 9, 5), now)).toBe('9:05 AM');
     expect(formatListDate(new Date(2026, 2, 7), now)).toBe('Mar 7');
-    expect(formatListDate(new Date(2024, 2, 7), now)).toBe('Mar 7, 2024');
+    expect(formatListDate(new Date(2024, 2, 7), now)).toBe('3/7/24');
+    expect(formatListDate(new Date(2025, 11, 24), now)).toBe('12/24/25');
     expect(formatListDate('not a date', now)).toBe('');
     expect(formatListDate(null, now)).toBe('');
   });
