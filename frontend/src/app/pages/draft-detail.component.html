@@ -77,22 +77,24 @@
                 Save changes
               </button>
             }
-            <span class="flex-auto"></span>
-            <button mat-stroked-button color="warn" (click)="rejectDraft()" [disabled]="isBusy()">
-              <mat-icon>block</mat-icon>
-              Reject
-            </button>
-            @if (draft.status === 'PENDING') {
-              <button mat-flat-button color="primary" (click)="approveDraft()" [disabled]="isBusy()">
-                <mat-icon>check_circle</mat-icon>
-                Approve
+            <!-- Reject and Approve/Send stay together on the right; on narrow screens the pair wraps below Save. -->
+            <div class="ml-auto flex gap-2">
+              <button mat-stroked-button color="warn" (click)="rejectDraft()" [disabled]="isBusy()">
+                <mat-icon>block</mat-icon>
+                Reject
               </button>
-            } @else {
-              <button mat-flat-button color="primary" (click)="sendDraft()" [disabled]="isBusy()">
-                <mat-icon>send</mat-icon>
-                Send
-              </button>
-            }
+              @if (draft.status === 'PENDING') {
+                <button mat-flat-button color="primary" (click)="approveDraft()" [disabled]="isBusy()">
+                  <mat-icon>check_circle</mat-icon>
+                  Approve
+                </button>
+              } @else {
+                <button mat-flat-button color="primary" (click)="sendDraft()" [disabled]="isBusy()">
+                  <mat-icon>send</mat-icon>
+                  Send
+                </button>
+              }
+            </div>
           </div>
           <p class="m-0 text-[13px] text-muted">
             @if (draft.status === 'PENDING') {
