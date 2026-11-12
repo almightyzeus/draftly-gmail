@@ -35,7 +35,7 @@
             <p class="m-0 text-[13px] text-muted">Preselected when you generate a draft. You can still pick another tone each time.</p>
           </section>
 
-          <mat-form-field appearance="outline" class="w-full">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-full">
             <mat-label>Signature</mat-label>
             <textarea
               matInput
@@ -45,13 +45,13 @@
               placeholder="Best regards,&#10;Your Name"
             ></textarea>
             <mat-hint>Every draft ends with this. Leave empty for no signature.</mat-hint>
-            <mat-hint align="end">{{ signatureLength }} / {{ maxSignatureLength }}</mat-hint>
+            <mat-hint align="end" class="whitespace-nowrap">{{ signatureLength }} / {{ maxSignatureLength }}</mat-hint>
             @if (form.get('signature')?.hasError('maxlength')) {
               <mat-error>At most {{ maxSignatureLength }} characters.</mat-error>
             }
           </mat-form-field>
 
-          <mat-form-field appearance="outline" class="w-full max-w-[420px]">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="w-full max-w-[420px]">
             <mat-label>Style examples</mat-label>
             <input
               matInput
