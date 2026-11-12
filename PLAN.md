@@ -10,35 +10,36 @@ No dependency upgrades and no commits unless explicitly approved.
 
 ---
 
-## 0. Current status (verified 2026-11-05)
+## 0. Current status (verified 2026-11-12)
 
 All six hardening stages (section 3) are complete. From the 2026-11-03/04 reconciliation, the P1
 items (5.1), quick-win Batch 1 (5.2), verification V1–V3 (5.3), features F1–F7 (5.4), dependency
 items D1–D4 and D6 (5.5), cleanup C-1 to C-3 (5.6) and security quick wins H1–H3 (5.7) are done.
-D5 (Angular 22) was done on 2026-11-11. Open: the items in section 6.
+D5 (Angular 22) was done on 2026-11-11, and the UI and frontend-structure work in 5.8 on
+2026-11-11/12. Open: the items in section 6.
 
-Local checks re-run on 2026-11-05 (Node 24.15.0, Windows):
+Local checks re-run on 2026-11-12 (Node 24.15.0, Windows):
 
 | Check | Result |
 |---|---|
 | Backend typecheck | `npx tsc --noEmit` and `npm run typecheck:tests` clean; `npm run build` passes |
 | Backend tests | 25 files, **455 passing** (`npm run test:ci`) |
 | Backend coverage | 93.83% statements, 82.69% branches, 96.27% functions, 94.36% lines (Vitest 5 V8 provider, stricter than Vitest 1's; same 36 files) |
-| Frontend dependencies | Lockfile installs with plain `npm ci` (no `--legacy-peer-deps`; last clean install 2026-11-03): Angular 22.2.5 (CLI/build 22.2.6, pinned exactly), Material 22.2.6, TypeScript 6.0.3 (2026-11-11) |
-| Frontend tests | 9 files, **160 passing** (2026-11-11; includes the component-file convention check and the busy overlay) |
-| Frontend coverage | 96.23% statements, 84.63% branches, 96.56% functions, 96.66% lines (2026-11-11) |
+| Frontend dependencies | Lockfile installs with plain `npm ci` (no `--legacy-peer-deps`; last clean install 2026-11-03, and in every Docker build since): Angular 22.2.5 (CLI/build 22.2.6, pinned exactly), Material 22.2.6, TypeScript 6.0.3 (2026-11-11); Tailwind CSS 4.3.3, `@fontsource-variable/roboto` 5.3.0 and `material-icons` 1.13.14, pinned exactly (U5, U8) |
+| Frontend tests | 9 files, **165 passing** (includes the component-file convention check, the busy overlay, list dates and placeholder rows) |
+| Frontend coverage | 95.75% statements, 85.15% branches, 96.68% functions, 96.78% lines |
 | Frontend typecheck | `npx tsc -p tsconfig.app.json --noEmit` and `npm run typecheck:tests` clean |
-| Production build | `ng build` passes with no warnings; initial bundle 476.77 kB (110.34 kB transferred, 2026-11-11), under the 500 kB warning budget; Preferences (7.43 kB) and Activity (74.04 kB, 10.43 kB gzipped) are lazy chunks; the built `index.html` has no inline event handlers (CSP) |
-| `npm audit` | Backend 0; frontend 0 (2026-11-11, after D5) |
+| Production build | `ng build` passes with no warnings; initial bundle 501.49 kB (114.64 kB transferred), under the 550 kB warning budget (raised from 500 kB in U8, when the font CSS moved from `index.html` into the stylesheet); Preferences (7.43 kB) and Activity (76.69 kB, 10.61 kB gzipped) are lazy chunks; the built `index.html` (559 bytes) has no inline event handlers (CSP) and no external links |
+| `npm audit` | Backend 0; frontend 0 |
 
 Other verification, with its date:
 
 | Check | Result |
 |---|---|
-| CI, GitHub-hosted | 12 runs since 2026-11-03 (checked 2026-11-05 via the GitHub API). Latest: `7dd415b` (2026-11-04, current `master`), both jobs passed. One failure: `9f33ab8` (2026-11-03), backend `npm ci` on Node 20 / npm 10, likely the npm 11-written lockfile (the log needs a login and was not read); all runs since `06577ce` (Node 24) passed. |
+| CI, GitHub-hosted | Checked 2026-11-12 via the GitHub API: the five latest runs passed, the newest on `9f4e9fd` (2026-11-12). Checked 2026-11-05: 12 runs since 2026-11-03; `7dd415b` (2026-11-04) passed. One failure: `9f33ab8` (2026-11-03), backend `npm ci` on Node 20 / npm 10, likely the npm 11-written lockfile (the log needs a login and was not read); all runs since `06577ce` (Node 24) passed. |
 | CI, local simulation | 2026-11-03: workflow steps in a clean worktree (fresh `npm ci`, no `.env`, placeholder env values), before the first hosted run |
-| Docker | 2026-11-03: both images built on `node:24-alpine` (Node 24.22.2); the backend loaded its compiled app; the frontend nginx config is valid inside compose. 2026-11-04: frontend image rebuilt, security headers checked with curl. 2026-11-11 (R1): both images rebuilt from `a417265` (Node 24.22.2, npm 11.19.1) and the stack started: the backend passed the JWT-secret check (H2) and connected to MongoDB; through nginx the app, a deep link (`/drafts/abc`) and the JS chunks return 200 with all security headers, `/api/drafts` without a token returns 401, and a login with unknown credentials returns 401. The frontend bundle hashes match the local build. Not checked: a browser session (R2). |
-| Browser | 2026-11-03: smoke test (V3) confirmed by the user. 2026-11-04: user re-checked the rebuilt stack after D2/D3 (menus, dialogs, snackbars). CSP (H1, added later that day) not yet confirmed in a browser console |
+| Docker | 2026-11-03: both images built on `node:24-alpine` (Node 24.22.2); the backend loaded its compiled app; the frontend nginx config is valid inside compose. 2026-11-04: frontend image rebuilt, security headers checked with curl. 2026-11-11 (R1): both images rebuilt from `a417265` (Node 24.22.2, npm 11.19.1) and the stack started: the backend passed the JWT-secret check (H2) and connected to MongoDB; through nginx the app, a deep link (`/drafts/abc`) and the JS chunks return 200 with all security headers, `/api/drafts` without a token returns 401, and a login with unknown credentials returns 401. The frontend bundle hashes match the local build. Not checked: a browser session (R2). 2026-11-11/12: the frontend image was rebuilt after every 5.8 step and its served bundle hashes matched the local build each time; since U8 the build downloads no fonts (the Google Fonts inlining step had failed intermittently with exit 127). |
+| Browser | 2026-11-03: smoke test (V3) confirmed by the user. 2026-11-04: user re-checked the rebuilt stack after D2/D3 (menus, dialogs, snackbars). 2026-11-11/12: every page captured in headless Edge at desktop and phone widths before and after each 5.8 step and compared pixel by pixel, with computed-style probes (Gmail list responses served from a fixture in the browser; no Gmail or OpenAI calls). CSP (H1) not yet confirmed in a browser console (R2) |
 
 Node: local runs use 24.15.0; the Docker image ran 24.22.2 when built; `.nvmrc` holds `24`
 since D4 (Node 20 reached end-of-life on 2026-04-30).
@@ -216,11 +217,28 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 
 | # | Item | Result |
 |---|---|---|
-| H1 | nginx security headers | `frontend/nginx.conf` (`location /`, `always`): Content-Security-Policy `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, plus `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and `server_tokens off`. API responses keep helmet's headers. Production build sets `optimization.styles.inlineCritical: false`: its `onload="this.media='all'"` handler would be blocked by `script-src 'self'` and leave the stylesheet unapplied. `style-src 'unsafe-inline'` remains (Angular injects component styles and inlines the font CSS). Verified on the rebuilt frontend image with curl (headers on `/` and SPA routes, no inline handlers); no browser-console check for CSP violations recorded yet. No HSTS (HTTP-only Docker setup). |
+| H1 | nginx security headers | `frontend/nginx.conf` (`location /`, `always`): Content-Security-Policy `default-src 'self'; script-src 'self'; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; font-src 'self' https://fonts.gstatic.com; img-src 'self' data: https:; connect-src 'self'; object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'`, plus `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`, and `server_tokens off`. API responses keep helmet's headers. Production build sets `optimization.styles.inlineCritical: false`: its `onload="this.media='all'"` handler would be blocked by `script-src 'self'` and leave the stylesheet unapplied. `style-src 'unsafe-inline'` remains (Angular injects component styles and inlines the font CSS). Verified on the rebuilt frontend image with curl (headers on `/` and SPA routes, no inline handlers); no browser-console check for CSP violations recorded yet. No HSTS (HTTP-only Docker setup). **Update 2026-11-12 (U3, U8):** the headers live in `frontend/security-headers.conf`, included in every app location of `nginx.conf`; the fonts are self-hosted, so the CSP is now `style-src 'self' 'unsafe-inline'; font-src 'self'` (no Google hosts), and `'unsafe-inline'` remains only for Angular's injected component styles. |
 | H2 | JWT-secret strength check | `validateJwtSecrets` in `config/env.ts`: each secret ≥ 32 characters, not the `.env.example` placeholder, and access ≠ refresh; the backend refuses to start otherwise. The existing `.env` files pass (44-character secrets; lengths checked, values not read). Unit-tested; the rebuilt backend image started with the Docker `.env` on 2026-11-11 (R1). |
 | H3 | Password policy | New passwords: at least 8 characters, at most 72 UTF-8 bytes (bcrypt truncates longer ones), in the API and the register form. Login does not re-check length, so older 6–7 character passwords keep working. |
 
 **Still deferred:** see section 4 (S5, remaining S12 items, in-memory rate limits) and section 6.
+
+### 5.8 UI and frontend structure — **done 2026-11-11/12**
+
+Requested by the user after D5, one commit per step, each checked on the rebuilt Docker stack.
+Pure restyling steps were verified as pixel-identical before/after (headless Edge screenshots
+at desktop and phone widths plus computed-style probes); intended changes are listed.
+
+| # | Item | Result |
+|---|---|---|
+| U1 | Inline component templates and styles (`a2f6824`) | Every component uses `templateUrl` (and `styleUrls` only when needed); `tests/conventions.vitest.ts` fails `npm test` on an inline `template:`/`styles:` or a missing file. |
+| U2 | Full-page busy overlay instead of button spinners (`2a907c7`, `34a0388`, `9a9ef06`) | `BusyOverlayComponent` for approve, send, reject, save, generate, sign in, register and saving preferences: 300 ms show delay (0 for generate), 400 ms minimum, focus trap, screen-reader announcement, optional "still working" message after 4 s. |
+| U3 | Response times and caching (`b47d3a3`) | Backend request log ends with `:response-time ms`. nginx: `index.html` `no-cache`, hashed build files `max-age=31536000, immutable`; security headers moved to `security-headers.conf`, included in each location. |
+| U4 | Material theme from Sass (`3d31e94`) | `src/theme.scss` (M2 indigo/pink, same output as the prebuilt CSS) plus the `--mat-sys-*` variables; `--dr-*` tokens point at them where they match. |
+| U5 | Tailwind CSS 4 (`749cb70` to `4f709e7`) | Utilities next to Material: no preflight, unlayered utilities, theme colours only (default palette removed), templates-only scanning, a `phone:` variant (up to 600px). Every page moved off its component CSS; shared patterns became `<app-state>` and `<app-status-badge>`; `styles.css` holds only design tokens. Each step pixel-identical. |
+| U6 | Bugs found while restyling (`54631cd`, `e4d9d22`, `4ef27dd`, `ab460c5`, `497de05`) | Account-menu header layout and the Connect Gmail outline (never applied); images and tables in email HTML not fitted to the card; earlier-year list dates cut off ("Dec 24, …"; now "12/24/25" with the full date on hover, phone date column 76 → 84px); Preferences hints overlapping the next field at phone width; Approve/Send wrapping alone onto its own line at phone width. |
+| U7 | Dashboard layout (`79a8526`, `9f4e9fd`) | Width up to 1600px (other pages keep 860px). The list card fills the window below the top bar and still grows with the list (page scroll, no inner scroll). Pulsing placeholder rows inside the real table replace the spinner on first load (10 rows), refresh and paging (as many rows as were listed), for inbox and drafts; hidden from screen readers, which hear "Loading emails…"; no pulse with reduced motion. |
+| U8 | Self-hosted fonts (`385dfd8`) | `@fontsource-variable/roboto` (byte-identical to the file Google Fonts serves) and `material-icons` (the same icon font, with its `.material-icons` class). Fixes the Docker build that failed intermittently while inlining Google Fonts; the app makes no requests to Google Fonts; CSP tightened (see H1). Bold text now renders with Roboto's true 600/700 weights instead of a synthesised bold; regular text and icons are pixel-identical. Initial-bundle warning budget 500 → 550 kB. |
 
 ---
 
@@ -230,7 +248,7 @@ deprecated Mongoose `new: true` replaced with `returnDocument: 'after'`.
 
 | # | Item | Notes |
 |---|---|---|
-| R2 | Browser-console check of the CSP (H1). | Email with **Show images**, Connect Gmail, fonts/icons; look for "Refused to …" errors. |
+| R2 | Browser-console check of the CSP (H1; tightened in U8). | Email with **Show images**, Connect Gmail, fonts/icons; look for "Refused to …" errors. |
 
 ### 6.2 Accepted limitations
 
