@@ -2,7 +2,7 @@
 
 Draftly is a self-hosted web app that connects to Gmail, lists and searches inbox emails, generates AI reply drafts, lets the user review/edit/approve/reject drafts, and sends approved replies through Gmail.
 
-The full workflow is implemented and tested, and the app runs with Docker Compose. It is built for a single-machine setup; the steps still needed for a public production deployment are listed under [Known Limitations](#known-limitations).
+The full workflow is implemented and tested, and the app runs with Docker Compose. It is built for a single-machine setup. The steps still needed for a public production deployment are listed under [Known Limitations](#known-limitations). A plan for a limited, invite-only demo on free hosting is in [DEPLOYMENT.md](DEPLOYMENT.md); nothing has been deployed yet.
 
 ## Why Draftly
 
@@ -24,12 +24,14 @@ The system supports:
 
 - Backend: Node.js 24, Express 5, TypeScript
 - Database: MongoDB with Mongoose
-- Frontend: Angular 22 (standalone components, lazy-loaded routes) with Angular Material 22 and Tailwind CSS 4 for layout utilities, TypeScript 6.0
+- Frontend: Angular 22 (standalone components, lazy-loaded routes) with Angular Material/CDK 22 and Tailwind CSS 4 for layout utilities, TypeScript 6.0; Roboto and Material Icons fonts self-hosted from npm packages
 - AI: OpenAI API
 - Gmail: Google OAuth2 and Gmail API
-- Auth: JWT access + refresh tokens
+- Auth: Draftly's own JWT access + refresh tokens. These are separate from the Google OAuth tokens used for Gmail; see [Sessions](#sessions-logout-and-the-two-kinds-of-tokens).
 - Security: bcrypt password hashing, AES-256-GCM token encryption, Helmet, CORS, rate limiting, nginx Content-Security-Policy and security headers
-- Tests: Vitest (backend and frontend), Supertest, mongodb-memory-server
+- Tests: Vitest (backend 5.0.5, frontend 4.1.12; Vite 8.3.5), Supertest, mongodb-memory-server
+
+Exact versions are pinned in the lockfiles. As of 2026-11-13: Angular 22.2.5 (CLI/build 22.2.6), Material/CDK 22.2.6, TypeScript 6.0.3, Tailwind CSS 4.3.3, Express 5.2.1, Mongoose 9.11.4.
 
 ## Features
 
@@ -92,7 +94,8 @@ backend/
   tests/
 
 frontend/
-  nginx.conf
+  nginx.conf            # /api proxy, SPA fallback, caching
+  security-headers.conf # CSP and other security headers, included by nginx.conf
   src/
     theme.scss          # Angular Material theme (indigo/pink, Material 2 look) and its --mat-sys-* colour variables
     styles.css          # Design tokens (--dr-* colours), used through Tailwind colour names
@@ -104,6 +107,8 @@ frontend/
   tests/
 
 docker-compose.yml
+PLAN.md                 # verified status, review findings, backlog
+DEPLOYMENT.md           # free-hosting demo plan (not deployed)
 ```
 
 ## Prerequisites
@@ -266,7 +271,9 @@ http://localhost:3000/api/gmail/oauth/callback
 
 The backend requests the Gmail read, modify, and send scopes.
 
-Note: for apps in **Testing** mode, Google expires refresh tokens after 7 days. When that happens, Draftly marks Gmail as disconnected and the UI shows **Connect Gmail** — just reconnect. Publishing the app removes this limit.
+Note: in **Testing** mode only the listed test users can connect (up to 100), and Google expires their Gmail authorization and refresh token 7 days after consent. When that happens, Draftly marks Gmail as disconnected and the UI shows **Connect Gmail**; the user reconnects. Leaving Testing mode is not just a switch: `gmail.readonly` and `gmail.modify` are restricted scopes, so a public app needs Google's OAuth verification and a security assessment (see [DEPLOYMENT.md](DEPLOYMENT.md#6-google-cloud-google-auth-platform), checked 2026-11-13).
+
+For a hosted deployment, the redirect URI must be HTTPS and match exactly, e.g. `https://<host>/api/gmail/oauth/callback` through the same-origin `/api` proxy.
 
 How the connect flow works: the frontend calls `GET /api/gmail/oauth/url` with its Bearer token, then navigates to the returned Google URL. The `state` parameter is a signed, 10-minute token with its own audience, so it cannot be used as an API token.
 
@@ -533,7 +540,7 @@ npm run typecheck:tests   # type-check the test suites (Vitest itself does not)
 
 CI: `.github/workflows/ci.yml` runs on every push to `master` and every pull request. The backend job runs `npm ci`, `npx tsc --noEmit`, `npm run typecheck:tests` and `npm run test:ci`; the frontend job runs `npm ci`, `npx tsc -p tsconfig.app.json --noEmit`, `npm run typecheck:tests`, `npm run test:coverage` and `npm run build`. Both use the Node version in `.nvmrc`, fail if the coverage thresholds are not met, and upload their coverage reports. The backend job sets placeholder values for the required environment variables (no secrets are needed: the tests use an in-memory MongoDB and mocks).
 
-GitHub-hosted runs (checked 2026-11-05 via the GitHub API): 12 runs, the first on 2026-11-03. The latest run, on `7dd415b` (2026-11-04, the current `master`), passed both jobs. One run failed: `9f33ab8` (2026-11-03, the `cookie-parser` removal), at the backend `npm ci` step while CI still ran Node 20 / npm 10; every run since the move to Node 24 (`06577ce`) has passed. Before the first hosted run, the workflow's steps were also simulated locally in a clean checkout; that simulation is not a substitute for the hosted results above.
+GitHub-hosted runs (checked 2026-11-13 via the GitHub API): 26 runs, the first on 2026-11-03. 25 passed and 1 failed. The latest run, on `06965d0` (2026-11-12, the current `master`), passed both jobs and every step in them. When several commits are pushed together, CI runs on the last one. Hosted CI covers typechecks, tests with coverage thresholds and the production build. The Docker and browser checks under [Testing Status](#testing-status) were run locally, not in CI. The one failed run: `9f33ab8` (2026-11-03, the `cookie-parser` removal), at the backend `npm ci` step while CI still ran Node 20 / npm 10; every run since the move to Node 24 (`06577ce`) has passed. Before the first hosted run, the workflow's steps were also simulated locally in a clean checkout; that simulation is not a substitute for the hosted results above.
 
 Frontend:
 
@@ -550,18 +557,23 @@ npm run typecheck:tests   # type-check the Vitest suites (Vitest itself does not
 
 Backend tests cover services, controllers, middleware, models, and API workflows against an in-memory MongoDB — including send idempotency under concurrency, OAuth hardening, rate limits, cross-user access, and reply-header injection attempts. Frontend tests cover services, the auth interceptor, and page/component behaviour (search and pagination, drafts, dialogs, error states).
 
-Last verified locally on 2026-11-05 (Node 24.15.0, Windows), re-running every check below; the frontend checks were re-run on 2026-11-11 after the Angular 22 upgrade:
+Last verified locally on 2026-11-13 (Node 24.15.0, Windows, at `06965d0`), re-running every check below:
 
 | | Test files | Tests | Statements | Branches | Functions | Lines |
 |---|---|---|---|---|---|---|
 | Backend | 25 | 455 passing | 93.83% | 82.69% | 96.27% | 94.36% |
-| Frontend | 9 | 160 passing | 96.23% | 84.63% | 96.56% | 96.66% |
+| Frontend | 9 | 165 passing | 95.75% | 85.15% | 96.68% | 96.78% |
 
-Both typechecks (app and tests) are clean on both sides, and the backend and frontend production builds pass. GitHub-hosted CI (Linux, Node 24 from `.nvmrc`) last passed on 2026-11-04 (see [Scripts](#scripts)).
+Both typechecks (app and tests) are clean on both sides, and the backend and frontend production builds pass. GitHub-hosted CI (Linux, Node 24 from `.nvmrc`) last passed on 2026-11-12, on the current `master` (see [Scripts](#scripts)).
 
-Node versions: tests and builds were run locally on Node 24.15.0; the Docker images use `node:24-alpine`, which was Node 24.22.2 when both images were last built (2026-11-11, after the Angular 22 upgrade). The stack was then started and checked through nginx: app and SPA routes load with the security headers, and API calls without a token return 401.
+Node versions: tests and builds were run locally on Node 24.15.0. The Docker images use `node:24-alpine`, which was Node 24.22.2 when the images were built on 2026-11-11 after the Angular 22 upgrade. The frontend image was rebuilt after each UI change on 2026-11-11/12. Each time, the stack was checked through nginx: app and SPA routes load with the security headers, the served bundle matches the local build, and API calls without a token return 401.
 
-`npm audit`: backend **0** vulnerabilities (2026-11-05); frontend **0** (2026-11-11, after the Angular 22 upgrade removed the 16 moderate findings in the CLI's packaging libraries).
+Browser checks (local Docker stack, not CI):
+- **UI changes, 2026-11-11/12.** Every page was captured in headless Edge at desktop and phone widths before and after each change and compared.
+- **CSP, 2026-11-12.** The CSP was checked in headless Edge on every page, including an email after **Show images**. No violations, console errors or blocked requests; fonts load from the app itself.
+- **Connect Gmail, 2026-11-12.** The user checked the flow by hand with the console open; the only messages came from a browser extension.
+
+`npm audit`: backend **0** vulnerabilities, frontend **0** (2026-11-13).
 
 Backend coverage is measured by Vitest 5's V8 provider, which counts statements and branches more strictly than the Vitest 1 provider used before 2026-11-04 (then 96.41% statements, 87.60% branches); the tests and covered files are the same.
 
@@ -576,7 +588,7 @@ cd frontend && npm run typecheck:tests && npm run test:coverage && npm run build
 docker compose up --build
 ```
 
-`npm run build` passes without warnings: the initial bundle is ≈477 kB (≈110 kB transferred), under Angular's 500 kB warning budget (hard limit 1 MB). Pages are lazy-loaded, and `@angular/animations` is not loaded (Angular Material animates with CSS).
+`npm run build` passes without warnings: the initial bundle is 501.49 kB (114.64 kB transferred), under Angular's 550 kB warning budget (hard limit 1 MB). The budget was raised from 500 kB on 2026-11-12, when the self-hosted font CSS moved into the stylesheet. Pages are lazy-loaded, and `@angular/animations` is not loaded (Angular Material animates with CSS).
 
 Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tests exercise on purpose print nothing. Run `LOG_LEVEL=debug npm test` to see them.
 
@@ -594,8 +606,15 @@ Backend logs are silent during tests (`NODE_ENV=test`), so the failure paths tes
 - The app keeps the human-in-the-loop requirement by never sending generated text automatically.
 - While an action runs (sign in, register, generate, save, approve, reject, send, reply all, save preferences), a full-page overlay names the action ("Sending reply…") and blocks the page, top bar included. It appears only if the action takes longer than 300 ms and then stays at least 400 ms, so quick actions do not flash. Generating a draft is always slow, so its overlay appears at once and, after 4 seconds, says it is still working; it traps keyboard focus and is announced to screen readers.
 - Request logs redact OAuth codes, OAuth state, and search queries, and end with the response time (e.g. `… "curl/8.6.0" 28.558 ms`).
-- Security hardening added on 2026-11-04: the nginx headers and the JWT-secret check (next two items), and the password policy for new accounts (see [Auth](#auth)). The headers were checked with curl on the rebuilt frontend image; a browser-console check for CSP violations has not been recorded.
-- nginx serves the app with a Content-Security-Policy (`script-src 'self'`, no inline scripts; `style-src` allows inline styles because Angular injects component styles; images from any `https:` host for emails after **Show images**; `frame-ancestors 'none'`) plus `X-Content-Type-Options`, `X-Frame-Options`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`. Critical-CSS inlining is off in the production build because its `onload` handler would violate the CSP. No HSTS header: the Docker setup serves plain HTTP.
+- Security hardening added on 2026-11-04: the nginx headers and the JWT-secret check (next two items), and the password policy for new accounts (see [Auth](#auth)). The headers were checked with curl on the rebuilt frontend image. The CSP was checked in a browser on 2026-11-12 (see [Testing Status](#testing-status)).
+- nginx serves the app with a Content-Security-Policy from `frontend/security-headers.conf`, included in every app location of `nginx.conf`:
+  - `default-src 'self'`, `script-src 'self'` (no inline scripts), `connect-src 'self'`;
+  - `style-src 'self' 'unsafe-inline'`, because Angular injects component styles;
+  - `font-src 'self'`: fonts are self-hosted since 2026-11-12, so no Google Fonts hosts are allowed;
+  - `img-src 'self' data: https:` for email images after **Show images**;
+  - `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`, `frame-ancestors 'none'`.
+
+  It also sends `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy` and `Cross-Origin-Opener-Policy`. Critical-CSS inlining is off in the production build because its `onload` handler would violate the CSP. nginx adds no HSTS header, because the Docker setup serves plain HTTP. helmet's default HSTS header on API responses has no effect over HTTP.
 - Caching: `index.html` (also served for every app route) is sent with `Cache-Control: no-cache`, so browsers pick up a new release on the next load; the hashed build files (`main-…js`, `chunk-…js`, `styles-…css`) are cached for a year (`immutable`), since every build gives them new names. A missing hashed file returns 404 instead of the app page.
 - The backend refuses to start with JWT secrets shorter than 32 characters, left at the `.env.example` placeholder, or identical for access and refresh tokens.
 
@@ -619,10 +638,12 @@ Required before a production deployment (not done):
 - **Secrets** from a secrets manager instead of `.env` files; a published (verified) Google OAuth app.
 - **Rate limits** in a shared store (they are kept in memory per backend process, so they reset on restart and do not work across several instances).
 - Monitoring, log shipping, and an automated deployment (CI only tests and builds).
+- **Google OAuth verification** and the restricted-scope security assessment, needed to leave Testing mode for public users.
+
+A limited, invite-only demo on free hosting does not need all of these first. [DEPLOYMENT.md](DEPLOYMENT.md) lists what it does need (P1), what to add before more than a few testers (P2), and what is only for a real product (P3).
 
 ## Future Improvements
 
-- Cloud deployment (AWS/GCP/Azure) with the production requirements above
+- Free-hosting demo per [DEPLOYMENT.md](DEPLOYMENT.md), then a production deployment with the requirements above
 - Automated deployment (CI already runs tests and the build)
-- Angular 22 upgrade (clears the remaining CLI audit findings)
 - Recovering a send interrupted by a crash (mark the draft `SENT` when Gmail shows the message was sent)

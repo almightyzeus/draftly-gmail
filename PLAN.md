@@ -10,21 +10,24 @@ No dependency upgrades and no commits unless explicitly approved.
 
 ---
 
-## 0. Current status (verified 2026-11-12)
+## 0. Current status (verified 2026-11-13)
 
 All six hardening stages (section 3) are complete. From the 2026-11-03/04 reconciliation, the P1
 items (5.1), quick-win Batch 1 (5.2), verification V1–V3 (5.3), features F1–F7 (5.4), dependency
 items D1–D4 and D6 (5.5), cleanup C-1 to C-3 (5.6) and security quick wins H1–H3 (5.7) are done.
 D5 (Angular 22) was done on 2026-11-11, and the UI and frontend-structure work in 5.8 on
-2026-11-11/12. The last release item, R2, was closed on 2026-11-12; nothing is open. Section 6
-lists the accepted limitations and what a production deployment would still need.
+2026-11-11/12. The last release item, R2, was closed on 2026-11-12. Nothing is open for the
+local Docker setup. Section 6 lists the accepted limitations and what a production deployment
+would still need. A plan for a limited free-hosting demo is in
+[DEPLOYMENT.md](DEPLOYMENT.md) (section 6.4). Nothing has been deployed.
 
-Local checks re-run on 2026-11-12 (Node 24.15.0, Windows):
+Local checks re-run on 2026-11-13 (Node 24.15.0, Windows, working tree at `06965d0`):
 
 | Check | Result |
 |---|---|
+| Versions (from the lockfiles) | Angular 22.2.5 (CLI/build 22.2.6), Material/CDK 22.2.6, TypeScript 6.0.3 (both sides), Tailwind CSS 4.3.3; Vitest 4.1.12 frontend / 5.0.5 backend, Vite 8.3.5 (both sides); Express 5.2.1, Mongoose 9.11.4, openai 6.34.0, googleapis 171.4.0; Node 24 (`.nvmrc`) |
 | Backend typecheck | `npx tsc --noEmit` and `npm run typecheck:tests` clean; `npm run build` passes |
-| Backend tests | 25 files, **455 passing** (`npm run test:ci`) |
+| Backend tests | 25 files, **455 passing** (`vitest run --coverage`, the same as `npm run test:ci`) |
 | Backend coverage | 93.83% statements, 82.69% branches, 96.27% functions, 94.36% lines (Vitest 5 V8 provider, stricter than Vitest 1's; same 36 files) |
 | Frontend dependencies | Lockfile installs with plain `npm ci` (no `--legacy-peer-deps`; last clean install 2026-11-03, and in every Docker build since): Angular 22.2.5 (CLI/build 22.2.6, pinned exactly), Material 22.2.6, TypeScript 6.0.3 (2026-11-11); Tailwind CSS 4.3.3, `@fontsource-variable/roboto` 5.3.0 and `material-icons` 1.13.14, pinned exactly (U5, U8) |
 | Frontend tests | 9 files, **165 passing** (includes the component-file convention check, the busy overlay, list dates and placeholder rows) |
@@ -37,7 +40,7 @@ Other verification, with its date:
 
 | Check | Result |
 |---|---|
-| CI, GitHub-hosted | Checked 2026-11-12 via the GitHub API: the five latest runs passed, the newest on `9f4e9fd` (2026-11-12). Checked 2026-11-05: 12 runs since 2026-11-03; `7dd415b` (2026-11-04) passed. One failure: `9f33ab8` (2026-11-03), backend `npm ci` on Node 20 / npm 10, likely the npm 11-written lockfile (the log needs a login and was not read); all runs since `06577ce` (Node 24) passed. |
+| CI, GitHub-hosted | Checked 2026-11-13 via the GitHub API: 26 runs since 2026-11-03, 25 passed and 1 failed. The latest run is on `06965d0` (2026-11-12, current `master`): both jobs passed every step. Backend: `npm ci`, typecheck, test typecheck, tests with coverage thresholds. Frontend: `npm ci`, typecheck, test typecheck, tests with coverage thresholds, production build. Pushes of several commits run CI on the last one only. Hosted CI runs typechecks, tests and the build only; Docker and browser checks are local (rows below). Checked 2026-11-12: the five latest runs passed, the newest on `9f4e9fd`. Checked 2026-11-05: 12 runs since 2026-11-03; `7dd415b` (2026-11-04) passed. One failure: `9f33ab8` (2026-11-03), backend `npm ci` on Node 20 / npm 10, likely the npm 11-written lockfile (the log needs a login and was not read); all runs since `06577ce` (Node 24) passed. |
 | CI, local simulation | 2026-11-03: workflow steps in a clean worktree (fresh `npm ci`, no `.env`, placeholder env values), before the first hosted run |
 | Docker | 2026-11-03: both images built on `node:24-alpine` (Node 24.22.2); the backend loaded its compiled app; the frontend nginx config is valid inside compose. 2026-11-04: frontend image rebuilt, security headers checked with curl. 2026-11-11 (R1): both images rebuilt from `a417265` (Node 24.22.2, npm 11.19.1) and the stack started: the backend passed the JWT-secret check (H2) and connected to MongoDB; through nginx the app, a deep link (`/drafts/abc`) and the JS chunks return 200 with all security headers, `/api/drafts` without a token returns 401, and a login with unknown credentials returns 401. The frontend bundle hashes match the local build. Not checked: a browser session (R2). 2026-11-11/12: the frontend image was rebuilt after every 5.8 step and its served bundle hashes matched the local build each time; since U8 the build downloads no fonts (the Google Fonts inlining step had failed intermittently with exit 127). |
 | Browser | 2026-11-03: smoke test (V3) confirmed by the user. 2026-11-04: user re-checked the rebuilt stack after D2/D3 (menus, dialogs, snackbars). 2026-11-11/12: every page captured in headless Edge at desktop and phone widths before and after each 5.8 step and compared pixel by pixel, with computed-style probes (Gmail list responses served from a fixture in the browser; no Gmail or OpenAI calls). 2026-11-12: CSP checked in headless Edge on every page, including email images, and by the user through the Connect Gmail flow (R2) |
@@ -243,7 +246,7 @@ at desktop and phone widths plus computed-style probes); intended changes are li
 
 ---
 
-## 6. Release readiness (reviewed 2026-11-05)
+## 6. Release readiness (reviewed 2026-11-05; re-reviewed 2026-11-13)
 
 ### 6.1 Release items
 
@@ -253,11 +256,12 @@ at desktop and phone widths plus computed-style probes); intended changes are li
 
 ### 6.2 Accepted limitations
 
-These are known and documented, and acceptable for a local, single-user demo:
+These are known and documented, and acceptable for a local, single-user demo and for the
+limited hosted demo in 6.4:
 
 - Send idempotency is at-most-once, not exactly-once: after a crash between Gmail accepting the message and MongoDB recording it, the draft is blocked for the 5-minute claim lease (send/edit/reject → 409), then the next send attempt gets Gmail's 404 for the used draft id, a generic 500, and the draft stays `APPROVED` although the email was delivered. No double send is possible. (Reviewed 2026-11-05; matches `DraftService.sendDraft` and `tests/sendIdempotency.test.ts`.)
 - Thread context limited to the newest 50 messages (prompt: 20); cache fallback when Gmail is unreachable.
-- Sanitized inline email HTML (no sandboxed iframe); OAuth `state` not browser-bound (S5).
+- Sanitized inline email HTML (no sandboxed iframe); remote images hidden until the user clicks **Show images**. OAuth `state` not browser-bound (S5; P2 for a hosted demo, see 6.4).
 - Google **Testing**-mode refresh tokens expire after 7 days (reconnect).
 - Drafts tab limited to 50; activity log records draft actions only.
 
@@ -279,3 +283,42 @@ Google; logout leaves Gmail connected.
 | P-6 | Rate limits in a shared store (Redis or similar) for restarts and multiple instances. |
 | P-7 | Monitoring/alerting, log shipping, automated deployment. |
 | P-8 | Send recovery: after a stale claim, detect a message Gmail already sent (thread/Sent lookup) and mark the draft `SENT` instead of returning 500. |
+
+### 6.4 Free demo deployment (planned 2026-11-13, not deployed)
+
+The full plan, provider facts with their check date and the smoke tests are in
+[DEPLOYMENT.md](DEPLOYMENT.md). It covers a limited, invite-only demo: Google OAuth in Testing
+mode with listed test users, and an OpenAI project with a hard spend limit. It is not a
+production launch.
+
+**Recommended:** one Render free web service running nginx and the backend in one container,
+with MongoDB Atlas (free cluster).
+- It keeps the same-origin `/api` arrangement, the CSP and the nginx headers and caching
+  unchanged.
+- It adds no third-party proxy timeout.
+- The backend is not reachable directly.
+
+**Not recommended:** Vercel.
+- External rewrites time out at 120 s, while a worst-case generation takes over 3 minutes.
+- A serverless backend would need code changes.
+- The Hobby plan is personal / non-commercial only.
+
+| # | Item | Status |
+|---|---|---|
+| DP-1 | **Deployment blocker:** no image runs nginx and the backend together, and the frontend image only works inside Compose (`proxy_pass http://backend:3000`, `listen 80`). Proposed: `deploy/render/Dockerfile`, `deploy/render/nginx.conf` (listen 10000, proxy to `127.0.0.1:3000`, 300 s proxy timeouts) and `deploy/render/start.sh`. These are deployment files only, with no application code. | **Awaiting approval** (not added) |
+| DP-2 | P1 setup in provider dashboards: Render service and environment, Atlas user and network access, Google redirect URI / Testing mode / test users, OpenAI project with a hard spend limit and alerts. | To do (manual; DEPLOYMENT.md §3–§8) |
+| DP-3 | Measure `TRUST_PROXY` on the host: Render does not document its forwarded headers. Start with 2 and use the smallest value whose request log shows the real client IP. | To do after the first deploy (DEPLOYMENT.md §5.2) |
+| DP-4 | Post-deployment smoke tests, with no automated email sending. | To do (DEPLOYMENT.md §10) |
+
+Priorities for the hosted demo:
+- **P1**, before sharing the URL: DP-1 to DP-4.
+- **P2**, before more than a few invited testers: P-1 and P-2 (server-side refresh tokens
+  with revocation; tokens in `HttpOnly` cookies with CSRF protection), P-6 (shared rate
+  limits) and S5 (OAuth `state` bound to the browser).
+- **P3**, for a real product:
+  - Google verification and the restricted-scope security assessment (part of P-5);
+  - backups (P-4);
+  - P-7 (monitoring and log shipping) and P-8 (send recovery);
+  - the sandboxed-iframe rendering, A8 and the signals / `OnPush` conversion from section 4.
+
+The accepted limitations in 6.2 stay as they are.

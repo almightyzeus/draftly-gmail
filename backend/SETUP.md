@@ -70,7 +70,7 @@ GOOGLE_REDIRECT_URI=http://localhost:3000/api/gmail/oauth/callback
 FRONTEND_URL=http://localhost:4200
 
 # Optional
-# TRUST_PROXY=1      # reverse-proxy hops (docker-compose sets 1 for nginx)
+# TRUST_PROXY=1      # reverse-proxy hops (docker-compose sets 1 for nginx; on a hosting platform, measure it: DEPLOYMENT.md §5.2)
 # LOG_LEVEL=debug    # default: info in production, debug in development, silent in tests
 ```
 
@@ -84,7 +84,9 @@ mongod
 
 **Or use MongoDB Atlas:**
 - Create a cluster on [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-- Get the connection string and set `MONGODB_URI` to it
+- Create a database user and add your IP to the project's IP access list (Atlas requires both)
+- Get the `mongodb+srv://` connection string (TLS is used by default) and set `MONGODB_URI` to it
+- For a hosted demo (dedicated user, network restrictions, free-cluster limits and backups), see [DEPLOYMENT.md](../DEPLOYMENT.md#4-mongodb-atlas)
 
 ### 5. Start the development server
 
@@ -135,6 +137,7 @@ backend/
 ### Authentication
 - JWT-based authentication with access (15 min) & refresh (7 days) tokens, sent only in the `Authorization: Bearer` header
 - Stateless sessions: there is no logout endpoint and refresh tokens are not stored server-side (see "Sessions, logout and the two kinds of tokens" in the project README)
+- These Draftly JWTs are unrelated to the Google OAuth tokens for Gmail. Those are stored in MongoDB, AES-256-GCM encrypted, and revoked through **Disconnect Gmail**.
 - Password hashing with bcryptjs; new passwords must be 8 characters to 72 bytes
 - Login/Register endpoints limited to 5 failed attempts per 15 minutes per client IP
 

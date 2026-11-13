@@ -19,7 +19,7 @@ Open http://localhost:4200. `npm start` runs `ng serve` with `proxy.conf.json`, 
 npm run build
 ```
 
-Output goes to `dist/frontend/browser`. In Docker, nginx serves this folder and proxies `/api` to the backend (see `nginx.conf` and `Dockerfile`).
+Output goes to `dist/frontend/browser`. In Docker, nginx serves this folder and proxies `/api` to the backend (see `nginx.conf` and `Dockerfile`). `nginx.conf` proxies to the Compose service name (`http://backend:3000`), so the image works only inside Docker Compose. The app calls `/api` on its own origin, and the CSP allows `connect-src 'self'`, so any other host must serve the API from the same origin. See [DEPLOYMENT.md](../DEPLOYMENT.md).
 
 ## Tests
 
