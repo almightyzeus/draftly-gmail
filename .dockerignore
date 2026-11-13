@@ -1,0 +1,14 @@
+# Build context for deploy/render/Dockerfile (repository root). Docker Compose
+# builds from backend/ and frontend/ with their own .dockerignore files.
+.git
+.github
+**/node_modules
+**/dist
+**/coverage
+**/.angular
+**/.env
+**/.env.*
+**/npm-debug.log
+backend/tests
+frontend/tests
+**/*.md

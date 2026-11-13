@@ -305,7 +305,7 @@ with MongoDB Atlas (free cluster).
 
 | # | Item | Status |
 |---|---|---|
-| DP-1 | **Deployment blocker:** no image runs nginx and the backend together, and the frontend image only works inside Compose (`proxy_pass http://backend:3000`, `listen 80`). Proposed: `deploy/render/Dockerfile`, `deploy/render/nginx.conf` (listen 10000, proxy to `127.0.0.1:3000`, 300 s proxy timeouts) and `deploy/render/start.sh`. These are deployment files only, with no application code. | **Awaiting approval** (not added) |
+| DP-1 | ~~**Deployment blocker:** no image runs nginx and the backend together, and the frontend image only works inside Compose (`proxy_pass http://backend:3000`, `listen 80`).~~ | **Done** 2026-11-13 (approved). Added `deploy/render/Dockerfile`, `deploy/render/nginx.conf` (listens on `$PORT`, proxies to `127.0.0.1:3000`, 300 s proxy timeouts, non-root, no access log), `deploy/render/start.sh`, a root `.dockerignore` and `.gitattributes` (LF for `*.sh`). No application code changed; Compose is unchanged. Local check of the image: see DEPLOYMENT.md §2.3. |
 | DP-2 | P1 setup in provider dashboards: Render service and environment, Atlas user and network access, Google redirect URI / Testing mode / test users, OpenAI project with a hard spend limit and alerts. | To do (manual; DEPLOYMENT.md §3–§8) |
 | DP-3 | Measure `TRUST_PROXY` on the host: Render does not document its forwarded headers. Start with 2 and use the smallest value whose request log shows the real client IP. | To do after the first deploy (DEPLOYMENT.md §5.2) |
 | DP-4 | Post-deployment smoke tests, with no automated email sending. | To do (DEPLOYMENT.md §10) |

@@ -9,8 +9,8 @@ Nothing here has been deployed yet. Provider facts were checked against official
 documentation on **2026-11-13**; free tiers and policies change, so re-check each one
 (the links are listed in [§12](#12-provider-facts-checked-2026-11-13)) before you rely on it.
 
-Status: **plan only.** The recommended architecture needs three new deployment files
-(not application code), which have not been added. See [§2.3](#23-what-the-repository-needs-for-option-a-not-yet-added).
+Status: **not deployed.** The deployment files for the recommended architecture
+are in `deploy/render/`; they contain no application code. See [§2.3](#23-the-single-container-image-deployrender).
 
 ---
 
@@ -46,7 +46,7 @@ Status: **plan only.** The recommended architecture needs three new deployment f
 | Cold starts | One service sleeps (about 1 min to wake) | The backend sleeps; whether static sites sleep is not stated | Static: none; a serverless backend would need code changes |
 | Backend exposed directly | No: Render forwards only one port, nginx's | Yes: the backend has its own public `onrender.com` URL | — |
 | `TRUST_PROXY` | One path, so one hop count | Two paths (via the rewrite, and direct) with different hop counts, so no single value is right for both | — |
-| Repo changes | Three new deployment files (§2.3) | None | `vercel.json`; for a serverless backend, application code changes |
+| Repo changes | Deployment files in `deploy/render/` (§2.3) | None | `vercel.json`; for a serverless backend, application code changes |
 
 **Recommendation: A.** It is the only option where every behaviour is already verified
 (it is the Docker Compose setup with the two containers merged), it has no third-party
@@ -101,37 +101,55 @@ What each concern needs in option A:
   **unverified**. If it is cut off, the backend may still save the draft, and reopening the
   email shows it.
 
-### 2.3 What the repository needs for option A (not yet added)
+### 2.3 The single-container image (`deploy/render/`)
 
-This is the one deployment blocker found: **the repository has no image that runs nginx and
-the backend together**, and the existing frontend image cannot run outside Compose. It needs
-three new deployment files, outlined below. No application code changes are needed. They were
-not added, pending your approval:
+The existing frontend image cannot run outside Compose: `frontend/nginx.conf` proxies to the
+Compose service name `backend:3000` and listens on 80. Option A therefore uses its own image.
+It is deployment configuration only: no application code changed, and Docker Compose still
+uses `backend/Dockerfile` and `frontend/Dockerfile`.
 
-1. **`deploy/render/Dockerfile`** (root build context):
-   - stage 1 builds the backend (`npm ci`, `npm run build`), as `backend/Dockerfile` does;
-   - stage 2 builds the frontend (`npm ci`, `npm run build`), as `frontend/Dockerfile` does;
-   - the final stage starts from `node:24-alpine`, adds nginx (`apk add nginx`), and copies in:
-     - the backend `dist`, with production dependencies installed (`npm ci --omit=dev`);
-     - the frontend `dist/frontend/browser`;
-     - `security-headers.conf`, unchanged;
-     - the nginx config from item 2;
-     - the start script from item 3.
-2. **`deploy/render/nginx.conf`**: the same rules as `frontend/nginx.conf`, with three changes:
-   - `listen 10000;` (Render's default `PORT`);
-   - `proxy_pass http://127.0.0.1:3000/api/;`;
-   - `proxy_read_timeout 300s;` and `proxy_send_timeout 300s;` on `/api/`.
+| File | What it does |
+|---|---|
+| `deploy/render/Dockerfile` | Built from the repository root (`docker build -f deploy/render/Dockerfile .`). One stage builds the backend and one the frontend, each with `npm ci` and `npm run build`, as their own Dockerfiles do. The final `node:24-alpine` stage contains: nginx from Alpine; the backend `dist` with production dependencies only; the frontend `dist/frontend/browser`; and `frontend/security-headers.conf`, unchanged. Everything runs as the unprivileged `node` user. |
+| `deploy/render/nginx.conf` | The complete nginx config. The server block has the same rules as `frontend/nginx.conf`: headers include, cache rules, `try_files`, `server_tokens off`. The differences are listed after this table. |
+| `deploy/render/start.sh` | Fills in the port and checks the config with `nginx -t`. Then starts the backend with `PORT=3000`, so it never competes with nginx for the platform's `PORT`, and nginx in the foreground. If either process exits, the other is stopped and the container exits, so Render restarts it. SIGTERM stops both; the backend shuts down gracefully. |
+| `.dockerignore` (root) | Keeps `node_modules`, build output, tests, Markdown and every `.env*` file out of the build context. |
+| `.gitattributes` | Keeps LF line endings for `*.sh`, so `start.sh` also works when the image is built from a Windows checkout. |
 
-   Every other line stays the same: the headers include, the cache rules, `try_files` and
-   `server_tokens off`.
-3. **`deploy/render/start.sh`**: starts the backend with `PORT=3000` overriding the platform's
-   `PORT` (otherwise the backend and nginx would both try to bind 10000), then runs nginx in
-   the foreground. If either process exits, the container exits, so Render restarts it.
+How `deploy/render/nginx.conf` differs from `frontend/nginx.conf`:
+- it listens on `$PORT` (default 10000);
+- it proxies `/api/` to `127.0.0.1:3000`;
+- it sets 300 s proxy read and send timeouts;
+- its pid file and temp paths are in `/tmp`, because nginx does not run as root;
+- it has **no access log**. An nginx access log would record full URLs, including Gmail
+  search queries, which the backend's request log redacts.
 
-Optional, with the same approval: add `Strict-Transport-Security` to `security-headers.conf`
-for the app pages (P-3; the app is HTTPS-only on Render).
+**Checked locally on 2026-11-13** (Docker Desktop, image built from the working tree at
+`0f535da` plus these files, run against the Compose MongoDB with the local `.env.docker`,
+`PORT=10000`, `TRUST_PROXY=1`). This was a local check, not a deployment.
+- **Startup:** the backend connected to MongoDB and started. The backend and nginx both run as
+  `node`. No `.env` file or Markdown is in the image.
+- **App routes:** `/`, `/dashboard`, `/index.html`, a hashed `main-*.js` and an unknown path
+  under `/media/` returned 200 with all six security headers. The CSP is byte-identical to
+  `security-headers.conf`. `Cache-Control` is `no-cache` on app routes and
+  `public, max-age=31536000, immutable` on the hashed file.
+- **API through nginx:**
+  - `/api/drafts` without a token returned 401 JSON from Express, with helmet's HSTS header;
+  - an unknown login returned 401;
+  - the served `main-*.js` matched the local build (SHA-256).
+- **Logs:** the backend request log shows the client address and `q=[redacted]`. There are no
+  nginx access-log lines; the search term appeared nowhere in the logs.
+- **Ports and shutdown:**
+  - `docker stop`: SIGTERM reached the backend, which closed the server and database
+    connections; exit code 0 after about 3.5 s;
+  - `PORT=8080` worked;
+  - `PORT=3000` was refused at startup with a clear message.
 
-Without these files, option B is the only no-change path.
+Not checked locally: a browser session on this image, Render itself, and Atlas.
+
+Optional, not done: add `Strict-Transport-Security` to `security-headers.conf` for the app
+pages (P-3). Render serves the app over HTTPS only, and helmet already sends HSTS on API
+responses.
 
 ### 2.4 nginx behaviour any host must preserve
 
@@ -351,9 +369,9 @@ The project hard limit is the actual cap. Keep it even with a small tester list.
 
 ---
 
-## 8. Deploy and build (option A, after §2.3 is approved and added)
+## 8. Deploy and build (option A)
 
-1. Push the branch with `deploy/render/*` to GitHub.
+1. Make sure the commit with `deploy/render/*` is pushed to GitHub.
 2. In Render, create a **New → Web Service**:
    - connect the repository;
    - runtime **Docker**;
@@ -430,7 +448,7 @@ Run these manually in a normal browser with DevTools open.
 
 ### P1: before sharing the demo URL
 
-1. Hosting per §2 (option A after approving §2.3, or option B), served over HTTPS.
+1. Hosting per §2 (option A with `deploy/render/`, or option B), served over HTTPS.
 2. Atlas set up per §4: dedicated user, restricted network access, `mongodb+srv` with TLS.
 3. Environment variables per §5, with fresh secrets and `TRUST_PROXY` measured.
 4. Google Testing mode, test users and the HTTPS redirect URI per §6.
